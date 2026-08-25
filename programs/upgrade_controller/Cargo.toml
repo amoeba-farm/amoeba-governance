@@ -1,0 +1,24 @@
+[package]
+name = "upgrade_controller"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+borsh.workspace = true
+solana-program.workspace = true
+solana-pubkey.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[lints.rust.unexpected_cfgs]
+level = "allow"
+check-cfg = ['cfg(target_os, values("solana"))']
