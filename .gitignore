@@ -1,0 +1,11 @@
+/target/
+/clients/ts/node_modules/
+/clients/ts/dist/
+*.log
+.env
+.env.*
+!.env.example
+*.keypair.json
+*.pem
+*.p12
+
