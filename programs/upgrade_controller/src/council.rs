@@ -21,14 +21,13 @@ pub const VALID_APPROVAL_MASK: u8 = 0b0001_1111;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApprovalRequirementV1 {
     Routine,
+    Major,
     Terminal,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct QuorumEvaluationV1 {
     pub total_approvals: u8,
-    pub noncompany_approvals: u8,
-    pub max_same_affiliation_approvals: u8,
 }
 
 pub fn canonical_council_hash_material(
@@ -208,9 +207,6 @@ pub(crate) fn evaluate_quorum(
     validate_approval_encoding(bitset, stored_count)?;
 
     let mut total = 0u8;
-    let mut noncompany = 0u8;
-    let mut affiliations = BTreeMap::<[u8; 32], u8>::new();
-    let mut max_affiliation = 0u8;
     for (index, seat) in council.seats.iter().enumerate() {
         if bitset & (1u8 << index) == 0 {
             continue;
@@ -221,39 +217,23 @@ pub(crate) fn evaluate_quorum(
         total = total
             .checked_add(1)
             .ok_or(GovernanceError::ArithmeticOverflow)?;
-        if seat.is_noncompany() {
-            noncompany = noncompany
-                .checked_add(1)
-                .ok_or(GovernanceError::ArithmeticOverflow)?;
-        }
-        let entry = affiliations.entry(seat.affiliation_group).or_default();
-        *entry = entry
-            .checked_add(1)
-            .ok_or(GovernanceError::ArithmeticOverflow)?;
-        max_affiliation = max_affiliation.max(*entry);
     }
-    if max_affiliation > policy.max_same_affiliation {
-        return Err(GovernanceError::ApprovalAffiliationLimit);
-    }
-    let (threshold, min_noncompany) = match requirement {
-        ApprovalRequirementV1::Routine => (policy.routine_threshold, policy.routine_min_noncompany),
-        ApprovalRequirementV1::Terminal => {
-            (policy.terminal_threshold, policy.terminal_min_noncompany)
-        }
+    let threshold = match requirement {
+        ApprovalRequirementV1::Routine | ApprovalRequirementV1::Major => policy.routine_threshold,
+        ApprovalRequirementV1::Terminal => policy.terminal_threshold,
     };
-    if total < threshold || noncompany < min_noncompany {
+    if total < threshold {
         return Err(GovernanceError::QuorumNotSatisfied);
     }
     Ok(QuorumEvaluationV1 {
         total_approvals: total,
-        noncompany_approvals: noncompany,
-        max_same_affiliation_approvals: max_affiliation,
     })
 }
 
 /// Evaluates the pinned proposal without accepting a caller-selected quorum
-/// class. Only target immutability uses the terminal 4-of-5 / 3-non-company
-/// coalition; every other proposal class uses the ordinary 3-of-5 / 2 rule.
+/// class. Every active seat has exactly one vote; seat metadata never changes
+/// pass/fail. Target immutability uses Terminal, constitutional and rotation
+/// proposals use Major, and every other proposal class uses Routine.
 pub fn evaluate_proposal_quorum(
     council: &GovernanceCouncilSetV1,
     policy: &GovernancePolicyV1,
@@ -262,10 +242,14 @@ pub fn evaluate_proposal_quorum(
     slot: u64,
 ) -> GovernanceResult<QuorumEvaluationV1> {
     validate_proposal_against_policy(proposal, policy)?;
-    let requirement = if proposal.proposal_class == ProposalClassV1::TargetImmutability {
-        ApprovalRequirementV1::Terminal
-    } else {
-        ApprovalRequirementV1::Routine
+    let requirement = match proposal.proposal_class {
+        ProposalClassV1::RoutineUpgrade
+        | ProposalClassV1::EmergencyRollback
+        | ProposalClassV1::EconomicChange => ApprovalRequirementV1::Routine,
+        ProposalClassV1::ConstitutionalChange | ProposalClassV1::CouncilSetRotation => {
+            ApprovalRequirementV1::Major
+        }
+        ProposalClassV1::TargetImmutability => ApprovalRequirementV1::Terminal,
     };
     evaluate_quorum(
         council,

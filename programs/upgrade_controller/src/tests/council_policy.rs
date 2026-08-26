@@ -39,17 +39,12 @@ fn required_routine_and_terminal_coalitions_are_enforced() {
         evaluate(0b00011, ApprovalRequirementV1::Routine),
         Err(GovernanceError::QuorumNotSatisfied)
     );
-    assert_eq!(
-        evaluate(0b00111, ApprovalRequirementV1::Routine),
-        Err(GovernanceError::QuorumNotSatisfied)
-    );
+    assert!(evaluate(0b00111, ApprovalRequirementV1::Routine).is_ok());
+    assert!(evaluate(0b00111, ApprovalRequirementV1::Major).is_ok());
     assert!(evaluate(0b01101, ApprovalRequirementV1::Routine).is_ok());
     assert!(evaluate(0b11100, ApprovalRequirementV1::Routine).is_ok());
-    // Four total with only two non-company is insufficient for terminal 4/3.
-    assert_eq!(
-        evaluate(0b01111, ApprovalRequirementV1::Terminal),
-        Err(GovernanceError::QuorumNotSatisfied)
-    );
+    // Any four equal seats satisfy terminal quorum.
+    assert!(evaluate(0b01111, ApprovalRequirementV1::Terminal).is_ok());
     assert!(evaluate(0b11101, ApprovalRequirementV1::Terminal).is_ok());
 }
 
@@ -59,8 +54,7 @@ fn all_approval_masks_match_the_independent_routine_predicate() {
     let council = council();
     for mask in 0u8..=VALID_APPROVAL_MASK {
         let total = mask.count_ones() as u8;
-        let noncompany = ((mask >> 2) & 0b111).count_ones() as u8;
-        let expected = total >= 3 && noncompany >= 2;
+        let expected = total >= 3;
         let actual = evaluate_quorum(
             &council,
             &policy,
@@ -296,8 +290,5 @@ fn proposal_class_mechanically_selects_routine_or_terminal_quorum() {
     proposal.council_approval_bitset = 0b01111;
     proposal.council_approval_count = 4;
     proposal.proposal_digest = crate::digest::compute_proposal_digest(&proposal).unwrap();
-    assert_eq!(
-        evaluate_proposal_quorum(&council, &policy, council.version, &proposal, 500),
-        Err(GovernanceError::QuorumNotSatisfied)
-    );
+    assert!(evaluate_proposal_quorum(&council, &policy, council.version, &proposal, 500).is_ok());
 }

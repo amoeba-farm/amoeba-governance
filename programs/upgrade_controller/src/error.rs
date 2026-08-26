@@ -53,8 +53,6 @@ pub enum GovernanceError {
     DuplicateApproval = 10_021,
     #[error("council quorum is not satisfied")]
     QuorumNotSatisfied = 10_022,
-    #[error("approved seats exceed the affiliation concentration limit")]
-    ApprovalAffiliationLimit = 10_023,
     #[error("proposal state transition is not permitted")]
     InvalidStateTransition = 10_024,
     #[error("proposal timing commitments are invalid")]
@@ -115,7 +113,6 @@ mod tests {
             GovernanceError::UnknownCouncilSigner,
             GovernanceError::DuplicateApproval,
             GovernanceError::QuorumNotSatisfied,
-            GovernanceError::ApprovalAffiliationLimit,
             GovernanceError::InvalidStateTransition,
             GovernanceError::InvalidProposalTiming,
             GovernanceError::InvalidProposalEpoch,
