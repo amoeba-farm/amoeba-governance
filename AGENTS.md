@@ -33,7 +33,7 @@ Do not:
 
 - deploy to Mainnet, Devnet, or a validator;
 - request, create, import, or use production keys;
-- sign or submit transactions;
+- sign or submit live transactions;
 - transfer ProgramData or buffer authority;
 - mutate live configuration, services, accounts, release intent, or
   automation;
@@ -75,7 +75,9 @@ Phase 2.
 
 ```bash
 cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets
+cargo build --workspace --release
 cd clients/ts
 npm ci --ignore-scripts --no-audit --no-fund
 npm run typecheck

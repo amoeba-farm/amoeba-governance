@@ -43,7 +43,8 @@ therefore run from the source root.
 
 ## Source conventions retained
 
-- Rust 1.90.0 host toolchain; Solana/Agave CLI and `cargo-build-sbf` 4.0.0.
+- Rust 1.89.0 host toolchain, aligned with `cargo-build-sbf` 4.0.0 and its
+  platform-tools v1.53 bundled compiler.
 - Direct target dependencies include Borsh 0.10.4 and `solana-program` 2.3.x.
 - State and instruction fields use exact fixed-width little-endian encodings.
 - Digests use ordered, domain-separated bytes and SHA-256.
@@ -52,7 +53,7 @@ therefore run from the source root.
   not Spread's older three-byte account discriminator convention.
 
 The default target build contains 115 vault tags and 14 DLMM tags. Feature
-`devnet-solo-backfill-2026` adds 12 mutating dispatch bytes. Phase 2 must cover
+`devnet-solo-backfill-2026` adds 12 mutating dispatch bytes. Phase 3 must cover
 those surfaces and the separate writer-math benchmark prefix, but this Phase 1
 repository does not change target dispatch.
 
@@ -93,4 +94,3 @@ Both exited 0. Node tests: 242 total, 241 passed, 1 intentionally skipped,
 
 No tracked source file changed. No deployment, signing, key access, authority
 transfer, service change, RPC mutation, or live-state mutation occurred.
-

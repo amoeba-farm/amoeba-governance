@@ -23,7 +23,7 @@ unchanged. Work stops at the Phase 2 boundary.
   `966efd6d42b4e2814b85dde836b4c1337cca227388c1c3f16e75301bb8e25fbf`.
 - `AGENTS.md` states the precedence explicitly.
 
-Implementation commits before this report:
+Phase 2 branch commits before this final report correction:
 
 ```text
 d7c5d380f1473473531aeff5e86770960b94c9ff docs: record bootstrap company-led V1 governance decision
@@ -32,6 +32,8 @@ f01168f158ecab2a1e28ab5eb8eb4ffd5a75c7f9 refactor: make council approvals equal-
 cf040717255f3a55a196bb2af64267a59c700244 refactor: freeze bootstrap V1 council model
 d296d8ea01fc1f7bb3a61d4693a86c0551b390f5 feat: add executable council approval kernel
 4fabf69770183554d886c81d9df56dbcc4b8afaa test: prove direct and PDA seat approvals
+f3dd49de60cc5fdbfb6add21627bd496aaa20576 docs: report Phase 2 bootstrap verification
+3be082c5a4c6fbb10d1fcdebdef03e59d0879de5 fix: keep approval kernel within SBF stack limits
 ```
 
 The intermediate history is retained rather than rewritten: the revised
@@ -44,6 +46,7 @@ Relative to the baseline, Phase 2 changes exactly these paths:
 ```text
 AGENTS.md
 Cargo.lock
+Cargo.toml
 README.md
 clients/ts/tools/generate-vectors.ts
 clients/ts/upgradeGovernance/syntheticVector.ts
@@ -52,6 +55,7 @@ clients/ts/upgradeGovernance/v1.ts
 docs/governance/amendments/phase-2-bootstrap-v1.md
 docs/governance/phase-2-bootstrap-company-led-v1.md
 docs/governance/phase-2-report.md
+docs/governance/repository-survey.md
 docs/governance/serialization-decisions.md
 fixtures/upgrade_governance_v1.json
 programs/upgrade_controller/Cargo.toml
@@ -71,6 +75,7 @@ programs/upgrade_controller/src/tests/layouts.rs
 programs/upgrade_controller/src/tests/support.rs
 programs/upgrade_controller/src/tests/transitions.rs
 programs/upgrade_controller/tests/program_test.rs
+rust-toolchain.toml
 ```
 
 `docs/governance/phase-1-report.md` was intentionally not edited.
@@ -193,11 +198,14 @@ unknown/truncated/trailing instruction bytes; and noncanonical booleans in every
 loaded account type. Every failed case asserts the proposal bytes remain
 unchanged. The duplicate test refreshes the blockhash so it reaches the custom
 `DuplicateApproval` error rather than transaction replay rejection.
+Every successful routine, terminal, and PDA approval also compares the complete
+decoded proposal against an expected clone with only the exact approval bit,
+count, and threshold-crossing state change permitted.
 
 ## Verification commands and exact outcomes
 
 The Rust and ProgramTest commands ran through WSL Ubuntu-22.04 with Rust
-1.90.0 and an isolated Linux target directory because Windows-native
+1.89.0 and an isolated Linux target directory because Windows-native
 `solana-program-test` transitively builds vendored OpenSSL and the Windows host
 does not provide Perl.
 
@@ -215,6 +223,39 @@ All four commands exited 0. Clippy produced no warnings. Rust unit tests passed
 complete positive and negative matrix described above. The optimized release
 `cdylib` and library built successfully.
 
+The release-path SBF checks used `cargo-build-sbf 4.0.0`, platform-tools v1.53,
+and its bundled Rust 1.89.0 compiler. An audit build of the pre-remediation
+source exposed a reachable 6,336-byte default-SBPF-v0 processor frame and three
+caller-frame overlap diagnostics even though `cargo-build-sbf` exited 0. That
+was treated as a blocker. The final processor heap-backs decoded controller
+states, removes the second 1,280-byte proposal clone, and retains the detached
+all-checks-before-write mutation boundary.
+
+```text
+cd programs/upgrade_controller
+export CARGO_TARGET_DIR=/tmp/ameba-gov-phase2-sbf-v0-target
+cargo-build-sbf --arch v0 \
+  --sbf-out-dir /mnt/c/Users/space/.codex/tmp/ameba-gov-phase2-verification/sbf-v0-artifact
+export CARGO_TARGET_DIR=/tmp/ameba-gov-phase2-sbf-v2-target
+cargo-build-sbf --arch v2 \
+  --sbf-out-dir /mnt/c/Users/space/.codex/tmp/ameba-gov-phase2-verification/sbf-v2-artifact
+```
+
+Each architecture used a distinct clean target and deploy output so a cached v2
+artifact could not be mistaken for v0. Both final commands ran without
+`--ignore-rust-version` and exited 0. The default SBPF v0 artifact is 119,392
+bytes with SHA-256
+`527414079fc86a94fa0bcc2f02507ddb798b6962e2a1e06946329d0b97272001`.
+The SBPF v2 artifact is 118,096 bytes with SHA-256
+`9e9113c98a9fbec77d56ac8da245681aab168c3af9bb8d024c78f67983c72866`.
+Neither final controller build emitted an `upgrade_controller` stack-frame,
+reachable-processor, or caller-frame-overlap diagnostic. Default v0 still emits
+exactly 16 frame-overflow diagnostics while compiling `hybrid_array` and
+`crypto_common` dependency rlibs. A final linked-ELF mangled dump contains zero
+`hybrid_array` symbols, zero `crypto_common` symbols, and zero occurrences of
+all 16 exact offending symbol hashes, proving those functions are absent from
+the linked controller. The v2 build printed no stack or overlap diagnostic.
+
 ```text
 cd clients/ts
 npm ci --ignore-scripts --no-audit --no-fund
@@ -224,7 +265,7 @@ npm test
 
 All commands exited 0. TypeScript typechecking passed. Fixture check passed.
 The Node test runner passed 5/5 tests with zero failures. `npm ci` emitted the
-upstream `uuid@8.3.2` deprecation warning and installed 59 packages; scripts,
+upstream `uuid@8.3.2` deprecation warning and installed 63 packages; scripts,
 audit, and funding output were disabled by the command.
 
 ## Target and side-effect confirmation
@@ -234,10 +275,12 @@ audit, and funding output were disabled by the command.
 modified. The universal Spread gate, signed epoch tail, and exhaustive target
 tag manifest were not started.
 
-No deployment, local validator deployment, signing, production key access,
-authority transfer, loader invocation, live RPC call or mutation, service or
-automation change, or live-state mutation occurred. No branch or commit from
-this worktree was pushed.
+No deployment, local validator deployment, production key access, authority
+transfer, loader invocation, live RPC call or mutation, service or automation
+change, or live-state mutation occurred. Only ephemeral in-process ProgramTest
+keypairs signed local simulated test transactions; no live or production
+transaction was signed or submitted. No branch or commit from this worktree was
+pushed.
 
 ## Remaining blockers before Phase 3
 

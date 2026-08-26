@@ -45,7 +45,9 @@ and prevails over conflicting earlier text.
 
 ```bash
 cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets
+cargo build --workspace --release
 cd clients/ts
 npm ci --ignore-scripts --no-audit --no-fund
 npm run typecheck
