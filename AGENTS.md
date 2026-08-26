@@ -1,22 +1,28 @@
 # AGENTS.md — Amoeba upgrade governance
 
-Read `docs/governance/upgrade-governance-spec.md` completely before changing
-this repository. That downloaded specification is normative.
+Read both governance documents completely before changing this repository:
+
+- `docs/governance/upgrade-governance-spec.md` remains normative for the
+  controller, gate, artifact, and proposal architecture.
+- `docs/governance/phase-2-bootstrap-company-led-v1.md` is the normative Phase
+  2 amendment. It supersedes conflicting council-composition,
+  minimum-non-company, affiliation-concentration, approval-threshold, and
+  active-token-voting requirements in the earlier specification.
 
 ## Current assignment
 
-Only Phase 0 and Phase 1 from Section 22 are authorized:
+Only Phase 2 from `phase-2-bootstrap-company-led-v1.md` is authorized, in this
+strict order:
 
-- repository survey and design freeze;
-- pure controller account/state scaffolding;
-- deterministic PDA and proposal-digest definitions;
-- council validation and quorum evaluation;
-- pure proposal-state transition guards;
-- local Rust and TypeScript parity tests.
+- Part A corrects the scaffold to company-led, equal-vote bootstrap governance
+  and must pass independent review and every Rust/TypeScript gate before Part B.
+- Part B adds the universal target-side freeze-gate bridge and client migration
+  without adding loader execution, deployment, or authority handoff.
 
-Stop before Phase 2. There is intentionally no program entrypoint, processor,
-loader CPI, target-program gate, vote escrow, signer, executor, deployment
-script, or authority-transfer path in this repository yet.
+Stop at the Phase 2 boundary. There must be no token escrow, snapshots, voting,
+delegation, loader CPI, buffer adoption or sealing, ProgramData operation,
+immutability execution, signer, deployment script, production controller ID,
+production PDA vector, or authority-transfer path.
 
 ## Safety boundary
 
@@ -26,15 +32,16 @@ Do not:
 - request, create, import, or use production keys;
 - sign or submit transactions;
 - transfer ProgramData or buffer authority;
-- mutate `ameba_spread`, live configuration, services, accounts, release
-  intent, or automation;
+- mutate live configuration, services, accounts, release intent, or
+  automation;
 - add an arbitrary-CPI surface;
-- claim this scaffold is production ready.
+- add an ungated compatibility path;
+- claim this Phase 2 implementation is production ready.
 
-The source repository at
-`C:\Users\space\amoeba-farm\ameba_spread` is read-only evidence for this
-assignment and is pinned to
-`1b2230d96e51f6582155d8284900fbfc11ff1f18`.
+The source repository at `C:\Users\space\amoeba-farm\ameba_spread` is pinned to
+`1b2230d96e51f6582155d8284900fbfc11ff1f18`. Part A treats it as read-only.
+Part B may change it only for the universal gate bridge described by the Phase
+2 amendment and must not alter existing economic behavior.
 
 ## Encoding rules
 
@@ -49,6 +56,14 @@ assignment and is pinned to
 - Tests must assert serialized lengths, frozen vectors, and cross-language
   parity. Expected vectors must not be generated from the implementation while
   the test is running.
+- Bootstrap V1 has five equal votes: three company Core Protocol seats, one
+  council-appointed External Reviewer, and one council-appointed Security
+  Steward. Routine and Major require any three; Terminal requires any four.
+- Affiliation and appointment metadata are disclosure data, never quorum
+  filters.
+- Token governance is canonically disabled: all vote identities are default,
+  all vote flags and basis-point fields are zero, and every proposal has
+  `VoteRequirementV1::None`.
 
 ## Local verification
 
@@ -60,4 +75,3 @@ npm ci --ignore-scripts --no-audit --no-fund
 npm run typecheck
 npm test
 ```
-
