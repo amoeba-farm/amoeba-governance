@@ -34,7 +34,6 @@ pub fn validate_proposal_static(proposal: &UpgradeProposalV1) -> GovernanceResul
         proposal.canonical_spill_treasury,
         proposal.prestate_checkpoint,
         proposal.required_poststate_checkpoint,
-        proposal.vote_program,
     ] {
         require_pubkey(key)?;
     }
@@ -97,14 +96,11 @@ pub fn validate_proposal_static(proposal: &UpgradeProposalV1) -> GovernanceResul
         return Err(GovernanceError::InvalidProposalCommitment);
     }
 
-    match proposal.vote_requirement {
-        VoteRequirementV1::None if proposal.vote_result_pda != Pubkey::default() => {
-            return Err(GovernanceError::InvalidProposalCommitment)
-        }
-        VoteRequirementV1::Veto | VoteRequirementV1::Affirmative => {
-            require_pubkey(proposal.vote_result_pda)?;
-        }
-        VoteRequirementV1::None => {}
+    if proposal.vote_requirement != VoteRequirementV1::None
+        || proposal.vote_program != Pubkey::default()
+        || proposal.vote_result_pda != Pubkey::default()
+    {
+        return Err(GovernanceError::InvalidProposalCommitment);
     }
 
     validate_approval_pair(
@@ -126,10 +122,10 @@ pub fn validate_proposal_static(proposal: &UpgradeProposalV1) -> GovernanceResul
     Ok(())
 }
 
-/// Binds the proposal to the exact immutable policy instead of accepting a
-/// caller-selected vote mode. Emergency rollback remains unsupported here:
-/// fields on the current proposal cannot prove an earlier governed proposal
-/// precommitted the exact rollback artifact.
+/// Binds the proposal to the exact immutable bootstrap policy instead of
+/// accepting a caller-selected vote mode. This permits approval accumulation
+/// for every scaffolded class; later transition/execution code still rejects
+/// any class whose required evidence graph is not implemented.
 pub fn validate_proposal_against_policy(
     proposal: &UpgradeProposalV1,
     policy: &GovernancePolicyV1,
@@ -145,9 +141,6 @@ pub fn validate_proposal_against_policy(
     }
     if proposal.vote_requirement != vote_requirement_for_class(policy, proposal.proposal_class)? {
         return Err(GovernanceError::InvalidProposalCommitment);
-    }
-    if proposal.proposal_class == ProposalClassV1::EmergencyRollback {
-        return Err(GovernanceError::UnsupportedProposalClass);
     }
     Ok(())
 }
@@ -176,6 +169,9 @@ pub fn validate_proposal_transition(
     if current == next || current.is_terminal() {
         return Err(GovernanceError::InvalidStateTransition);
     }
+    if current == ProposalStateV1::TokenReviewOpen || next == ProposalStateV1::TokenReviewOpen {
+        return Err(GovernanceError::InvalidStateTransition);
+    }
     if matches!(next, ProposalStateV1::Cancelled | ProposalStateV1::Expired) {
         return if current.is_frozen_or_later() {
             Err(GovernanceError::InvalidStateTransition)
@@ -187,7 +183,7 @@ pub fn validate_proposal_transition(
         (ProposalStateV1::Draft, ProposalStateV1::BufferAdopted)
         | (ProposalStateV1::BufferAdopted, ProposalStateV1::BufferVerified)
         | (ProposalStateV1::BufferVerified, ProposalStateV1::CouncilApproved)
-        | (ProposalStateV1::TokenReviewOpen, ProposalStateV1::GovernanceSatisfied)
+        | (ProposalStateV1::CouncilApproved, ProposalStateV1::GovernanceSatisfied)
         | (ProposalStateV1::GovernanceSatisfied, ProposalStateV1::Timelocked)
         | (ProposalStateV1::Timelocked, ProposalStateV1::Frozen)
         | (ProposalStateV1::Extended, ProposalStateV1::UpgradeExecuted)
@@ -195,12 +191,6 @@ pub fn validate_proposal_transition(
         | (ProposalStateV1::ProgramDataVerified, ProposalStateV1::PoststateAccepted)
         | (ProposalStateV1::PoststateAccepted, ProposalStateV1::UnfreezeApproved)
         | (ProposalStateV1::UnfreezeApproved, ProposalStateV1::Completed) => true,
-        (ProposalStateV1::CouncilApproved, ProposalStateV1::TokenReviewOpen) => {
-            proposal.vote_required()
-        }
-        (ProposalStateV1::CouncilApproved, ProposalStateV1::GovernanceSatisfied) => {
-            !proposal.vote_required()
-        }
         (ProposalStateV1::Frozen, ProposalStateV1::Extended) => proposal.extension_required(),
         (ProposalStateV1::Frozen, ProposalStateV1::UpgradeExecuted) => {
             !proposal.extension_required()

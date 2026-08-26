@@ -3,7 +3,8 @@ use thiserror::Error;
 
 pub type GovernanceResult<T> = Result<T, GovernanceError>;
 
-/// Stable Phase 1 error codes. New variants must be appended, never reordered.
+/// Explicit predeployment V1 error codes. Numeric assignments remain stable
+/// even when Phase 2 corrects keypair-oriented source terminology.
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 #[repr(u32)]
 pub enum GovernanceError {
@@ -19,14 +20,14 @@ pub enum GovernanceError {
     DefaultPubkey = 10_004,
     #[error("optional public key encoding is not canonical")]
     InvalidOptionalPubkey = 10_005,
-    #[error("council seat order or class composition is invalid")]
+    #[error("council shape is invalid")]
     InvalidCouncilComposition = 10_006,
-    #[error("council contains a duplicate signer")]
-    DuplicateCouncilSigner = 10_007,
-    #[error("council seat appointment metadata is invalid")]
-    InvalidAppointment = 10_008,
-    #[error("council seat affiliation metadata is invalid")]
-    InvalidAffiliation = 10_009,
+    #[error("council contains a duplicate seat authority")]
+    DuplicateSeatAuthority = 10_007,
+    #[error("seat authority must carry Solana signer privilege")]
+    MissingSeatAuthoritySignature = 10_008,
+    #[error("seat authority must be read-only")]
+    WritableSeatAuthority = 10_009,
     #[error("council seat is inactive or outside its term")]
     InactiveCouncilSeat = 10_010,
     #[error("council activation or deactivation range is invalid")]
@@ -47,12 +48,14 @@ pub enum GovernanceError {
     InvalidApprovalBitset = 10_018,
     #[error("approval count does not match the approval bitset")]
     ApprovalCountMismatch = 10_019,
-    #[error("signer does not occupy a council seat")]
-    UnknownCouncilSigner = 10_020,
+    #[error("authority does not occupy a council seat")]
+    UnknownSeatAuthority = 10_020,
     #[error("council seat has already approved")]
     DuplicateApproval = 10_021,
     #[error("council quorum is not satisfied")]
     QuorumNotSatisfied = 10_022,
+    #[error("seat authority must not be executable")]
+    ExecutableSeatAuthority = 10_023,
     #[error("proposal state transition is not permitted")]
     InvalidStateTransition = 10_024,
     #[error("proposal timing commitments are invalid")]
@@ -71,7 +74,7 @@ pub enum GovernanceError {
     InvalidControllerConfig = 10_031,
     #[error("protocol gate state is internally inconsistent")]
     InvalidGateState = 10_032,
-    #[error("proposal class is scaffolded but has no safe Phase 1 execution path")]
+    #[error("proposal class is scaffolded but has no safe execution path")]
     UnsupportedProposalClass = 10_033,
 }
 
@@ -97,9 +100,9 @@ mod tests {
             GovernanceError::DefaultPubkey,
             GovernanceError::InvalidOptionalPubkey,
             GovernanceError::InvalidCouncilComposition,
-            GovernanceError::DuplicateCouncilSigner,
-            GovernanceError::InvalidAppointment,
-            GovernanceError::InvalidAffiliation,
+            GovernanceError::DuplicateSeatAuthority,
+            GovernanceError::MissingSeatAuthoritySignature,
+            GovernanceError::WritableSeatAuthority,
             GovernanceError::InactiveCouncilSeat,
             GovernanceError::InvalidCouncilActivation,
             GovernanceError::InvalidCouncilThreshold,
@@ -110,9 +113,10 @@ mod tests {
             GovernanceError::ProposalCouncilHashMismatch,
             GovernanceError::InvalidApprovalBitset,
             GovernanceError::ApprovalCountMismatch,
-            GovernanceError::UnknownCouncilSigner,
+            GovernanceError::UnknownSeatAuthority,
             GovernanceError::DuplicateApproval,
             GovernanceError::QuorumNotSatisfied,
+            GovernanceError::ExecutableSeatAuthority,
             GovernanceError::InvalidStateTransition,
             GovernanceError::InvalidProposalTiming,
             GovernanceError::InvalidProposalEpoch,

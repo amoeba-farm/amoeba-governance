@@ -2,6 +2,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   PROPOSAL_DIGEST_DOMAIN_V1,
+  canonicalCouncilSetHashMaterial,
+  canonicalPolicyHashMaterial,
   canonicalProposalDigestMaterial,
   deriveAuthorityPda,
   deriveBufferCheckPda,
@@ -11,15 +13,25 @@ import {
   deriveGatePda,
   derivePolicyPda,
   deriveProposalPda,
+  governanceCouncilSetHash,
+  governancePolicyHash,
   proposalDigest,
+  serializeCouncilSeatV1,
+  serializeGovernanceCouncilSetV1,
+  serializeGovernancePolicyV1,
 } from "../upgradeGovernance/v1.js";
 import {
+  syntheticCouncilHashV1,
+  syntheticCouncilV1,
   syntheticKey,
   syntheticPolicyHashV1,
+  syntheticPolicyV1,
   syntheticProposalDigestInputV1,
 } from "../upgradeGovernance/syntheticVector.js";
 
 const proposal = syntheticProposalDigestInputV1();
+const policy = syntheticPolicyV1();
+const council = syntheticCouncilV1();
 const controller = syntheticKey(1);
 const target = syntheticKey(3);
 const proposalPda = deriveProposalPda(controller, target, proposal.proposalId)[0];
@@ -29,9 +41,14 @@ const pda = (value: ReturnType<typeof deriveProposalPda>) => ({
 });
 const material = canonicalProposalDigestMaterial(proposal);
 const preimage = Buffer.concat([PROPOSAL_DIGEST_DOMAIN_V1, material]);
+const policyMaterial = canonicalPolicyHashMaterial(policy);
+const policyAccount = serializeGovernancePolicyV1(policy);
+const councilMaterial = canonicalCouncilSetHashMaterial(council);
+const councilAccount = serializeGovernanceCouncilSetV1(council);
+const firstSeatAccount = serializeCouncilSeatV1(council.seats[0]!);
 const output = {
-  schemaVersion: 1,
-  note: "Synthetic non-production Phase 1 golden vector; the controller program id is not finalized.",
+  schemaVersion: 2,
+  note: "Synthetic non-production Phase 2 bootstrap V1 golden vector; the controller program id is not finalized.",
   pdaInputs: {
     controllerProgram: controller.toBase58(),
     targetProgram: target.toBase58(),
@@ -50,7 +67,36 @@ const output = {
     poststateCheckpoint: pda(deriveCheckpointPda(controller, proposalPda, 1)),
     bufferCheck: pda(deriveBufferCheckPda(controller, proposalPda)),
   },
-  proposalInputs: { policyHashHex: syntheticPolicyHashV1.toString("hex") },
+  accountLengths: {
+    controllerConfig: 512,
+    governancePolicy: policyAccount.length,
+    councilSeat: serializeCouncilSeatV1(council.seats[0]!).length,
+    governanceCouncilSet: councilAccount.length,
+    protocolGate: 192,
+    upgradeProposal: 1280,
+  },
+  policy: {
+    materialLength: policyMaterial.length,
+    materialHex: policyMaterial.toString("hex"),
+    sha256Hex: governancePolicyHash(policy).toString("hex"),
+    accountLength: policyAccount.length,
+    accountHex: policyAccount.toString("hex"),
+  },
+  council: {
+    firstSeatHex: firstSeatAccount.toString("hex"),
+    materialLength: councilMaterial.length,
+    materialHex: councilMaterial.toString("hex"),
+    sha256Hex: governanceCouncilSetHash(council).toString("hex"),
+    accountLength: councilAccount.length,
+    accountHex: councilAccount.toString("hex"),
+  },
+  proposalInputs: {
+    policyHashHex: syntheticPolicyHashV1.toString("hex"),
+    councilHashHex: syntheticCouncilHashV1.toString("hex"),
+    voteRequirement: 0,
+    voteProgram: proposal.voteProgram.toBase58(),
+    voteResultPda: proposal.voteResultPda.toBase58(),
+  },
   proposalDigest: {
     domainAscii: PROPOSAL_DIGEST_DOMAIN_V1.toString("ascii"),
     materialLength: material.length,

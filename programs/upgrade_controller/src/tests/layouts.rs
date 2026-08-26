@@ -1,9 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::state::{
-    AppointingBodyV1, CheckpointPhaseV1, ControllerConfigV1, CouncilSeatV1, GateStatusV1,
-    GovernanceCouncilSetV1, GovernancePolicyV1, ProposalClassV1, ProposalStateV1, ProtocolGateV1,
-    SeatClassV1, UpgradeProposalV1, VoteRequirementV1,
+    CheckpointPhaseV1, ControllerConfigV1, CouncilSeatV1, GateStatusV1, GovernanceCouncilSetV1,
+    GovernanceModeV1, GovernancePolicyV1, ProposalClassV1, ProposalStateV1, ProtocolGateV1,
+    UpgradeProposalV1, VoteRequirementV1,
 };
 
 use super::support::{controller_config, council, gate, policy, proposal};
@@ -36,8 +36,19 @@ fn account_layouts_have_exact_deterministic_lengths() {
 fn config_and_gate_static_invariants_fail_closed() {
     let mut config = controller_config();
     assert_eq!(config.validate_static(), Ok(()));
-    config.token_governance_enabled = false;
+    config.token_governance_enabled = true;
     assert!(config.validate_static().is_err());
+
+    for mutate in [
+        |config: &mut ControllerConfigV1| config.vote_program = super::support::key(90),
+        |config: &mut ControllerConfigV1| config.vote_programdata = super::support::key(91),
+        |config: &mut ControllerConfigV1| config.vote_config = super::support::key(92),
+        |config: &mut ControllerConfigV1| config.vote_mint = super::support::key(93),
+    ] {
+        let mut config = controller_config();
+        mutate(&mut config);
+        assert!(config.validate_static().is_err());
+    }
 
     let mut invalid_gate = gate();
     assert_eq!(invalid_gate.validate_static(), Ok(()));
@@ -61,15 +72,9 @@ fn every_stable_enum_has_one_byte_wire_values_and_rejects_unknowns() {
             assert!(<$ty>::try_from_slice(&[$unknown]).is_err());
         }};
     }
-    check!(SeatClassV1, {
-        SeatClassV1::CoreProtocol => 0,
-        SeatClassV1::CommunityDelegate => 1,
-        SeatClassV1::SecuritySteward => 2
-    }, 3);
-    check!(AppointingBodyV1, {
-        AppointingBodyV1::Company => 0,
-        AppointingBodyV1::TokenGovernance => 1
-    }, 2);
+    check!(GovernanceModeV1, {
+        GovernanceModeV1::BootstrapCouncilOnly => 0
+    }, 1);
     check!(GateStatusV1, {
         GateStatusV1::Active => 0,
         GateStatusV1::FrozenForUpgrade => 1,

@@ -14,7 +14,7 @@ pub const ACCOUNT_VERSION_V1: u8 = 1;
 
 pub const CONTROLLER_CONFIG_RESERVED_LEN: usize = 28;
 pub const GOVERNANCE_POLICY_RESERVED_LEN: usize = 21;
-pub const COUNCIL_SEAT_RESERVED_LEN: usize = 12;
+pub const COUNCIL_SEAT_RESERVED_LEN: usize = 47;
 pub const GOVERNANCE_COUNCIL_RESERVED_LEN: usize = 26;
 pub const PROTOCOL_GATE_RESERVED_LEN: usize = 2;
 pub const UPGRADE_PROPOSAL_RESERVED_LEN: usize = 142;
@@ -45,37 +45,16 @@ macro_rules! fixed_u8_enum_borsh {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
-pub enum SeatClassV1 {
-    CoreProtocol = 0,
-    CommunityDelegate = 1,
-    SecuritySteward = 2,
+pub enum GovernanceModeV1 {
+    BootstrapCouncilOnly = 0,
 }
-fixed_u8_enum_borsh!(SeatClassV1 {
-    CoreProtocol = 0,
-    CommunityDelegate = 1,
-    SecuritySteward = 2,
+fixed_u8_enum_borsh!(GovernanceModeV1 {
+    BootstrapCouncilOnly = 0,
 });
 
-impl Default for SeatClassV1 {
+impl Default for GovernanceModeV1 {
     fn default() -> Self {
-        Self::CoreProtocol
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum AppointingBodyV1 {
-    Company = 0,
-    TokenGovernance = 1,
-}
-fixed_u8_enum_borsh!(AppointingBodyV1 {
-    Company = 0,
-    TokenGovernance = 1,
-});
-
-impl Default for AppointingBodyV1 {
-    fn default() -> Self {
-        Self::Company
+        Self::BootstrapCouncilOnly
     }
 }
 
@@ -333,13 +312,7 @@ impl ControllerConfigV1 {
             self.vote_config,
             self.vote_mint,
         ];
-        let nondefault_votes = vote_keys
-            .iter()
-            .filter(|key| **key != Pubkey::default())
-            .count();
-        if (self.token_governance_enabled && nondefault_votes != vote_keys.len())
-            || (!self.token_governance_enabled && nondefault_votes != 0)
-        {
+        if self.token_governance_enabled || vote_keys.iter().any(|key| *key != Pubkey::default()) {
             return Err(GovernanceError::InvalidControllerConfig);
         }
         Ok(())
@@ -356,11 +329,11 @@ pub struct GovernancePolicyV1 {
     pub version: u64,
     pub target_program: Pubkey,
     pub activation_slot: u64,
+    pub council_size: u8,
     pub routine_threshold: u8,
-    pub routine_min_noncompany: u8,
     pub terminal_threshold: u8,
-    pub terminal_min_noncompany: u8,
-    pub max_same_affiliation: u8,
+    pub governance_mode: GovernanceModeV1,
+    pub policy_flags: u8,
     pub veto_quorum_bps: u16,
     pub affirmative_quorum_bps: u16,
     pub affirmative_approval_bps: u16,
@@ -379,11 +352,7 @@ impl GovernancePolicyV1 {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct CouncilSeatV1 {
-    pub signer: Pubkey,
-    pub seat_class: SeatClassV1,
-    pub appointing_body: AppointingBodyV1,
-    pub company_affiliated: bool,
-    pub affiliation_group: [u8; 32],
+    pub seat_authority: Pubkey,
     pub term_start_slot: u64,
     pub term_end_slot: u64,
     pub active: bool,
@@ -393,10 +362,6 @@ pub struct CouncilSeatV1 {
 impl CouncilSeatV1 {
     pub const LEN: usize = 96;
 
-    pub const fn is_noncompany(&self) -> bool {
-        !self.company_affiliated
-    }
-
     pub const fn term_covers(&self, slot: u64) -> bool {
         self.active && self.term_start_slot <= slot && slot < self.term_end_slot
     }
@@ -405,11 +370,7 @@ impl CouncilSeatV1 {
 impl Default for CouncilSeatV1 {
     fn default() -> Self {
         Self {
-            signer: Pubkey::default(),
-            seat_class: SeatClassV1::default(),
-            appointing_body: AppointingBodyV1::default(),
-            company_affiliated: false,
-            affiliation_group: [0; 32],
+            seat_authority: Pubkey::default(),
             term_start_slot: 0,
             term_end_slot: 0,
             active: false,
@@ -430,9 +391,9 @@ pub struct GovernanceCouncilSetV1 {
     pub activation_slot: u64,
     pub deactivation_slot: u64,
     pub seats: [CouncilSeatV1; 5],
-    pub threshold: u8,
-    pub min_noncompany_approvals: u8,
-    pub max_same_affiliation: u8,
+    pub routine_threshold: u8,
+    pub terminal_threshold: u8,
+    pub policy_flags: u8,
     pub set_hash: [u8; 32],
     pub reserved: [u8; GOVERNANCE_COUNCIL_RESERVED_LEN],
 }

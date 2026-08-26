@@ -2,8 +2,8 @@ use solana_program::{hash::hashv, pubkey::Pubkey};
 
 use crate::{
     state::{
-        validate_reserved, GovernancePolicyV1, ProposalClassV1, VoteRequirementV1,
-        ACCOUNT_VERSION_V1, GOVERNANCE_POLICY_DISCRIMINATOR,
+        validate_reserved, ControllerConfigV1, GovernanceModeV1, GovernancePolicyV1,
+        ProposalClassV1, VoteRequirementV1, ACCOUNT_VERSION_V1, GOVERNANCE_POLICY_DISCRIMINATOR,
     },
     GovernanceError, GovernanceResult,
 };
@@ -21,11 +21,11 @@ pub fn canonical_policy_hash_material(
     put_u64(&mut out, &mut offset, policy.version);
     put_u64(&mut out, &mut offset, policy.activation_slot);
     for value in [
+        policy.council_size,
         policy.routine_threshold,
-        policy.routine_min_noncompany,
         policy.terminal_threshold,
-        policy.terminal_min_noncompany,
-        policy.max_same_affiliation,
+        policy.governance_mode as u8,
+        policy.policy_flags,
     ] {
         put_u8(&mut out, &mut offset, value);
     }
@@ -49,52 +49,15 @@ pub fn canonical_policy_hash_material(
     out
 }
 
-/// Derives the token-chamber rule from the immutable proposal class and pinned
-/// policy. Callers never supply a free-standing vote mode.
+/// Bootstrap V1 has no token chamber. The class argument remains explicit so a
+/// future reviewed policy version can add class-derived vote behavior without
+/// accepting a caller-selected mode.
 pub fn vote_requirement_for_class(
     policy: &GovernancePolicyV1,
-    class: ProposalClassV1,
+    _class: ProposalClassV1,
 ) -> GovernanceResult<VoteRequirementV1> {
     validate_policy(policy)?;
-    let requirement = match class {
-        ProposalClassV1::RoutineUpgrade => {
-            if policy.routine_requires_vote {
-                VoteRequirementV1::Veto
-            } else {
-                VoteRequirementV1::None
-            }
-        }
-        ProposalClassV1::EmergencyRollback => VoteRequirementV1::None,
-        ProposalClassV1::EconomicChange => {
-            if policy.economic_requires_vote {
-                VoteRequirementV1::Affirmative
-            } else {
-                VoteRequirementV1::None
-            }
-        }
-        ProposalClassV1::ConstitutionalChange => {
-            if policy.constitutional_requires_vote {
-                VoteRequirementV1::Affirmative
-            } else {
-                VoteRequirementV1::None
-            }
-        }
-        ProposalClassV1::CouncilSetRotation => {
-            if policy.rotation_requires_vote {
-                VoteRequirementV1::Affirmative
-            } else {
-                VoteRequirementV1::None
-            }
-        }
-        ProposalClassV1::TargetImmutability => {
-            if policy.immutability_requires_vote {
-                VoteRequirementV1::Affirmative
-            } else {
-                VoteRequirementV1::None
-            }
-        }
-    };
-    Ok(requirement)
+    Ok(VoteRequirementV1::None)
 }
 
 pub fn compute_policy_hash(policy: &GovernancePolicyV1) -> [u8; 32] {
@@ -116,27 +79,51 @@ pub fn validate_policy(policy: &GovernancePolicyV1) -> GovernanceResult<()> {
     require_pubkey(&policy.controller_config)?;
     require_pubkey(&policy.target_program)?;
     if policy.version == 0
+        || policy.council_size != 5
         || policy.routine_threshold != 3
-        || policy.routine_min_noncompany != 2
         || policy.terminal_threshold != 4
-        || policy.terminal_min_noncompany != 3
-        || policy.max_same_affiliation != 2
-        || policy.veto_quorum_bps == 0
-        || policy.veto_quorum_bps > 10_000
-        || policy.affirmative_quorum_bps == 0
-        || policy.affirmative_quorum_bps > 10_000
-        || policy.affirmative_approval_bps <= 5_000
-        || policy.affirmative_approval_bps > 10_000
-        || !policy.routine_requires_vote
-        || !policy.economic_requires_vote
-        || !policy.constitutional_requires_vote
-        || !policy.rotation_requires_vote
-        || !policy.immutability_requires_vote
+        || policy.governance_mode != GovernanceModeV1::BootstrapCouncilOnly
+        || policy.policy_flags != 0
+        || policy.veto_quorum_bps != 0
+        || policy.affirmative_quorum_bps != 0
+        || policy.affirmative_approval_bps != 0
+        || policy.routine_requires_vote
+        || policy.economic_requires_vote
+        || policy.constitutional_requires_vote
+        || policy.rotation_requires_vote
+        || policy.immutability_requires_vote
     {
         return Err(GovernanceError::InvalidPolicy);
     }
     if compute_policy_hash(policy) != policy.policy_hash {
         return Err(GovernanceError::PolicyHashMismatch);
+    }
+    Ok(())
+}
+
+/// Cross-validates the immutable bootstrap policy against the controller
+/// configuration. Token governance cannot be activated through account data in
+/// V1: both accounts must carry the canonical disabled representation.
+pub fn validate_policy_against_config(
+    policy: &GovernancePolicyV1,
+    config: &ControllerConfigV1,
+) -> GovernanceResult<()> {
+    config.validate_static()?;
+    validate_policy(policy)?;
+    if policy.controller_config == Pubkey::default()
+        || policy.target_program != config.target_program
+        || policy.version != config.current_policy_version
+        || config.token_governance_enabled
+        || [
+            config.vote_program,
+            config.vote_programdata,
+            config.vote_config,
+            config.vote_mint,
+        ]
+        .iter()
+        .any(|key| *key != Pubkey::default())
+    {
+        return Err(GovernanceError::InvalidPolicy);
     }
     Ok(())
 }

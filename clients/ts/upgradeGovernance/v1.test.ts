@@ -4,6 +4,8 @@ import test from "node:test";
 import { PublicKey } from "@solana/web3.js";
 import {
   PROPOSAL_DIGEST_DOMAIN_V1,
+  canonicalCouncilSetHashMaterial,
+  canonicalPolicyHashMaterial,
   canonicalProposalDigestMaterial,
   deriveAuthorityPda,
   deriveBufferCheckPda,
@@ -13,10 +15,21 @@ import {
   deriveGatePda,
   derivePolicyPda,
   deriveProposalPda,
+  governanceCouncilSetHash,
+  governancePolicyHash,
   proposalDigest,
+  serializeCouncilSeatV1,
+  serializeGovernanceCouncilSetV1,
+  serializeGovernancePolicyV1,
+  validateCouncilSeatV1Bytes,
+  validateGovernanceCouncilSetV1Bytes,
+  validateGovernancePolicyV1Bytes,
 } from "./v1.js";
 import {
+  syntheticCouncilHashV1,
+  syntheticCouncilV1,
   syntheticPolicyHashV1,
+  syntheticPolicyV1,
   syntheticProposalDigestInputV1,
 } from "./syntheticVector.js";
 
@@ -27,6 +40,7 @@ interface ExpectedPda {
 
 interface Fixture {
   schemaVersion: number;
+  accountLengths: Record<string, number>;
   pdaInputs: {
     controllerProgram: string;
     targetProgram: string;
@@ -35,7 +49,28 @@ interface Fixture {
     proposalId: string;
   };
   pdas: Record<string, ExpectedPda>;
-  proposalInputs: { policyHashHex: string };
+  policy: {
+    materialLength: number;
+    materialHex: string;
+    sha256Hex: string;
+    accountLength: number;
+    accountHex: string;
+  };
+  council: {
+    firstSeatHex: string;
+    materialLength: number;
+    materialHex: string;
+    sha256Hex: string;
+    accountLength: number;
+    accountHex: string;
+  };
+  proposalInputs: {
+    policyHashHex: string;
+    councilHashHex: string;
+    voteRequirement: number;
+    voteProgram: string;
+    voteResultPda: string;
+  };
   proposalDigest: {
     domainAscii: string;
     materialLength: number;
@@ -58,8 +93,8 @@ function expectPda(actual: [PublicKey, number], expected: ExpectedPda): void {
   assert.equal(actual[1], expected.bump);
 }
 
-test("all Phase 1 PDA derivations match the frozen Rust fixture", () => {
-  assert.equal(fixture.schemaVersion, 1);
+test("all Phase 2 PDA derivations match the frozen Rust fixture", () => {
+  assert.equal(fixture.schemaVersion, 2);
   const controller = new PublicKey(fixture.pdaInputs.controllerProgram);
   const target = new PublicKey(fixture.pdaInputs.targetProgram);
   const policyVersion = BigInt(fixture.pdaInputs.policyVersion);
@@ -99,11 +134,88 @@ test("all Phase 1 PDA derivations match the frozen Rust fixture", () => {
   );
 });
 
+test("policy and simplified council layouts and hashes match the frozen fixture", () => {
+  const policy = syntheticPolicyV1();
+  const council = syntheticCouncilV1();
+  const seatBytes = serializeCouncilSeatV1(council.seats[0]!);
+  const policyBytes = serializeGovernancePolicyV1(policy);
+  const councilBytes = serializeGovernanceCouncilSetV1(council);
+  const policyMaterial = canonicalPolicyHashMaterial(policy);
+  const councilMaterial = canonicalCouncilSetHashMaterial(council);
+
+  assert.equal(seatBytes.length, fixture.accountLengths.councilSeat);
+  assert.equal(seatBytes.toString("hex"), fixture.council.firstSeatHex);
+  assert.equal(policyBytes.length, fixture.accountLengths.governancePolicy);
+  assert.equal(councilBytes.length, fixture.accountLengths.governanceCouncilSet);
+  assert.equal(policyMaterial.length, fixture.policy.materialLength);
+  assert.equal(policyMaterial.toString("hex"), fixture.policy.materialHex);
+  assert.equal(governancePolicyHash(policy).toString("hex"), fixture.policy.sha256Hex);
+  assert.equal(policyBytes.toString("hex"), fixture.policy.accountHex);
+  assert.equal(councilMaterial.length, fixture.council.materialLength);
+  assert.equal(councilMaterial.toString("hex"), fixture.council.materialHex);
+  assert.equal(
+    governanceCouncilSetHash(council).toString("hex"),
+    fixture.council.sha256Hex,
+  );
+  assert.equal(councilBytes.toString("hex"), fixture.council.accountHex);
+  assert.equal(syntheticPolicyHashV1.toString("hex"), fixture.policy.sha256Hex);
+  assert.equal(syntheticCouncilHashV1.toString("hex"), fixture.council.sha256Hex);
+
+  validateCouncilSeatV1Bytes(seatBytes);
+  validateGovernancePolicyV1Bytes(policyBytes);
+  validateGovernanceCouncilSetV1Bytes(councilBytes);
+});
+
+test("fixed layout validators reject truncation, trailing, enum, boolean, and reserved drift", () => {
+  const policy = serializeGovernancePolicyV1(syntheticPolicyV1());
+  const councilValue = syntheticCouncilV1();
+  const council = serializeGovernanceCouncilSetV1(councilValue);
+  const seat = serializeCouncilSeatV1(councilValue.seats[0]!);
+
+  assert.throws(() => validateCouncilSeatV1Bytes(seat.subarray(0, 95)), /96 bytes/);
+  assert.throws(
+    () => validateGovernancePolicyV1Bytes(Buffer.concat([policy, Buffer.alloc(1)])),
+    /160 bytes/,
+  );
+  assert.throws(
+    () => validateGovernanceCouncilSetV1Bytes(council.subarray(0, 639)),
+    /640 bytes/,
+  );
+
+  const badSeatBool = Buffer.from(seat);
+  badSeatBool[48] = 2;
+  assert.throws(() => validateCouncilSeatV1Bytes(badSeatBool), /canonical boolean/);
+
+  const badSeatReserved = Buffer.from(seat);
+  badSeatReserved[95] = 1;
+  assert.throws(() => validateCouncilSeatV1Bytes(badSeatReserved), /must be zero/);
+
+  const unknownMode = Buffer.from(policy);
+  unknownMode[94] = 1;
+  assert.throws(() => validateGovernancePolicyV1Bytes(unknownMode), /unknown GovernanceModeV1/);
+
+  const badPolicyBool = Buffer.from(policy);
+  badPolicyBool[102] = 2;
+  assert.throws(() => validateGovernancePolicyV1Bytes(badPolicyBool), /canonical boolean/);
+
+  const badPolicyReserved = Buffer.from(policy);
+  badPolicyReserved[159] = 1;
+  assert.throws(() => validateGovernancePolicyV1Bytes(badPolicyReserved), /must be zero/);
+
+  const badCouncilReserved = Buffer.from(council);
+  badCouncilReserved[639] = 1;
+  assert.throws(() => validateGovernanceCouncilSetV1Bytes(badCouncilReserved), /must be zero/);
+});
+
 test("proposal material, preimage, and SHA-256 match the frozen Rust fixture", () => {
   const input = syntheticProposalDigestInputV1();
   const material = canonicalProposalDigestMaterial(input);
   const preimage = Buffer.concat([PROPOSAL_DIGEST_DOMAIN_V1, material]);
   assert.equal(syntheticPolicyHashV1.toString("hex"), fixture.proposalInputs.policyHashHex);
+  assert.equal(syntheticCouncilHashV1.toString("hex"), fixture.proposalInputs.councilHashHex);
+  assert.equal(input.voteRequirement, fixture.proposalInputs.voteRequirement);
+  assert.equal(input.voteProgram.toBase58(), fixture.proposalInputs.voteProgram);
+  assert.equal(input.voteResultPda.toBase58(), fixture.proposalInputs.voteResultPda);
   assert.equal(PROPOSAL_DIGEST_DOMAIN_V1.toString("ascii"), fixture.proposalDigest.domainAscii);
   assert.equal(material.length, fixture.proposalDigest.materialLength);
   assert.equal(preimage.length, fixture.proposalDigest.preimageLength);

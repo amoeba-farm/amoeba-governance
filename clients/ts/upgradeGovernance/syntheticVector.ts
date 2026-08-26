@@ -1,37 +1,86 @@
-import { createHash } from "node:crypto";
 import { PublicKey } from "@solana/web3.js";
-import type { ProposalDigestInputV1 } from "./v1.js";
+import {
+  governanceCouncilSetHash,
+  governancePolicyHash,
+  type CouncilSeatV1Input,
+  type GovernanceCouncilSetV1Input,
+  type GovernancePolicyV1Input,
+  type ProposalDigestInputV1,
+} from "./v1.js";
 
 export const syntheticKey = (byte: number): PublicKey =>
   new PublicKey(Uint8Array.from({ length: 32 }, () => byte));
+
 const bytes = (byte: number): Buffer => Buffer.alloc(32, byte);
-const u64 = (value: bigint): Buffer => {
-  const out = Buffer.alloc(8);
-  out.writeBigUInt64LE(value);
-  return out;
-};
-const u16 = (value: number): Buffer => {
-  const out = Buffer.alloc(2);
-  out.writeUInt16LE(value);
-  return out;
-};
 
-const policyMaterial = Buffer.concat([
-  syntheticKey(2).toBuffer(),
-  syntheticKey(3).toBuffer(),
-  u64(7n),
-  u64(0x0102_0304_0506_0708n),
-  Buffer.from([3, 2, 4, 3, 2]),
-  u16(1500),
-  u16(2000),
-  u16(6667),
-  Buffer.from([1, 1, 1, 1, 1]),
-]);
+const syntheticSeat = (authorityByte: number): CouncilSeatV1Input => ({
+  seatAuthority: syntheticKey(authorityByte),
+  termStartSlot: 10n,
+  termEndSlot: 10_000n,
+  active: true,
+  reserved: Buffer.alloc(47),
+});
 
-export const syntheticPolicyHashV1 = createHash("sha256")
-  .update(Buffer.from("AMOEBA_GOVERNANCE_POLICY_V1", "ascii"))
-  .update(policyMaterial)
-  .digest();
+export function syntheticPolicyV1(): GovernancePolicyV1Input {
+  const value: GovernancePolicyV1Input = {
+    discriminator: Buffer.from("AGVPOL01", "ascii"),
+    accountVersion: 1,
+    bump: 201,
+    initialized: true,
+    controllerConfig: syntheticKey(2),
+    version: 7n,
+    targetProgram: syntheticKey(3),
+    activationSlot: 0x0102_0304_0506_0708n,
+    councilSize: 5,
+    routineThreshold: 3,
+    terminalThreshold: 4,
+    governanceMode: 0,
+    policyFlags: 0,
+    vetoQuorumBps: 0,
+    affirmativeQuorumBps: 0,
+    affirmativeApprovalBps: 0,
+    routineRequiresVote: false,
+    economicRequiresVote: false,
+    constitutionalRequiresVote: false,
+    rotationRequiresVote: false,
+    immutabilityRequiresVote: false,
+    policyHash: Buffer.alloc(32),
+    reserved: Buffer.alloc(21),
+  };
+  value.policyHash = governancePolicyHash(value);
+  return value;
+}
+
+export function syntheticCouncilV1(): GovernanceCouncilSetV1Input {
+  const value: GovernanceCouncilSetV1Input = {
+    discriminator: Buffer.from("AGVCNS01", "ascii"),
+    accountVersion: 1,
+    bump: 202,
+    initialized: true,
+    controllerConfig: syntheticKey(2),
+    version: 11n,
+    targetProgram: syntheticKey(3),
+    activationSlot: 100n,
+    deactivationSlot: 0n,
+    seats: [
+      syntheticSeat(20),
+      syntheticSeat(21),
+      syntheticSeat(22),
+      syntheticSeat(23),
+      syntheticSeat(24),
+    ],
+    routineThreshold: 3,
+    terminalThreshold: 4,
+    policyFlags: 0,
+    setHash: Buffer.alloc(32),
+    reserved: Buffer.alloc(26),
+  };
+  value.setHash = governanceCouncilSetHash(value);
+  return value;
+}
+
+export const syntheticPolicyHashV1 = syntheticPolicyV1().policyHash;
+export const syntheticCouncilHashV1 = syntheticCouncilV1().setHash;
 
 export function syntheticProposalDigestInputV1(): ProposalDigestInputV1 {
   const defaultKey = new PublicKey(new Uint8Array(32));
@@ -51,7 +100,7 @@ export function syntheticProposalDigestInputV1(): ProposalDigestInputV1 {
     targetNonce: 0x1112_1314_1516_1718n,
     proposalClass: 0,
     councilVersion: 11n,
-    councilHash: bytes(32),
+    councilHash: syntheticCouncilHashV1,
     creationGateEpoch: 41n,
     freezeGateEpoch: 42n,
     bufferPubkey: syntheticKey(15),
@@ -76,9 +125,9 @@ export function syntheticProposalDigestInputV1(): ProposalDigestInputV1 {
     rollbackProposal: { present: false, value: defaultKey },
     rollbackBuffer: { present: false, value: defaultKey },
     rollbackArtifactHash: Buffer.alloc(32),
-    voteProgram: syntheticKey(10),
-    voteResultPda: syntheticKey(18),
-    voteRequirement: 1,
+    voteProgram: defaultKey,
+    voteResultPda: defaultKey,
+    voteRequirement: 0,
     reviewStartSlot: 0x2122_2324_2526_2728n,
     reviewEndSlot: 0x3132_3334_3536_3738n,
     notBeforeSlot: 0x4142_4344_4546_4748n,

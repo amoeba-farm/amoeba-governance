@@ -27,8 +27,11 @@ const STATES: [ProposalStateV1; 16] = [
     ProposalStateV1::Expired,
 ];
 
-fn expected(current: ProposalStateV1, next: ProposalStateV1, vote: bool, extension: bool) -> bool {
+fn expected(current: ProposalStateV1, next: ProposalStateV1, extension: bool) -> bool {
     if current == next || current.is_terminal() {
+        return false;
+    }
+    if current == ProposalStateV1::TokenReviewOpen || next == ProposalStateV1::TokenReviewOpen {
         return false;
     }
     if matches!(next, ProposalStateV1::Cancelled | ProposalStateV1::Expired) {
@@ -38,7 +41,7 @@ fn expected(current: ProposalStateV1, next: ProposalStateV1, vote: bool, extensi
         (ProposalStateV1::Draft, ProposalStateV1::BufferAdopted)
         | (ProposalStateV1::BufferAdopted, ProposalStateV1::BufferVerified)
         | (ProposalStateV1::BufferVerified, ProposalStateV1::CouncilApproved)
-        | (ProposalStateV1::TokenReviewOpen, ProposalStateV1::GovernanceSatisfied)
+        | (ProposalStateV1::CouncilApproved, ProposalStateV1::GovernanceSatisfied)
         | (ProposalStateV1::GovernanceSatisfied, ProposalStateV1::Timelocked)
         | (ProposalStateV1::Timelocked, ProposalStateV1::Frozen)
         | (ProposalStateV1::Extended, ProposalStateV1::UpgradeExecuted)
@@ -46,8 +49,6 @@ fn expected(current: ProposalStateV1, next: ProposalStateV1, vote: bool, extensi
         | (ProposalStateV1::ProgramDataVerified, ProposalStateV1::PoststateAccepted)
         | (ProposalStateV1::PoststateAccepted, ProposalStateV1::UnfreezeApproved)
         | (ProposalStateV1::UnfreezeApproved, ProposalStateV1::Completed) => true,
-        (ProposalStateV1::CouncilApproved, ProposalStateV1::TokenReviewOpen) => vote,
-        (ProposalStateV1::CouncilApproved, ProposalStateV1::GovernanceSatisfied) => !vote,
         (ProposalStateV1::Frozen, ProposalStateV1::Extended) => extension,
         (ProposalStateV1::Frozen, ProposalStateV1::UpgradeExecuted) => !extension,
         _ => false,
@@ -57,30 +58,19 @@ fn expected(current: ProposalStateV1, next: ProposalStateV1, vote: bool, extensi
 #[test]
 fn all_256_state_pairs_match_the_frozen_code_upgrade_graph() {
     let policy = super::support::policy();
-    let vote = true;
     for extension in [false, true] {
         for current in STATES {
             for next in STATES {
                 let mut value = proposal();
                 value.state = current;
-                value.vote_requirement = if vote {
-                    VoteRequirementV1::Veto
-                } else {
-                    VoteRequirementV1::None
-                };
-                value.vote_result_pda = if vote {
-                    super::support::key(18)
-                } else {
-                    Default::default()
-                };
                 value.extension_delta = u64::from(extension) * 4_096;
                 value.expected_post_capacity = value.current_capacity + value.extension_delta;
                 value.proposal_digest = crate::digest::compute_proposal_digest(&value).unwrap();
                 let actual = validate_proposal_transition(&value, &policy, next).is_ok();
                 assert_eq!(
                     actual,
-                    expected(current, next, vote, extension),
-                    "vote={vote} extension={extension} {current:?}->{next:?}"
+                    expected(current, next, extension),
+                    "extension={extension} {current:?}->{next:?}"
                 );
             }
         }
@@ -132,8 +122,15 @@ fn class_policy_cannot_be_selected_by_the_caller() {
     value.proposal_digest = crate::digest::compute_proposal_digest(&value).unwrap();
     assert_eq!(validate_proposal_against_policy(&value, &policy), Ok(()));
 
-    value.vote_requirement = VoteRequirementV1::None;
-    value.vote_result_pda = Default::default();
+    value.vote_program = super::support::key(10);
+    value.proposal_digest = crate::digest::compute_proposal_digest(&value).unwrap();
+    assert_eq!(
+        validate_proposal_against_policy(&value, &policy),
+        Err(GovernanceError::InvalidProposalCommitment)
+    );
+
+    value.vote_requirement = VoteRequirementV1::Veto;
+    value.vote_result_pda = super::support::key(18);
     value.proposal_digest = crate::digest::compute_proposal_digest(&value).unwrap();
     assert_eq!(
         validate_proposal_against_policy(&value, &policy),
@@ -141,8 +138,9 @@ fn class_policy_cannot_be_selected_by_the_caller() {
     );
 
     value.proposal_class = ProposalClassV1::EconomicChange;
-    value.vote_requirement = VoteRequirementV1::Affirmative;
-    value.vote_result_pda = super::support::key(18);
+    value.vote_requirement = VoteRequirementV1::None;
+    value.vote_program = Default::default();
+    value.vote_result_pda = Default::default();
     value.proposal_digest = crate::digest::compute_proposal_digest(&value).unwrap();
     assert_eq!(validate_proposal_against_policy(&value, &policy), Ok(()));
 
@@ -150,18 +148,12 @@ fn class_policy_cannot_be_selected_by_the_caller() {
     value.vote_requirement = VoteRequirementV1::None;
     value.vote_result_pda = Default::default();
     value.proposal_digest = crate::digest::compute_proposal_digest(&value).unwrap();
-    assert_eq!(
-        validate_proposal_against_policy(&value, &policy),
-        Err(GovernanceError::UnsupportedProposalClass)
-    );
+    assert_eq!(validate_proposal_against_policy(&value, &policy), Ok(()));
     value.rollback_proposal = OptionalPubkeyV1::some(super::support::key(90)).unwrap();
     value.rollback_buffer = OptionalPubkeyV1::some(super::support::key(91)).unwrap();
     value.rollback_artifact_hash = [92; 32];
     value.proposal_digest = crate::digest::compute_proposal_digest(&value).unwrap();
-    assert_eq!(
-        validate_proposal_against_policy(&value, &policy),
-        Err(GovernanceError::UnsupportedProposalClass)
-    );
+    assert_eq!(validate_proposal_against_policy(&value, &policy), Ok(()));
 }
 
 #[test]
@@ -173,7 +165,6 @@ fn incomplete_governance_only_class_graphs_are_explicitly_unsupported() {
     ] {
         let mut value = proposal();
         value.proposal_class = class;
-        value.vote_requirement = VoteRequirementV1::Affirmative;
         value.proposal_digest = crate::digest::compute_proposal_digest(&value).unwrap();
         assert_eq!(
             validate_proposal_transition(&value, &policy, ProposalStateV1::BufferAdopted),
