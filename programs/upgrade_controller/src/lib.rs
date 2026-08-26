@@ -1,13 +1,20 @@
-//! Phase 1 state and policy scaffold for the independent Amoeba upgrade controller.
+//! Bootstrap V1 state, policy, and approval kernel for the independent Amoeba
+//! upgrade controller.
 //!
-//! This crate deliberately has no Solana entrypoint or instruction processor.
-//! It is not deployable and cannot sign or invoke the upgradeable loader.
+//! The sole executable instruction records one runtime-authenticated council
+//! seat approval. Loader CPI, gate mutation, initialization, and every later
+//! lifecycle instruction remain deliberately absent.
 
+pub mod authorization;
 pub mod council;
 pub mod digest;
+#[cfg(not(feature = "no-entrypoint"))]
+pub mod entrypoint;
 pub mod error;
+pub mod instruction;
 pub mod pda;
 pub mod policy;
+pub mod processor;
 pub mod proposal;
 pub mod state;
 

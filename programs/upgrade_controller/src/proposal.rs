@@ -146,9 +146,10 @@ pub fn validate_proposal_against_policy(
 }
 
 /// Validates only the shape of the Phase 1 code-upgrade lifecycle without
-/// mutating the proposal. This is not transition authorization: Phase 3 must
-/// additionally prove quorum, vote result, time, gate, and account evidence.
-/// Governance-only class-specific execution paths remain unsupported.
+/// mutating the proposal. This is not transition authorization: the later full
+/// lifecycle phase must additionally prove quorum, time, gate, and account
+/// evidence. Governance-only class-specific execution paths remain
+/// unsupported.
 pub fn validate_proposal_transition(
     proposal: &UpgradeProposalV1,
     policy: &GovernancePolicyV1,

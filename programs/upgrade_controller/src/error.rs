@@ -76,6 +76,20 @@ pub enum GovernanceError {
     InvalidGateState = 10_032,
     #[error("proposal class is scaffolded but has no safe execution path")]
     UnsupportedProposalClass = 10_033,
+    #[error("instruction requires exactly five accounts")]
+    InvalidAccountCount = 10_034,
+    #[error("controller account privileges are invalid")]
+    InvalidAccountPrivileges = 10_035,
+    #[error("controller account has the wrong owner")]
+    IncorrectAccountOwner = 10_036,
+    #[error("controller account has the wrong fixed length")]
+    InvalidAccountSize = 10_037,
+    #[error("account address or stored bump is not canonical")]
+    InvalidPda = 10_038,
+    #[error("cross-account governance identities are inconsistent")]
+    CrossAccountMismatch = 10_039,
+    #[error("the selected governance policy is not active")]
+    InactivePolicy = 10_040,
 }
 
 impl From<GovernanceError> for ProgramError {
@@ -127,6 +141,13 @@ mod tests {
             GovernanceError::InvalidControllerConfig,
             GovernanceError::InvalidGateState,
             GovernanceError::UnsupportedProposalClass,
+            GovernanceError::InvalidAccountCount,
+            GovernanceError::InvalidAccountPrivileges,
+            GovernanceError::IncorrectAccountOwner,
+            GovernanceError::InvalidAccountSize,
+            GovernanceError::InvalidPda,
+            GovernanceError::CrossAccountMismatch,
+            GovernanceError::InactivePolicy,
         ];
         let codes = values.iter().map(|value| *value as u32).collect::<Vec<_>>();
         assert_eq!(codes.iter().collect::<BTreeSet<_>>().len(), codes.len());
