@@ -33,6 +33,7 @@ pub fn process_instruction(
     process_record_proposal_approval(program_id, accounts, instruction)
 }
 
+#[inline(never)]
 fn process_record_proposal_approval(
     program_id: &Pubkey,
     accounts: &[AccountInfo<'_>],
@@ -64,7 +65,7 @@ fn process_record_proposal_approval(
         council_info,
         GovernanceCouncilSetV1::LEN,
     )?;
-    let proposal = load_controller_account::<UpgradeProposalV1>(
+    let mut proposal = load_controller_account::<UpgradeProposalV1>(
         program_id,
         proposal_info,
         UpgradeProposalV1::LEN,
@@ -124,17 +125,19 @@ fn process_record_proposal_approval(
         slot,
     )?;
 
-    let mut next_proposal = proposal.clone();
-    next_proposal.council_approval_bitset = next_bitset;
-    next_proposal.council_approval_count = next_count;
+    // The decoded proposal is heap-backed and is still detached from account
+    // data. Mutating this one local avoids a second 1,280-byte value while
+    // preserving the all-checks-before-account-write commit boundary.
+    proposal.council_approval_bitset = next_bitset;
+    proposal.council_approval_count = next_count;
     match evaluate_proposal_quorum(
         &council,
         &policy,
         config.current_council_version,
-        &next_proposal,
+        &proposal,
         slot,
     ) {
-        Ok(_) => next_proposal.state = ProposalStateV1::CouncilApproved,
+        Ok(_) => proposal.state = ProposalStateV1::CouncilApproved,
         Err(GovernanceError::QuorumNotSatisfied) => {}
         Err(error) => return Err(error.into()),
     }
@@ -142,8 +145,8 @@ fn process_record_proposal_approval(
     // Serialize off-borrow and validate the exact final representation before
     // taking a mutable account-data borrow. No failed check can partially
     // mutate the proposal.
-    validate_proposal_against_policy(&next_proposal, &policy)?;
-    let encoded = next_proposal
+    validate_proposal_against_policy(&proposal, &policy)?;
+    let encoded = proposal
         .try_to_vec()
         .map_err(|_| ProgramError::InvalidAccountData)?;
     if encoded.len() != UpgradeProposalV1::LEN {
@@ -164,18 +167,21 @@ fn validate_state_privileges(account: &AccountInfo<'_>, writable: bool) -> Progr
     Ok(())
 }
 
+#[inline(never)]
 fn load_controller_account<T: BorshDeserialize>(
     program_id: &Pubkey,
     account: &AccountInfo<'_>,
     expected_len: usize,
-) -> Result<T, ProgramError> {
+) -> Result<Box<T>, ProgramError> {
     if account.owner != program_id {
         return Err(GovernanceError::IncorrectAccountOwner.into());
     }
     if account.data_len() != expected_len {
         return Err(GovernanceError::InvalidAccountSize.into());
     }
-    T::try_from_slice(&account.try_borrow_data()?).map_err(|_| ProgramError::InvalidAccountData)
+    let decoded = T::try_from_slice(&account.try_borrow_data()?)
+        .map_err(|_| ProgramError::InvalidAccountData)?;
+    Ok(Box::new(decoded))
 }
 
 #[allow(clippy::too_many_arguments)]

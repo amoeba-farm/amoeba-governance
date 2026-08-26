@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 license = "Apache-2.0"
-rust-version = "1.90"
+rust-version = "1.89"
 
 [workspace.dependencies]
 borsh = "=0.10.4"

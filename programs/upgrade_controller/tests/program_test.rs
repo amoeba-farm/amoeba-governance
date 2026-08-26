@@ -374,6 +374,20 @@ async fn proposal_state(context: &mut ProgramTestContext, key: Pubkey) -> Upgrad
     UpgradeProposalV1::try_from_slice(&proposal_bytes(context, key).await).unwrap()
 }
 
+fn expected_after_sequential_approvals(
+    original: &UpgradeProposalV1,
+    approvals: u8,
+    threshold: u8,
+) -> UpgradeProposalV1 {
+    let mut expected = original.clone();
+    expected.council_approval_bitset = (1u8 << approvals) - 1;
+    expected.council_approval_count = approvals;
+    if approvals >= threshold {
+        expected.state = ProposalStateV1::CouncilApproved;
+    }
+    expected
+}
+
 async fn expect_custom_unchanged(
     context: &mut ProgramTestContext,
     proposal_key: Pubkey,
@@ -426,15 +440,13 @@ async fn direct_signers_quorum_and_executable_fail_closed_matrix() {
         .await
         .unwrap();
         let proposal = proposal_state(&mut context, fixture.proposal_key).await;
-        assert_eq!(proposal.council_approval_count, (index + 1) as u8);
-        assert_eq!(proposal.council_approval_bitset, (1u8 << (index + 1)) - 1);
         assert_eq!(
-            proposal.state,
-            if index == 2 {
-                ProposalStateV1::CouncilApproved
-            } else {
-                ProposalStateV1::BufferVerified
-            }
+            proposal,
+            expected_after_sequential_approvals(
+                &fixture.proposal,
+                (index + 1) as u8,
+                fixture.policy.routine_threshold,
+            )
         );
     }
 
@@ -859,14 +871,13 @@ async fn direct_signers_quorum_and_executable_fail_closed_matrix() {
         .await
         .unwrap();
         let proposal = proposal_state(&mut context, terminal.proposal_key).await;
-        assert_eq!(proposal.council_approval_count, (index + 1) as u8);
         assert_eq!(
-            proposal.state,
-            if index == 3 {
-                ProposalStateV1::CouncilApproved
-            } else {
-                ProposalStateV1::BufferVerified
-            }
+            proposal,
+            expected_after_sequential_approvals(
+                &terminal.proposal,
+                (index + 1) as u8,
+                terminal.policy.terminal_threshold,
+            )
         );
     }
 }
@@ -962,9 +973,10 @@ async fn pda_seat_authority_requires_invoke_signed() {
     };
     submit(&mut context, &[outer], &[]).await.unwrap();
     let proposal = proposal_state(&mut context, fixture.proposal_key).await;
-    assert_eq!(proposal.council_approval_bitset, 1);
-    assert_eq!(proposal.council_approval_count, 1);
-    assert_eq!(proposal.state, ProposalStateV1::BufferVerified);
+    assert_eq!(
+        proposal,
+        expected_after_sequential_approvals(&fixture.proposal, 1, fixture.policy.routine_threshold)
+    );
 
     let mut direct = fixture.approval_instruction(proxy_seat);
     direct.accounts[4].is_signer = false;
