@@ -1,28 +1,31 @@
 # AGENTS.md — Amoeba upgrade governance
 
-Read both governance documents completely before changing this repository:
+Read the governance documents completely in this order before changing this
+repository:
 
 - `docs/governance/upgrade-governance-spec.md` remains normative for the
   controller, gate, artifact, and proposal architecture.
-- `docs/governance/phase-2-bootstrap-company-led-v1.md` is the normative Phase
-  2 amendment. It supersedes conflicting council-composition,
-  minimum-non-company, affiliation-concentration, approval-threshold, and
-  active-token-voting requirements in the earlier specification.
+- `docs/governance/phase-2-bootstrap-company-led-v1.md` is preserved as an
+  earlier Phase 2 decision record.
+- `docs/governance/amendments/phase-2-bootstrap-v1.md` is the current normative
+  Phase 2 amendment and wins wherever either earlier document conflicts with
+  it.
 
 ## Current assignment
 
-Only Phase 2 from `phase-2-bootstrap-company-led-v1.md` is authorized, in this
-strict order:
+Only Phase 2 from `amendments/phase-2-bootstrap-v1.md` is authorized:
 
-- Part A corrects the scaffold to company-led, equal-vote bootstrap governance
-  and must pass independent review and every Rust/TypeScript gate before Part B.
-- Part B adds the universal target-side freeze-gate bridge and client migration
-  without adding loader execution, deployment, or authority handoff.
+- simplify consensus state to five unclassified, equal seat authorities;
+- mechanically disable token governance;
+- add the minimal executable `RecordProposalApprovalV1` kernel; and
+- prove direct-signer and PDA `invoke_signed` authorization with local
+  ProgramTest.
 
 Stop at the Phase 2 boundary. There must be no token escrow, snapshots, voting,
 delegation, loader CPI, buffer adoption or sealing, ProgramData operation,
-immutability execution, signer, deployment script, production controller ID,
-production PDA vector, or authority-transfer path.
+immutability execution, target gate, signed epoch tail, mutating-tag manifest,
+deployment script, production controller ID, production PDA vector, or
+authority-transfer path. The universal Spread gate is Phase 3.
 
 ## Safety boundary
 
@@ -34,14 +37,14 @@ Do not:
 - transfer ProgramData or buffer authority;
 - mutate live configuration, services, accounts, release intent, or
   automation;
+- modify `ameba_spread`;
 - add an arbitrary-CPI surface;
 - add an ungated compatibility path;
 - claim this Phase 2 implementation is production ready.
 
 The source repository at `C:\Users\space\amoeba-farm\ameba_spread` is pinned to
-`1b2230d96e51f6582155d8284900fbfc11ff1f18`. Part A treats it as read-only.
-Part B may change it only for the universal gate bridge described by the Phase
-2 amendment and must not alter existing economic behavior.
+`1b2230d96e51f6582155d8284900fbfc11ff1f18` and remains read-only throughout
+Phase 2.
 
 ## Encoding rules
 
@@ -56,11 +59,14 @@ Part B may change it only for the universal gate bridge described by the Phase
 - Tests must assert serialized lengths, frozen vectors, and cross-language
   parity. Expected vectors must not be generated from the implementation while
   the test is running.
-- Bootstrap V1 has five equal votes: three company Core Protocol seats, one
-  council-appointed External Reviewer, and one council-appointed Security
-  Steward. Routine and Major require any three; Terminal requires any four.
-- Affiliation and appointment metadata are disclosure data, never quorum
-  filters.
+- Bootstrap V1 has five equal, unclassified seat authorities. Any three pass
+  ordinary governance; any four pass terminal governance.
+- Amoeba Farm operationally controls three authorities, but company,
+  appointment, affiliation, and signer-kind metadata must not exist in
+  consensus state or quorum logic.
+- A seat authority may be a direct signer or a PDA signer furnished by another
+  program through CPI and `invoke_signed`; no private key or signature bytes
+  are accepted by governance.
 - Token governance is canonically disabled: all vote identities are default,
   all vote flags and basis-point fields are zero, and every proposal has
   `VoteRequirementV1::None`.
