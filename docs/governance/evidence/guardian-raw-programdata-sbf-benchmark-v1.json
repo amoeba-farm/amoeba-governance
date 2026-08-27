@@ -1,0 +1,299 @@
+{
+    "architectures": {
+        "v0": {
+            "build_diagnostics": {
+                "caller_frame_or_stack_offset_diagnostic_count": 0,
+                "compiler_frame_diagnostic_count": 16,
+                "diagnostic_symbols_absent_from_linked_elf": 16,
+                "diagnostic_symbols_present_in_linked_elf": [],
+                "linked_elf_safe": true
+            },
+            "elf": {
+                "bytes": 49152,
+                "sha256": "acfe53dae4caf7c044dba1db79fa10cfa0e947e301d322dd99e1d0425351e58c"
+            },
+            "measurements": [
+                {
+                    "architecture": "v0",
+                    "benchmark_program_loader_owner": "BPFLoader2111111111111111111111111111111111",
+                    "compute_limit": 1400000,
+                    "compute_margin": 731327,
+                    "compute_margin_basis_points": 5224,
+                    "compute_units": 668673,
+                    "compute_usage_basis_points": 4776,
+                    "execution": "actual_sbf_programtest",
+                    "gate_transition": "Active -> EmergencyFrozen",
+                    "observation_digest": "694531aa6b1a1ed125bc3a5ff2fdd9acd28b86b2d4f71206f847e1c54419edf0",
+                    "observation_preallocated_and_serialized": true,
+                    "payload_capacity_bytes": 1310720,
+                    "programdata_metadata_bytes": 45,
+                    "programdata_owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+                    "raw_programdata_account_bytes": 1310765,
+                    "raw_sha256": "1dee2aaba12cceae4f49a27dcb38d393ef2f47e3561ca90e31511897c0cc4fc7",
+                    "synthetic_target_program_executable": false,
+                    "synthetic_target_program_owner": "CDY4kzJhAWJcA2XFQb9XJK7dXMvQoYy7kjdvg6ST2JYM"
+                },
+                {
+                    "architecture": "v0",
+                    "benchmark_program_loader_owner": "BPFLoader2111111111111111111111111111111111",
+                    "compute_limit": 1400000,
+                    "compute_margin": 601755,
+                    "compute_margin_basis_points": 4298,
+                    "compute_units": 798245,
+                    "compute_usage_basis_points": 5702,
+                    "execution": "actual_sbf_programtest",
+                    "gate_transition": "Active -> EmergencyFrozen",
+                    "observation_digest": "d489dfd83465bab01fddebc5ad1a10172f528e4b396ef73cf91243cb6127d984",
+                    "observation_preallocated_and_serialized": true,
+                    "payload_capacity_bytes": 1572864,
+                    "programdata_metadata_bytes": 45,
+                    "programdata_owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+                    "raw_programdata_account_bytes": 1572909,
+                    "raw_sha256": "fd48573b34682236243917b1b88a640987f718c70bc8fbbbc1f61192da55a7ed",
+                    "synthetic_target_program_executable": false,
+                    "synthetic_target_program_owner": "CDY4kzJhAWJcA2XFQb9XJK7dXMvQoYy7kjdvg6ST2JYM"
+                },
+                {
+                    "architecture": "v0",
+                    "benchmark_program_loader_owner": "BPFLoader2111111111111111111111111111111111",
+                    "compute_limit": 1400000,
+                    "compute_margin": 467683,
+                    "compute_margin_basis_points": 3341,
+                    "compute_units": 932317,
+                    "compute_usage_basis_points": 6659,
+                    "execution": "actual_sbf_programtest",
+                    "gate_transition": "Active -> EmergencyFrozen",
+                    "observation_digest": "c339543fd04f88fa735cef80a65bb0ccf3a3a9107ce0be72eabb98e02aaf234f",
+                    "observation_preallocated_and_serialized": true,
+                    "payload_capacity_bytes": 1835008,
+                    "programdata_metadata_bytes": 45,
+                    "programdata_owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+                    "raw_programdata_account_bytes": 1835053,
+                    "raw_sha256": "aa9eae93d462fb34eb5fe5a0c87eb7d98d5ac1605f5f31755f39892dea64215a",
+                    "synthetic_target_program_executable": false,
+                    "synthetic_target_program_owner": "CDY4kzJhAWJcA2XFQb9XJK7dXMvQoYy7kjdvg6ST2JYM"
+                },
+                {
+                    "architecture": "v0",
+                    "benchmark_program_loader_owner": "BPFLoader2111111111111111111111111111111111",
+                    "compute_limit": 1400000,
+                    "compute_margin": 339611,
+                    "compute_margin_basis_points": 2426,
+                    "compute_units": 1060389,
+                    "compute_usage_basis_points": 7574,
+                    "execution": "actual_sbf_programtest",
+                    "gate_transition": "Active -> EmergencyFrozen",
+                    "observation_digest": "dbf6689367aa8d7804462cf468f8d76473a8e3380f7bac32f8d4f7a60adeb2a7",
+                    "observation_preallocated_and_serialized": true,
+                    "payload_capacity_bytes": 2097152,
+                    "programdata_metadata_bytes": 45,
+                    "programdata_owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+                    "raw_programdata_account_bytes": 2097197,
+                    "raw_sha256": "9fa34db8f3080445cb7b95e2f772633b36e200a3f08566faef268de5060aff29",
+                    "synthetic_target_program_executable": false,
+                    "synthetic_target_program_owner": "CDY4kzJhAWJcA2XFQb9XJK7dXMvQoYy7kjdvg6ST2JYM"
+                }
+            ],
+            "stack": {
+                "linked_elf_margin_bytes": 0,
+                "linked_elf_max_frame_or_offset_bytes": 4096,
+                "method": "max_r10_direct_offset",
+                "process_instruction_frame_bytes": 4096,
+                "process_instruction_margin_bytes": 0,
+                "sbf_frame_limit_bytes": 4096
+            }
+        },
+        "v2": {
+            "build_diagnostics": {
+                "caller_frame_or_stack_offset_diagnostic_count": 0,
+                "compiler_frame_diagnostic_count": 0,
+                "diagnostic_symbols_absent_from_linked_elf": 0,
+                "diagnostic_symbols_present_in_linked_elf": [],
+                "linked_elf_safe": true
+            },
+            "elf": {
+                "bytes": 49384,
+                "sha256": "2c2c82f8ee086a154775f73edee6323f792500bacffddbc9e4e9453bb460fe65"
+            },
+            "measurements": [
+                {
+                    "architecture": "v2",
+                    "benchmark_program_loader_owner": "BPFLoader2111111111111111111111111111111111",
+                    "compute_limit": 1400000,
+                    "compute_margin": 731249,
+                    "compute_margin_basis_points": 5223,
+                    "compute_units": 668751,
+                    "compute_usage_basis_points": 4777,
+                    "execution": "actual_sbf_programtest",
+                    "gate_transition": "Active -> EmergencyFrozen",
+                    "observation_digest": "694531aa6b1a1ed125bc3a5ff2fdd9acd28b86b2d4f71206f847e1c54419edf0",
+                    "observation_preallocated_and_serialized": true,
+                    "payload_capacity_bytes": 1310720,
+                    "programdata_metadata_bytes": 45,
+                    "programdata_owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+                    "raw_programdata_account_bytes": 1310765,
+                    "raw_sha256": "1dee2aaba12cceae4f49a27dcb38d393ef2f47e3561ca90e31511897c0cc4fc7",
+                    "synthetic_target_program_executable": false,
+                    "synthetic_target_program_owner": "CDY4kzJhAWJcA2XFQb9XJK7dXMvQoYy7kjdvg6ST2JYM"
+                },
+                {
+                    "architecture": "v2",
+                    "benchmark_program_loader_owner": "BPFLoader2111111111111111111111111111111111",
+                    "compute_limit": 1400000,
+                    "compute_margin": 601677,
+                    "compute_margin_basis_points": 4298,
+                    "compute_units": 798323,
+                    "compute_usage_basis_points": 5702,
+                    "execution": "actual_sbf_programtest",
+                    "gate_transition": "Active -> EmergencyFrozen",
+                    "observation_digest": "d489dfd83465bab01fddebc5ad1a10172f528e4b396ef73cf91243cb6127d984",
+                    "observation_preallocated_and_serialized": true,
+                    "payload_capacity_bytes": 1572864,
+                    "programdata_metadata_bytes": 45,
+                    "programdata_owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+                    "raw_programdata_account_bytes": 1572909,
+                    "raw_sha256": "fd48573b34682236243917b1b88a640987f718c70bc8fbbbc1f61192da55a7ed",
+                    "synthetic_target_program_executable": false,
+                    "synthetic_target_program_owner": "CDY4kzJhAWJcA2XFQb9XJK7dXMvQoYy7kjdvg6ST2JYM"
+                },
+                {
+                    "architecture": "v2",
+                    "benchmark_program_loader_owner": "BPFLoader2111111111111111111111111111111111",
+                    "compute_limit": 1400000,
+                    "compute_margin": 467605,
+                    "compute_margin_basis_points": 3340,
+                    "compute_units": 932395,
+                    "compute_usage_basis_points": 6660,
+                    "execution": "actual_sbf_programtest",
+                    "gate_transition": "Active -> EmergencyFrozen",
+                    "observation_digest": "c339543fd04f88fa735cef80a65bb0ccf3a3a9107ce0be72eabb98e02aaf234f",
+                    "observation_preallocated_and_serialized": true,
+                    "payload_capacity_bytes": 1835008,
+                    "programdata_metadata_bytes": 45,
+                    "programdata_owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+                    "raw_programdata_account_bytes": 1835053,
+                    "raw_sha256": "aa9eae93d462fb34eb5fe5a0c87eb7d98d5ac1605f5f31755f39892dea64215a",
+                    "synthetic_target_program_executable": false,
+                    "synthetic_target_program_owner": "CDY4kzJhAWJcA2XFQb9XJK7dXMvQoYy7kjdvg6ST2JYM"
+                },
+                {
+                    "architecture": "v2",
+                    "benchmark_program_loader_owner": "BPFLoader2111111111111111111111111111111111",
+                    "compute_limit": 1400000,
+                    "compute_margin": 339533,
+                    "compute_margin_basis_points": 2425,
+                    "compute_units": 1060467,
+                    "compute_usage_basis_points": 7575,
+                    "execution": "actual_sbf_programtest",
+                    "gate_transition": "Active -> EmergencyFrozen",
+                    "observation_digest": "dbf6689367aa8d7804462cf468f8d76473a8e3380f7bac32f8d4f7a60adeb2a7",
+                    "observation_preallocated_and_serialized": true,
+                    "payload_capacity_bytes": 2097152,
+                    "programdata_metadata_bytes": 45,
+                    "programdata_owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+                    "raw_programdata_account_bytes": 2097197,
+                    "raw_sha256": "9fa34db8f3080445cb7b95e2f772633b36e200a3f08566faef268de5060aff29",
+                    "synthetic_target_program_executable": false,
+                    "synthetic_target_program_owner": "CDY4kzJhAWJcA2XFQb9XJK7dXMvQoYy7kjdvg6ST2JYM"
+                }
+            ],
+            "stack": {
+                "linked_elf_margin_bytes": 2944,
+                "linked_elf_max_frame_or_offset_bytes": 1152,
+                "method": "dynamic_frame_prologue",
+                "process_instruction_frame_bytes": 1152,
+                "process_instruction_margin_bytes": 2944,
+                "sbf_frame_limit_bytes": 4096
+            }
+        }
+    },
+    "base_commit": "67e351346f2e6aa6e9cbb0acb84ef9c2ba367e53",
+    "benchmark_contract": {
+        "account_data_access": "direct AccountInfo::try_borrow_data slice; no raw-account copy",
+        "candidate_payload_bytes": [
+            1310720,
+            1572864,
+            1835008,
+            2097152
+        ],
+        "candidate_raw_account_bytes": [
+            1310765,
+            1572909,
+            1835053,
+            2097197
+        ],
+        "compute_measurement_includes_compute_budget_instruction": true,
+        "digest": "one additional domain-separated SHA-256 over graph, header, raw hash, epoch, slot, and reason",
+        "gate": "validated canonical 192-byte Active gate and mutated it to EmergencyFrozen with epoch increment",
+        "observation": "preallocated zeroed 256-byte PDA validated and serialized in the same transaction",
+        "production_instruction_tag_added": false,
+        "program_graph_checks": "exact read-only privileges, equal-cost synthetic owner comparison, and exact Program -> ProgramData linkage bytes; the synthetic target is benchmark-owned and nonexecutable because ProgramTest deploy-cache loading rejects a synthetic Loader-v3 Program record before the benchmark entrypoint runs",
+        "programdata_header_checks": "exact loader owner, length, tag, nonzero slot, and controller authority",
+        "programdata_metadata_bytes": 45
+    },
+    "commands": [
+        "cargo fmt --manifest-path benchmarks/guardian_raw_hash_sbf/Cargo.toml -- --check",
+        "cargo clippy --manifest-path benchmarks/guardian_raw_hash_sbf/Cargo.toml --locked --offline --lib --tests -- -D warnings",
+        "cargo-build-sbf --manifest-path benchmarks/guardian_raw_hash_sbf/Cargo.toml --arch v0 --tools-version v1.53 --sbf-out-dir <fresh>/v0/sbf-out -- --locked --offline",
+        "cargo test --manifest-path benchmarks/guardian_raw_hash_sbf/Cargo.toml --locked --offline --test actual_sbf -- --nocapture --test-threads=1 (BPF_OUT_DIR=<fresh>/v0/sbf-out)",
+        "cargo-build-sbf --manifest-path benchmarks/guardian_raw_hash_sbf/Cargo.toml --arch v2 --tools-version v1.53 --sbf-out-dir <fresh>/v2/sbf-out -- --locked --offline",
+        "cargo test --manifest-path benchmarks/guardian_raw_hash_sbf/Cargo.toml --locked --offline --test actual_sbf -- --nocapture --test-threads=1 (BPF_OUT_DIR=<fresh>/v2/sbf-out)"
+    ],
+    "decision": {
+        "max_atomic_payload_capacity_bytes": 1572864,
+        "max_atomic_raw_programdata_account_bytes": 1572909,
+        "max_selected_compute_units": 798323,
+        "min_process_instruction_stack_margin_bytes": 0,
+        "min_selected_compute_margin_basis_points": 4298,
+        "min_selected_compute_margin_units": 601677,
+        "passes_selection_gates": true,
+        "raw_hash_complete_rule": "true only for a structurally valid ProgramData account whose exact data length is at most 1572909; false with a zero raw hash above that bound",
+        "reason": "The 1.5 MiB payload case passes the predeclared 850,000-CU cap, retains at least 550,000 CU for production-specific variance and checks, covers the expected 1.1-1.3 MiB Spread artifact range, and has no linked frame-overflow or caller-overlap diagnostic. Larger measured cases are evidence only and are deliberately outside the V1 atomic-complete bound."
+    },
+    "environment": {
+        "cargo_build_sbf": "cargo-build-sbf 4.0.0\nplatform-tools v1.53\nrustc 1.89.0",
+        "cargo_offline": true,
+        "cluster_or_rpc_used": false,
+        "host": "Linux DESKTOP-MVRQUSJ 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
+        "platform_tools": "v1.53",
+        "program_test": "2.3.13",
+        "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+        "solana_program": "2.3.0"
+    },
+    "generated_at_utc": "2026-08-27T23:12:20.339133+00:00",
+    "limitations": [
+        "This standalone benchmark is a faithful composed resource model, not the production GuardianFreeze processor.",
+        "The synthetic target Program is benchmark-owned and nonexecutable; production must validate the Loader-v3 owner and executable bit. These are constant-cost checks and must be included in the integrated rebenchmark.",
+        "The observation PDA is preallocated. Any production instruction that creates it through System CPI must be remeasured; the selected bound reserves at least 550,000 CU for integration work.",
+        "It does not prove semantic correctness of the production schema, digest, state transition, or failure atomicity.",
+        "A ProgramData account above the selected bound must skip the raw hash, record incomplete evidence, and remain fail closed for ResumeWithoutUpgrade.",
+        "The full production GuardianFreeze and failure-observation SBF instructions must be remeasured after integration."
+    ],
+    "schema": "ameba-guardian-raw-programdata-sbf-benchmark-evidence-v1",
+    "selection_gates": {
+        "actual_sbf_required_for": [
+            "v0",
+            "v2"
+        ],
+        "compute_limit": 1400000,
+        "linked_compiler_frame_or_caller_overlap_allowed": false,
+        "process_instruction_frame_cap_bytes": {
+            "v0": 4096,
+            "v2": 1536
+        },
+        "selected_compute_cap": 850000,
+        "selected_min_compute_margin": 550000,
+        "selected_min_compute_margin_basis_points": 3929,
+        "v0_stack_rule": "direct r10 offsets may use the complete fixed 4,096-byte frame; any compiler overflow, caller-frame overlap, or linked diagnostic symbol is forbidden"
+    },
+    "source_sha256": {
+        "benchmarks/guardian_raw_hash_sbf/.gitignore": "337613937fda3acd2ba7834aa3e1b1eacfe04c9cafb336dfd6dfb7b6827d8f3e",
+        "benchmarks/guardian_raw_hash_sbf/Cargo.lock": "9897d18f3b72e0d666aee3ae748eead2b6ae3ad849348ef1654a546ecfc74269",
+        "benchmarks/guardian_raw_hash_sbf/Cargo.toml": "7bcacea6d915707d881ce8c0352d9aab90bedea43c7a9ccbcd4bcd38fac81799",
+        "benchmarks/guardian_raw_hash_sbf/run-benchmark.sh": "af0fd8a83563c58b60d5c2ab174b4b182f03f99bd621eff13f3bf64139bceab5",
+        "benchmarks/guardian_raw_hash_sbf/rust-toolchain.toml": "92d22712000a7d8c1a6c236f19967550b431b6c3ec8d89d798b214da15dd3c7f",
+        "benchmarks/guardian_raw_hash_sbf/src/lib.rs": "16efa2c3a3598ef518d1f0bbccf3a8db60fb95d01cc2fc7472ece435b488f380",
+        "benchmarks/guardian_raw_hash_sbf/summarize_benchmark.py": "2bd2f2dbdc7993c3cef2fc770df479eb897beb8cb5c26974037a3f363bec3241",
+        "benchmarks/guardian_raw_hash_sbf/tests/actual_sbf.rs": "6fc248504482ae8e5939377b006bfe6e9c7d150e707aa0450ccdb64c2250f0eb"
+    }
+}
