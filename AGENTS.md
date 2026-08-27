@@ -16,21 +16,17 @@ repository:
 
 ## Current assignment
 
-Only the execution-free `ameba_gov` slice of Phase 3 is authorized:
+`docs/governance/amendments/release-1-completion-batch.md` authorizes the local
+Release 1 Phase 4-6 implementation and Phase 7 readiness work on the isolated
+`codex/release1-completion` branch. It supersedes the former Phase 3-only source
+boundary while preserving every Phase 2/3 wire invariant and the safety rules
+below.
 
-- preserve the normative Phase 3 amendment byte-for-byte;
-- publish the canonical fixed-width `ProtocolGateV1` and governance-tail
-  codecs and deterministic bridge fixture;
-- freeze Rust and TypeScript parity/rejection vectors for that fixture;
-- add pinned trust-root CI with SBPF v0/v2 diagnostic analysis; and
-- record the controller-side Phase 3 gate ABI report.
-
-Do not add another executable controller instruction. The only executable
-surface remains `RecordProposalApprovalV1`; the gate/tail work in this
-repository is codec, derivation, fixture, test, CI, and documentation only.
-Target dispatch enforcement, tag manifests, compressed integration, client
-migration, and packet tests belong to the separately scoped `ameba_spread`
-slice and remain out of bounds here.
+The clean local Phase 3 commits are the accepted development baselines, but
+their packet and constructor-proof blockers remain open and must be closed or
+reported. Work in `ameba_spread` is allowed only in its separate isolated
+Release 1 worktree and only for bridge/client/evidence integration; protocol
+economics remain out of scope.
 
 ## Safety boundary
 
@@ -42,16 +38,15 @@ Do not:
 - transfer ProgramData or buffer authority;
 - mutate live configuration, services, accounts, release intent, or
   automation;
-- modify `ameba_spread`;
-- add a proposal, initialization, gate-mutation, freeze, unfreeze, recovery,
-  loader, or deployment processor;
+- modify `ameba_spread` outside its isolated Release 1 worktree or beyond the
+  authorized bridge/client/evidence boundary;
+- deploy, initialize, sign, or invoke a loader on a live cluster;
 - add an arbitrary-CPI surface;
 - add an ungated compatibility path;
-- claim this Phase 3 ABI slice is production ready or live.
+- claim Release 1 is production ready or live before every internal gate passes.
 
-The source repository at `C:\Users\space\amoeba-farm\ameba_spread` is pinned to
-`1b2230d96e51f6582155d8284900fbfc11ff1f18` and remains read-only throughout
-this `ameba_gov` Phase 3 slice.
+Never modify either `main` worktree or the deployed Devnet contract. Never push
+without a separate authorization.
 
 ## Encoding rules
 
