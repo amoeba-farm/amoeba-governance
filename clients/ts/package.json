@@ -8,10 +8,12 @@
     "node": ">=22 <25"
   },
   "scripts": {
+    "generate:bridge": "node --import tsx tools/generate-spread-gate-bridge.ts",
     "generate:vectors": "node --import tsx tools/generate-vectors.ts",
+    "check:bridge": "node --import tsx tools/generate-spread-gate-bridge.ts --check",
     "check:vectors": "node --import tsx tools/generate-vectors.ts --check",
     "typecheck": "tsc --noEmit",
-    "test": "npm run check:vectors && node --import tsx --test upgradeGovernance/*.test.ts"
+    "test": "npm run check:vectors && npm run check:bridge && node --import tsx --test upgradeGovernance/*.test.ts"
   },
   "dependencies": {
     "@solana/web3.js": "1.98.4"

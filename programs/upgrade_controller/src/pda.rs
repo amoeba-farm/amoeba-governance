@@ -1,4 +1,4 @@
-use solana_program::pubkey::Pubkey;
+use solana_program::{pubkey, pubkey::Pubkey};
 
 use crate::state::CheckpointPhaseV1;
 
@@ -11,6 +11,11 @@ pub const COUNCIL_SEED: &[u8] = b"council";
 pub const PROPOSAL_SEED: &[u8] = b"proposal";
 pub const CHECKPOINT_SEED: &[u8] = b"checkpoint";
 pub const BUFFER_CHECK_SEED: &[u8] = b"buffer-check";
+pub const UPGRADEABLE_LOADER_ID: Pubkey = pubkey!("BPFLoaderUpgradeab1e11111111111111111111111");
+
+pub fn derive_upgradeable_programdata_address(target_program: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[target_program.as_ref()], &UPGRADEABLE_LOADER_ID)
+}
 
 pub fn derive_controller_config_pda(
     controller_program: &Pubkey,
@@ -125,6 +130,7 @@ mod tests {
         let target = Pubkey::new_from_array([29; 32]);
         let proposal = derive_proposal_pda(&controller, &target, 7).0;
         let addresses = [
+            derive_upgradeable_programdata_address(&target).0,
             derive_controller_config_pda(&controller, &target).0,
             derive_authority_pda(&controller, &target).0,
             derive_gate_pda(&controller, &target).0,

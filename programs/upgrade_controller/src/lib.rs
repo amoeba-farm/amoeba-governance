@@ -11,6 +11,7 @@ pub mod digest;
 #[cfg(not(feature = "no-entrypoint"))]
 pub mod entrypoint;
 pub mod error;
+pub mod gate_abi;
 pub mod instruction;
 pub mod pda;
 pub mod policy;

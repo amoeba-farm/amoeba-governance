@@ -20,9 +20,40 @@ export const COUNCIL_SEAT_LEN = 96;
 export const GOVERNANCE_COUNCIL_SET_LEN = 640;
 export const PROTOCOL_GATE_LEN = 192;
 export const UPGRADE_PROPOSAL_LEN = 1280;
+export const GOVERNANCE_TAIL_LEN = 16;
 export const POLICY_HASH_MATERIAL_LEN = 96;
 export const COUNCIL_SET_HASH_MATERIAL_LEN = 336;
 export const PROPOSAL_DIGEST_MATERIAL_LEN = 1084;
+export const PROTOCOL_GATE_DISCRIMINATOR = Buffer.from("AGVGAT01", "ascii");
+export const GOVERNANCE_TAIL_MAGIC = Buffer.from("AGV1", "ascii");
+export const GOVERNANCE_TAIL_VERSION_V1 = 1;
+export const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
+  "BPFLoaderUpgradeab1e11111111111111111111111",
+);
+
+export const PROTOCOL_GATE_V1_OFFSETS = Object.freeze({
+  discriminator: 0,
+  accountVersion: 8,
+  bump: 9,
+  initialized: 10,
+  status: 11,
+  controllerConfig: 12,
+  targetProgram: 44,
+  targetProgramdata: 76,
+  epoch: 108,
+  activeProposal: 116,
+  freezeSlot: 148,
+  freezeReasonCode: 156,
+  lastCompletedProposal: 158,
+  reserved: 190,
+});
+
+export const GOVERNANCE_TAIL_V1_OFFSETS = Object.freeze({
+  magic: 0,
+  version: 4,
+  reserved: 5,
+  expectedEpoch: 8,
+});
 
 const seed = (value: string): Buffer => Buffer.from(value, "ascii");
 const TARGET_SEED = seed("target");
@@ -84,6 +115,12 @@ function requireNondefaultKey(value: PublicKey, field: string): Buffer {
 
 function derive(programId: PublicKey, seeds: Buffer[]): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(seeds, programId);
+}
+
+export function deriveUpgradeableProgramdataAddress(
+  targetProgram: PublicKey,
+): [PublicKey, number] {
+  return derive(BPF_LOADER_UPGRADEABLE_PROGRAM_ID, [targetProgram.toBuffer()]);
 }
 
 export function deriveControllerConfigPda(
@@ -429,6 +466,223 @@ export function validateGovernanceCouncilSetV1Bytes(value: Buffer): void {
     validateCouncilSeatV1Bytes(value.subarray(start, start + COUNCIL_SEAT_LEN));
   }
   requireZeroBytes(value.subarray(614), 26, "council reserved");
+}
+
+export type GateStatusV1 = 0 | 1 | 2;
+
+export interface ProtocolGateV1Input {
+  discriminator: Buffer;
+  accountVersion: number;
+  bump: number;
+  initialized: boolean;
+  status: GateStatusV1;
+  controllerConfig: PublicKey;
+  targetProgram: PublicKey;
+  targetProgramdata: PublicKey;
+  epoch: bigint;
+  activeProposal: PublicKey;
+  freezeSlot: bigint;
+  freezeReasonCode: number;
+  lastCompletedProposal: PublicKey;
+  reserved: Buffer;
+}
+
+export interface GovernanceInstructionTailV1Input {
+  magic: Buffer;
+  version: number;
+  reserved: Buffer;
+  expectedEpoch: bigint;
+}
+
+function isDefaultPublicKey(value: PublicKey): boolean {
+  return value.toBuffer().equals(Buffer.alloc(32));
+}
+
+function validateProtocolGateV1(value: ProtocolGateV1Input): void {
+  if (!value.discriminator.equals(PROTOCOL_GATE_DISCRIMINATOR)) {
+    throw new Error("invalid ProtocolGateV1 discriminator");
+  }
+  if (value.accountVersion !== 1) {
+    throw new Error("unsupported ProtocolGateV1 version");
+  }
+  if (typeof value.initialized !== "boolean") {
+    throw new TypeError("initialized must be boolean");
+  }
+  if (!value.initialized) {
+    throw new Error("ProtocolGateV1 is not initialized");
+  }
+  if (![0, 1, 2].includes(value.status)) {
+    throw new Error("unknown GateStatusV1");
+  }
+  for (const [field, key] of [
+    ["controllerConfig", value.controllerConfig],
+    ["targetProgram", value.targetProgram],
+    ["targetProgramdata", value.targetProgramdata],
+  ] as const) {
+    if (isDefaultPublicKey(key)) {
+      throw new Error(`${field} must be nondefault`);
+    }
+  }
+  requireZeroBytes(value.reserved, 2, "gate reserved");
+
+  const activeProposalIsDefault = isDefaultPublicKey(value.activeProposal);
+  const activeIsCanonical =
+    activeProposalIsDefault &&
+    value.freezeSlot === 0n &&
+    value.freezeReasonCode === 0;
+  const upgradeFrozenIsCanonical =
+    !activeProposalIsDefault &&
+    value.freezeSlot !== 0n &&
+    value.freezeReasonCode !== 0;
+  const emergencyFrozenIsCanonical =
+    activeProposalIsDefault &&
+    value.freezeSlot !== 0n &&
+    value.freezeReasonCode !== 0;
+  if (
+    (value.status === 0 && !activeIsCanonical) ||
+    (value.status === 1 && !upgradeFrozenIsCanonical) ||
+    (value.status === 2 && !emergencyFrozenIsCanonical)
+  ) {
+    throw new Error("ProtocolGateV1 fields are not a canonical V1 state");
+  }
+}
+
+export function serializeProtocolGateV1(value: ProtocolGateV1Input): Buffer {
+  validateProtocolGateV1(value);
+  const out = Buffer.concat([
+    requireBytes(value.discriminator, 8, "gate discriminator"),
+    u8(value.accountVersion, "accountVersion"),
+    u8(value.bump, "bump"),
+    boolByte(value.initialized, "initialized"),
+    u8(value.status, "status"),
+    value.controllerConfig.toBuffer(),
+    value.targetProgram.toBuffer(),
+    value.targetProgramdata.toBuffer(),
+    u64Le(value.epoch),
+    value.activeProposal.toBuffer(),
+    u64Le(value.freezeSlot),
+    u16Le(value.freezeReasonCode, "freezeReasonCode"),
+    value.lastCompletedProposal.toBuffer(),
+    requireZeroBytes(value.reserved, 2, "gate reserved"),
+  ]);
+  if (out.length !== PROTOCOL_GATE_LEN) {
+    throw new Error(`ProtocolGateV1 length ${out.length}`);
+  }
+  return out;
+}
+
+export function deserializeProtocolGateV1(bytes: Buffer): ProtocolGateV1Input {
+  requireBytes(bytes, PROTOCOL_GATE_LEN, "ProtocolGateV1");
+  const offsets = PROTOCOL_GATE_V1_OFFSETS;
+  if (!bytes.subarray(offsets.discriminator, offsets.accountVersion).equals(PROTOCOL_GATE_DISCRIMINATOR)) {
+    throw new Error("invalid ProtocolGateV1 discriminator");
+  }
+  if (bytes[offsets.accountVersion] !== 1) {
+    throw new Error("unsupported ProtocolGateV1 version");
+  }
+  requireCanonicalBoolByte(bytes[offsets.initialized]!, "gate initialized");
+  const status = bytes[offsets.status]!;
+  if (status > 2) {
+    throw new Error("unknown GateStatusV1");
+  }
+  requireZeroBytes(bytes.subarray(offsets.reserved), 2, "gate reserved");
+
+  const value: ProtocolGateV1Input = {
+    discriminator: Buffer.from(bytes.subarray(offsets.discriminator, offsets.accountVersion)),
+    accountVersion: bytes[offsets.accountVersion]!,
+    bump: bytes[offsets.bump]!,
+    initialized: bytes[offsets.initialized] === 1,
+    status: status as GateStatusV1,
+    controllerConfig: new PublicKey(bytes.subarray(offsets.controllerConfig, offsets.targetProgram)),
+    targetProgram: new PublicKey(bytes.subarray(offsets.targetProgram, offsets.targetProgramdata)),
+    targetProgramdata: new PublicKey(bytes.subarray(offsets.targetProgramdata, offsets.epoch)),
+    epoch: bytes.readBigUInt64LE(offsets.epoch),
+    activeProposal: new PublicKey(bytes.subarray(offsets.activeProposal, offsets.freezeSlot)),
+    freezeSlot: bytes.readBigUInt64LE(offsets.freezeSlot),
+    freezeReasonCode: bytes.readUInt16LE(offsets.freezeReasonCode),
+    lastCompletedProposal: new PublicKey(bytes.subarray(offsets.lastCompletedProposal, offsets.reserved)),
+    reserved: Buffer.from(bytes.subarray(offsets.reserved)),
+  };
+  validateProtocolGateV1(value);
+  return value;
+}
+
+export function canonicalGovernanceInstructionTailV1(
+  expectedEpoch: bigint,
+): GovernanceInstructionTailV1Input {
+  return {
+    magic: Buffer.from(GOVERNANCE_TAIL_MAGIC),
+    version: GOVERNANCE_TAIL_VERSION_V1,
+    reserved: Buffer.alloc(3),
+    expectedEpoch,
+  };
+}
+
+export function serializeGovernanceInstructionTailV1(
+  value: GovernanceInstructionTailV1Input,
+): Buffer {
+  if (!value.magic.equals(GOVERNANCE_TAIL_MAGIC)) {
+    throw new Error("invalid governance tail magic");
+  }
+  if (value.version !== GOVERNANCE_TAIL_VERSION_V1) {
+    throw new Error("unsupported governance tail version");
+  }
+  const out = Buffer.concat([
+    requireBytes(value.magic, 4, "tail magic"),
+    u8(value.version, "tail version"),
+    requireZeroBytes(value.reserved, 3, "tail reserved"),
+    u64Le(value.expectedEpoch),
+  ]);
+  if (out.length !== GOVERNANCE_TAIL_LEN) {
+    throw new Error(`GovernanceInstructionTailV1 length ${out.length}`);
+  }
+  return out;
+}
+
+export function deserializeGovernanceInstructionTailV1(
+  bytes: Buffer,
+): GovernanceInstructionTailV1Input {
+  requireBytes(bytes, GOVERNANCE_TAIL_LEN, "GovernanceInstructionTailV1");
+  const offsets = GOVERNANCE_TAIL_V1_OFFSETS;
+  if (!bytes.subarray(offsets.magic, offsets.version).equals(GOVERNANCE_TAIL_MAGIC)) {
+    throw new Error("invalid governance tail magic");
+  }
+  if (bytes[offsets.version] !== GOVERNANCE_TAIL_VERSION_V1) {
+    throw new Error("unsupported governance tail version");
+  }
+  requireZeroBytes(bytes.subarray(offsets.reserved, offsets.expectedEpoch), 3, "tail reserved");
+  return {
+    magic: Buffer.from(bytes.subarray(offsets.magic, offsets.version)),
+    version: bytes[offsets.version]!,
+    reserved: Buffer.from(bytes.subarray(offsets.reserved, offsets.expectedEpoch)),
+    expectedEpoch: bytes.readBigUInt64LE(offsets.expectedEpoch),
+  };
+}
+
+export function envelopeInstructionDataV1(
+  legacyInstruction: Buffer,
+  tail: GovernanceInstructionTailV1Input,
+): Buffer {
+  return Buffer.concat([
+    Buffer.from(legacyInstruction),
+    serializeGovernanceInstructionTailV1(tail),
+  ]);
+}
+
+export function stripGovernanceTailV1(envelopedInstruction: Buffer): {
+  legacyInstruction: Buffer;
+  tail: GovernanceInstructionTailV1Input;
+} {
+  if (envelopedInstruction.length < GOVERNANCE_TAIL_LEN) {
+    throw new RangeError(
+      `enveloped instruction must contain a final ${GOVERNANCE_TAIL_LEN}-byte tail`,
+    );
+  }
+  const split = envelopedInstruction.length - GOVERNANCE_TAIL_LEN;
+  return {
+    legacyInstruction: Buffer.from(envelopedInstruction.subarray(0, split)),
+    tail: deserializeGovernanceInstructionTailV1(envelopedInstruction.subarray(split)),
+  };
 }
 
 export interface ProposalDigestInputV1 {
