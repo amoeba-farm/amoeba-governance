@@ -7578,6 +7578,8 @@ dependencies = [
  "solana-program-test",
  "solana-pubkey",
  "solana-sdk",
+ "solana-sdk-ids",
+ "solana-system-interface",
  "thiserror 2.0.18",
  "tokio",
 ]

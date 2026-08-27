@@ -16,6 +16,8 @@ no-entrypoint = []
 borsh.workspace = true
 solana-program.workspace = true
 solana-pubkey.workspace = true
+solana-sdk-ids.workspace = true
+solana-system-interface.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
