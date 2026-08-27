@@ -1,0 +1,104 @@
+name: governance-trust-root
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  native-and-parity:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install pinned Rust
+        shell: bash
+        run: |
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt,clippy
+          rustup default 1.89.0
+          test "$(rustc --version)" = "rustc 1.89.0 (29483883e 2025-08-04)"
+
+      - name: Install pinned Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.20.0
+          cache: npm
+          cache-dependency-path: clients/ts/package-lock.json
+
+      - name: Pin npm
+        shell: bash
+        run: |
+          npm install --global npm@10.9.8
+          test "$(node --version)" = "v22.20.0"
+          test "$(npm --version)" = "10.9.8"
+
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Rust Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Rust unit and ProgramTest
+        run: cargo test --workspace --all-targets
+
+      - name: Rust release build
+        run: cargo build --workspace --release
+
+      - name: TypeScript install
+        working-directory: clients/ts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: TypeScript typecheck
+        working-directory: clients/ts
+        run: npm run typecheck
+
+      - name: TypeScript tests and fixture drift
+        working-directory: clients/ts
+        run: npm test
+
+  sbpf-diagnostics:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install pinned Rust
+        shell: bash
+        run: |
+          rustup toolchain install 1.89.0 --profile minimal
+          rustup default 1.89.0
+          test "$(rustc --version)" = "rustc 1.89.0 (29483883e 2025-08-04)"
+
+      - name: Install pinned Agave SBF tool
+        shell: bash
+        run: |
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output /tmp/agave-release.tar.bz2 \
+            https://github.com/anza-xyz/agave/releases/download/v2.3.13/solana-release-x86_64-unknown-linux-gnu.tar.bz2
+          echo "c43539ebdf6942472e8b87635d6ea55f428a51e3d0219f7b6f720fc6b19fade0  /tmp/agave-release.tar.bz2" \
+            | sha256sum --check --strict
+          mkdir /tmp/agave-release
+          tar --extract --bzip2 --file /tmp/agave-release.tar.bz2 \
+            --directory /tmp/agave-release
+          echo "/tmp/agave-release/solana-release/bin" >> "$GITHUB_PATH"
+
+      - name: Verify pinned SBF versions
+        shell: bash
+        run: |
+          cargo-build-sbf --version | tee /tmp/cargo-build-sbf-version.txt
+          grep --fixed-strings "cargo-build-sbf 4.0.0" /tmp/cargo-build-sbf-version.txt
+          grep --fixed-strings "platform-tools v1.53" /tmp/cargo-build-sbf-version.txt
+          grep --fixed-strings "rustc 1.89.0" /tmp/cargo-build-sbf-version.txt
+
+      - name: Build and analyze SBPF v0
+        shell: bash
+        run: scripts/build-sbpf-checked.sh v0 "$RUNNER_TEMP/ameba-gov-sbpf"
+
+      - name: Build and analyze SBPF v2
+        shell: bash
+        run: scripts/build-sbpf-checked.sh v2 "$RUNNER_TEMP/ameba-gov-sbpf"
