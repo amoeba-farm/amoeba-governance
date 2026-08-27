@@ -1,9 +1,10 @@
-# Bootstrap V1 serialization and execution decisions
+# Bootstrap V1 and Phase 3 bridge serialization decisions
 
 This file records the current implementation decisions after the Phase 2
-Bootstrap V1 amendment. The historical Phase 0/1 report remains unchanged; the
-current amendment supersedes its company-classified council and token-vote
-assumptions.
+Bootstrap V1 and Phase 3 universal Spread gate amendments. The historical
+Phase 0/1 report remains unchanged; the Phase 2 amendment supersedes its
+company-classified council and token-vote assumptions, while the Phase 3
+amendment controls the bridge ABI and current phase boundary.
 
 ## Frozen account ABI
 
@@ -32,6 +33,46 @@ bytes, and all nine PDA addresses and bumps.
 The persisted `Pubkey` type uses the pinned `solana-pubkey` 2.4.0 Borsh feature
 to make its 32-byte Borsh 0.10 representation explicit. No variable-width
 collection, string, or Borsh `Option` appears in an account.
+
+## Phase 3 gate and tail bridge ABI
+
+`ProtocolGateV1` remains the exact 192-byte account below. Rust and TypeScript
+export the same offsets and reject every length, discriminator, version,
+noncanonical-boolean, unknown-enum, reserved-byte, and invalid-state-shape
+mutation before accepting a canonical re-encoding.
+
+| Offset | Bytes | Field |
+|---:|---:|---|
+| 0 | 8 | discriminator `AGVGAT01` |
+| 8 | 1 | account version `1` |
+| 9 | 1 | PDA bump |
+| 10 | 1 | initialized boolean |
+| 11 | 1 | `GateStatusV1` |
+| 12 | 32 | controller config |
+| 44 | 32 | target program |
+| 76 | 32 | target ProgramData |
+| 108 | 8 | epoch, little-endian `u64` |
+| 116 | 32 | active proposal |
+| 148 | 8 | freeze slot, little-endian `u64` |
+| 156 | 2 | freeze reason, little-endian `u16` |
+| 158 | 32 | last completed proposal |
+| 190 | 2 | zero reserved bytes |
+
+`GovernanceInstructionTailV1` is exactly 16 bytes and is a signed instruction
+suffix, not an account and not a detached signature: bytes 0–3 are ASCII
+`AGV1`, byte 4 is version `1`, bytes 5–7 are zero, and bytes 8–15 are the
+expected gate epoch as a little-endian `u64`. The parser consumes only the
+absolute final 16 bytes, never searches backward for magic, and returns the
+unchanged legacy prefix. The canonical epoch-41 tail is
+`41475631010000002900000000000000`.
+
+The bridge fixture uses the synthetic controller
+`4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi`, the real Spread target program,
+and that target's canonical upgradeable-loader ProgramData derivation. Its
+self-hash is SHA-256 over the exact LF-terminated pretty JSON after replacing
+the `fixtureSha256` value with 64 ASCII zeroes. This avoids a circular file-hash
+definition while still committing every other byte. The generator is not used
+inside the independent Rust or TypeScript fixture assertions.
 
 ## Equal, unclassified seat authorities
 
@@ -146,9 +187,13 @@ second reviewed vector set before initialization or deployment.
 
 ## Phase boundary
 
-The controller remains predeployment. Phase 2 adds only
-`RecordProposalApprovalV1`; there is no initialization, proposal creation,
-queue, timelock, gate mutation, buffer custody, loader CPI, upgrade, recovery,
-authority transfer, token voting, deployment, or arbitrary CPI surface. The
-universal `ameba_spread` gate and exhaustive target tag work move to Phase 3;
-the full proposal lifecycle moves to Phase 4.
+The controller remains predeployment. Phase 2 adds only the executable
+`RecordProposalApprovalV1` kernel. The controller-side Phase 3 slice adds only
+execution-free gate/tail codecs, ProgramData/PDA derivations, a deterministic
+bridge fixture, parity tests, CI, and documentation. It adds no executable
+instruction. Universal dispatch admission, the exhaustive tag manifest,
+compressed-instruction integration, client migration, packet boundaries,
+races, and durable-nonce behavior remain target-side `ameba_spread` work. The
+full proposal lifecycle remains Phase 4. Initialization, gate mutation, buffer
+custody, loader CPI, upgrade, recovery, authority transfer, token voting,
+deployment, and arbitrary CPI remain absent.
