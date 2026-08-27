@@ -3,5 +3,6 @@ mod digest_vectors;
 mod gate_abi;
 mod golden_vectors;
 mod layouts;
+mod release1_schema;
 mod support;
 mod transitions;

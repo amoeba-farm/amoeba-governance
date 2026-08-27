@@ -9,11 +9,13 @@
   },
   "scripts": {
     "generate:bridge": "node --import tsx tools/generate-spread-gate-bridge.ts",
+    "generate:release1-vectors": "node --import tsx tools/generate-release1-vectors.ts",
     "generate:vectors": "node --import tsx tools/generate-vectors.ts",
     "check:bridge": "node --import tsx tools/generate-spread-gate-bridge.ts --check",
+    "check:release1-vectors": "node --import tsx tools/generate-release1-vectors.ts --check",
     "check:vectors": "node --import tsx tools/generate-vectors.ts --check",
     "typecheck": "tsc --noEmit",
-    "test": "npm run check:vectors && npm run check:bridge && node --import tsx --test upgradeGovernance/*.test.ts"
+    "test": "npm run check:vectors && npm run check:bridge && npm run check:release1-vectors && node --import tsx --test upgradeGovernance/*.test.ts"
   },
   "dependencies": {
     "@solana/web3.js": "1.98.4"

@@ -5,6 +5,7 @@
 //! seat approval. Loader CPI, gate mutation, initialization, and every later
 //! lifecycle instruction remain deliberately absent.
 
+pub mod artifact_merkle;
 pub mod authorization;
 pub mod council;
 pub mod digest;
@@ -17,6 +18,8 @@ pub mod pda;
 pub mod policy;
 pub mod processor;
 pub mod proposal;
+pub mod release1_digest;
+pub mod release1_state;
 pub mod state;
 
 pub use error::{GovernanceError, GovernanceResult};

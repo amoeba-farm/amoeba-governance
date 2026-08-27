@@ -90,6 +90,16 @@ pub enum GovernanceError {
     CrossAccountMismatch = 10_039,
     #[error("the selected governance policy is not active")]
     InactivePolicy = 10_040,
+    #[error("Release 1 account fields are internally inconsistent")]
+    InvalidRelease1Account = 10_041,
+    #[error("Release 1 verification bitmap is not canonical")]
+    InvalidRelease1Bitmap = 10_042,
+    #[error("artifact Merkle parameters are invalid")]
+    InvalidMerkleParameters = 10_043,
+    #[error("artifact Merkle proof is invalid")]
+    InvalidMerkleProof = 10_044,
+    #[error("Release 1 digest does not match its canonical commitments")]
+    Release1DigestMismatch = 10_045,
 }
 
 impl From<GovernanceError> for ProgramError {
@@ -148,6 +158,11 @@ mod tests {
             GovernanceError::InvalidPda,
             GovernanceError::CrossAccountMismatch,
             GovernanceError::InactivePolicy,
+            GovernanceError::InvalidRelease1Account,
+            GovernanceError::InvalidRelease1Bitmap,
+            GovernanceError::InvalidMerkleParameters,
+            GovernanceError::InvalidMerkleProof,
+            GovernanceError::Release1DigestMismatch,
         ];
         let codes = values.iter().map(|value| *value as u32).collect::<Vec<_>>();
         assert_eq!(codes.iter().collect::<BTreeSet<_>>().len(), codes.len());

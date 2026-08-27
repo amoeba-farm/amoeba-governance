@@ -11,6 +11,10 @@ pub const COUNCIL_SEED: &[u8] = b"council";
 pub const PROPOSAL_SEED: &[u8] = b"proposal";
 pub const CHECKPOINT_SEED: &[u8] = b"checkpoint";
 pub const BUFFER_CHECK_SEED: &[u8] = b"buffer-check";
+pub const PROGRAMDATA_CHECK_SEED: &[u8] = b"programdata-check";
+pub const EMERGENCY_RESOLUTION_SEED: &[u8] = b"emergency-resolution";
+pub const EMERGENCY_CHECKPOINT_SEED: &[u8] = b"emergency-checkpoint";
+pub const COUNCIL_ROTATION_SEED: &[u8] = b"council-rotation";
 pub const UPGRADEABLE_LOADER_ID: Pubkey = pubkey!("BPFLoaderUpgradeab1e11111111111111111111111");
 
 pub fn derive_upgradeable_programdata_address(target_program: &Pubkey) -> (Pubkey, u8) {
@@ -120,6 +124,71 @@ pub fn derive_buffer_check_pda(controller_program: &Pubkey, proposal: &Pubkey) -
     )
 }
 
+pub fn derive_programdata_check_pda(
+    controller_program: &Pubkey,
+    proposal: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            PROGRAMDATA_CHECK_SEED,
+            proposal.as_ref(),
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_emergency_resolution_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+    frozen_epoch: u64,
+) -> (Pubkey, u8) {
+    let epoch = frozen_epoch.to_le_bytes();
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            EMERGENCY_RESOLUTION_SEED,
+            target_program.as_ref(),
+            &epoch,
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_emergency_checkpoint_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+    frozen_epoch: u64,
+) -> (Pubkey, u8) {
+    let epoch = frozen_epoch.to_le_bytes();
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            EMERGENCY_CHECKPOINT_SEED,
+            target_program.as_ref(),
+            &epoch,
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_council_rotation_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+    candidate_council_version: u64,
+) -> (Pubkey, u8) {
+    let version = candidate_council_version.to_le_bytes();
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            COUNCIL_ROTATION_SEED,
+            target_program.as_ref(),
+            &version,
+        ],
+        controller_program,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,6 +209,10 @@ mod tests {
             derive_checkpoint_pda(&controller, &proposal, CheckpointPhaseV1::Prestate).0,
             derive_checkpoint_pda(&controller, &proposal, CheckpointPhaseV1::Poststate).0,
             derive_buffer_check_pda(&controller, &proposal).0,
+            derive_programdata_check_pda(&controller, &proposal).0,
+            derive_emergency_resolution_pda(&controller, &target, 7).0,
+            derive_emergency_checkpoint_pda(&controller, &target, 7).0,
+            derive_council_rotation_pda(&controller, &target, 8).0,
         ];
         for (index, address) in addresses.iter().enumerate() {
             assert!(
@@ -171,6 +244,25 @@ mod tests {
         assert_ne!(
             actual,
             derive_policy_pda(&controller, &target, version.swap_bytes()).0
+        );
+
+        let (resolution, bump) = derive_emergency_resolution_pda(&controller, &target, version);
+        let bump_seed = [bump];
+        let expected = Pubkey::create_program_address(
+            &[
+                UPGRADE_SEED_DOMAIN_V1,
+                EMERGENCY_RESOLUTION_SEED,
+                target.as_ref(),
+                &version.to_le_bytes(),
+                &bump_seed,
+            ],
+            &controller,
+        )
+        .unwrap();
+        assert_eq!(resolution, expected);
+        assert_ne!(
+            resolution,
+            derive_emergency_resolution_pda(&controller, &target, version.swap_bytes()).0
         );
     }
 }
