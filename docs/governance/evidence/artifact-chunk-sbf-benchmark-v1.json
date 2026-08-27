@@ -9,8 +9,8 @@
                 "linked_elf_safe": true
             },
             "elf": {
-                "bytes": 27608,
-                "sha256": "1b2d94784b6332edf9365d47654f023fbf621fe5f7cc3a60499741184ade0672"
+                "bytes": 28048,
+                "sha256": "9e310655ae7c898df17002dd93b5441edd8412381fdfe6f6a70ca1ea794336ce"
             },
             "measurements": [
                 {
@@ -19,14 +19,13 @@
                     "chunk_bytes": 4096,
                     "chunk_count": 512,
                     "compute_limit": 200000,
-                    "compute_margin": 195156,
-                    "compute_margin_basis_points": 9758,
-                    "compute_units": 4844,
+                    "compute_margin": 195152,
+                    "compute_units": 4848,
                     "compute_usage_basis_points": 242,
                     "execution": "actual_sbf_programtest",
                     "instruction_bytes": 345,
                     "leaf_index": 511,
-                    "merkle_root": "166f2ee739bac4ef65fec685ec8e843603664cf1e3793febb7a0f62b3eaa3a1f",
+                    "merkle_root": "57ae592a986cf8a9b25b9a44aa325f19a4d0a2b74dbb86bce5baa6dca7502097",
                     "program_owner": "BPFLoader2111111111111111111111111111111111",
                     "proof_depth": 9
                 },
@@ -36,14 +35,13 @@
                     "chunk_bytes": 8192,
                     "chunk_count": 256,
                     "compute_limit": 200000,
-                    "compute_margin": 193295,
-                    "compute_margin_basis_points": 9665,
-                    "compute_units": 6705,
+                    "compute_margin": 193291,
+                    "compute_units": 6709,
                     "compute_usage_basis_points": 335,
                     "execution": "actual_sbf_programtest",
                     "instruction_bytes": 313,
                     "leaf_index": 255,
-                    "merkle_root": "039ed2939cbdb05eddf13ac04b0e07b20dde04844edb89f5c77a1e3d6a274779",
+                    "merkle_root": "16a3fb22a25618e922a223ec34513a667af811447fe8b7829fa45279b8ec9874",
                     "program_owner": "BPFLoader2111111111111111111111111111111111",
                     "proof_depth": 8
                 },
@@ -53,24 +51,37 @@
                     "chunk_bytes": 16384,
                     "chunk_count": 128,
                     "compute_limit": 200000,
-                    "compute_margin": 189389,
-                    "compute_margin_basis_points": 9469,
-                    "compute_units": 10611,
+                    "compute_margin": 189385,
+                    "compute_units": 10615,
                     "compute_usage_basis_points": 531,
                     "execution": "actual_sbf_programtest",
                     "instruction_bytes": 281,
                     "leaf_index": 127,
-                    "merkle_root": "76fc898ea8f97e66bd54729a9844c21618310dd80f38e2ee40f67b415af733bc",
+                    "merkle_root": "ec38db6660008b4510e1edd270ae9c96f4a2341d3899b17a53421268fba43c34",
                     "program_owner": "BPFLoader2111111111111111111111111111111111",
                     "proof_depth": 7
                 }
             ],
+            "raw_programdata_hash_measurement": {
+                "account_bytes": 2097197,
+                "architecture": "v0",
+                "compute_limit": 1400000,
+                "compute_margin": 350274,
+                "compute_margin_basis_points": 2502,
+                "compute_units": 1049726,
+                "compute_usage_basis_points": 7498,
+                "execution": "actual_sbf_programtest",
+                "payload_capacity_bytes": 2097152,
+                "program_owner": "BPFLoader2111111111111111111111111111111111",
+                "programdata_metadata_bytes": 45,
+                "raw_sha256": "c9b773fc5e275d257e0849da3b4dd8c619f719662ca461aa3238c809010a8304"
+            },
             "stack": {
                 "linked_elf_margin_bytes": 0,
                 "linked_elf_max_frame_or_offset_bytes": 4096,
                 "method": "max_r10_direct_offset",
-                "process_instruction_frame_bytes": 232,
-                "process_instruction_margin_bytes": 3864,
+                "process_instruction_frame_bytes": 264,
+                "process_instruction_margin_bytes": 3832,
                 "sbf_frame_limit_bytes": 4096
             }
         },
@@ -83,8 +94,8 @@
                 "linked_elf_safe": true
             },
             "elf": {
-                "bytes": 27176,
-                "sha256": "5da5e19d5a23440f1b9e6cb3a84ab743f6626ce4c767ad73d6e2655bc41bf3df"
+                "bytes": 27624,
+                "sha256": "67a750820d6a1cf6b960617da1d8b848ff19d37f3c16f1fcee676681597ce902"
             },
             "measurements": [
                 {
@@ -93,14 +104,13 @@
                     "chunk_bytes": 4096,
                     "chunk_count": 512,
                     "compute_limit": 200000,
-                    "compute_margin": 195188,
-                    "compute_margin_basis_points": 9759,
-                    "compute_units": 4812,
+                    "compute_margin": 195186,
+                    "compute_units": 4814,
                     "compute_usage_basis_points": 241,
                     "execution": "actual_sbf_programtest",
                     "instruction_bytes": 345,
                     "leaf_index": 511,
-                    "merkle_root": "166f2ee739bac4ef65fec685ec8e843603664cf1e3793febb7a0f62b3eaa3a1f",
+                    "merkle_root": "57ae592a986cf8a9b25b9a44aa325f19a4d0a2b74dbb86bce5baa6dca7502097",
                     "program_owner": "BPFLoader2111111111111111111111111111111111",
                     "proof_depth": 9
                 },
@@ -110,14 +120,13 @@
                     "chunk_bytes": 8192,
                     "chunk_count": 256,
                     "compute_limit": 200000,
-                    "compute_margin": 193327,
-                    "compute_margin_basis_points": 9666,
-                    "compute_units": 6673,
+                    "compute_margin": 193325,
+                    "compute_units": 6675,
                     "compute_usage_basis_points": 334,
                     "execution": "actual_sbf_programtest",
                     "instruction_bytes": 313,
                     "leaf_index": 255,
-                    "merkle_root": "039ed2939cbdb05eddf13ac04b0e07b20dde04844edb89f5c77a1e3d6a274779",
+                    "merkle_root": "16a3fb22a25618e922a223ec34513a667af811447fe8b7829fa45279b8ec9874",
                     "program_owner": "BPFLoader2111111111111111111111111111111111",
                     "proof_depth": 8
                 },
@@ -127,29 +136,42 @@
                     "chunk_bytes": 16384,
                     "chunk_count": 128,
                     "compute_limit": 200000,
-                    "compute_margin": 189421,
-                    "compute_margin_basis_points": 9471,
-                    "compute_units": 10579,
+                    "compute_margin": 189419,
+                    "compute_units": 10581,
                     "compute_usage_basis_points": 529,
                     "execution": "actual_sbf_programtest",
                     "instruction_bytes": 281,
                     "leaf_index": 127,
-                    "merkle_root": "76fc898ea8f97e66bd54729a9844c21618310dd80f38e2ee40f67b415af733bc",
+                    "merkle_root": "ec38db6660008b4510e1edd270ae9c96f4a2341d3899b17a53421268fba43c34",
                     "program_owner": "BPFLoader2111111111111111111111111111111111",
                     "proof_depth": 7
                 }
             ],
+            "raw_programdata_hash_measurement": {
+                "account_bytes": 2097197,
+                "architecture": "v2",
+                "compute_limit": 1400000,
+                "compute_margin": 350303,
+                "compute_margin_basis_points": 2502,
+                "compute_units": 1049697,
+                "compute_usage_basis_points": 7498,
+                "execution": "actual_sbf_programtest",
+                "payload_capacity_bytes": 2097152,
+                "program_owner": "BPFLoader2111111111111111111111111111111111",
+                "programdata_metadata_bytes": 45,
+                "raw_sha256": "c9b773fc5e275d257e0849da3b4dd8c619f719662ca461aa3238c809010a8304"
+            },
             "stack": {
-                "linked_elf_margin_bytes": 3840,
-                "linked_elf_max_frame_or_offset_bytes": 256,
+                "linked_elf_margin_bytes": 3776,
+                "linked_elf_max_frame_or_offset_bytes": 320,
                 "method": "dynamic_frame_prologue",
-                "process_instruction_frame_bytes": 256,
-                "process_instruction_margin_bytes": 3840,
+                "process_instruction_frame_bytes": 320,
+                "process_instruction_margin_bytes": 3776,
                 "sbf_frame_limit_bytes": 4096
             }
         }
     },
-    "base_commit": "4f17a2a1f53a127096ea53004efa8a5d31618e26",
+    "base_commit": "07d14ed93173d59d8ef490536788c01e1c507408",
     "benchmark_contract": {
         "account_data_access": "direct AccountInfo::try_borrow_data slice; no chunk copy",
         "actual_chunk_length_encoding": "u32_le",
@@ -175,10 +197,10 @@
         "cargo test --manifest-path benchmarks/artifact_chunk_sbf/Cargo.toml --test actual_sbf -- --nocapture --test-threads=1 (BPF_OUT_DIR=<fresh>/v2/sbf-out)"
     ],
     "decision": {
-        "max_selected_compute_units": 10611,
+        "max_selected_compute_units": 10615,
         "max_selected_compute_usage_basis_points": 531,
-        "min_process_instruction_stack_margin_bytes": 3840,
-        "min_selected_compute_margin_units": 189389,
+        "min_process_instruction_stack_margin_bytes": 3776,
+        "min_selected_compute_margin_units": 189385,
         "passes_selection_gates": true,
         "reason": "16 KiB passes both conservative resource gates and minimizes chunk count, bitmap bytes, proof depth, and instruction bytes among the measured candidates.",
         "selected_v1_chunk_bytes": 16384
@@ -192,7 +214,17 @@
         "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
         "solana_program": "2.3.0"
     },
-    "generated_at_utc": "2026-08-27T18:22:32.814760+00:00",
+    "generated_at_utc": "2026-08-27T19:55:29.166107+00:00",
+    "raw_programdata_hash_decision": {
+        "algorithm": "SHA-256 over exact raw account bytes in one dedicated finalization transaction",
+        "full_account_bytes": 2097197,
+        "max_compute_units": 1049726,
+        "min_compute_margin_units": 350274,
+        "passes_gate": true,
+        "payload_capacity_bytes": 2097152,
+        "programdata_metadata_bytes": 45,
+        "reason": "The raw hash is finalized only after chunk and zero-tail verification, in a separate bounded-compute transaction with no Loader CPI."
+    },
     "schema": "ameba-artifact-chunk-sbf-benchmark-evidence-v1",
     "selection_gates": {
         "actual_sbf_required_for": [
@@ -201,16 +233,18 @@
         ],
         "linked_compiler_frame_or_caller_overlap_allowed": false,
         "process_instruction_frame_cap_bytes": 512,
+        "raw_hash_compute_cap": 1150000,
+        "raw_hash_compute_limit": 1400000,
         "selected_case_compute_cap": 25000,
         "selected_case_compute_cap_basis_points_of_default": 1250
     },
     "source_sha256": {
         "benchmarks/artifact_chunk_sbf/Cargo.lock": "40fac5ffcb88d96db3207f9a20c77c9d8ea3241077e8c7dc2a95a19dc93eaec2",
         "benchmarks/artifact_chunk_sbf/Cargo.toml": "9c5d1a39c0673c149858e4e7ad6c3c24ef25e49f002117a909986d2d79826d4e",
-        "benchmarks/artifact_chunk_sbf/run-benchmark.sh": "1f3fc120db0f9f9e57894e695a45dcff983a588c5432a03fac245995563c6a06",
+        "benchmarks/artifact_chunk_sbf/run-benchmark.sh": "d62d1eda7b851a49c096d867d2768e9809f0e005d902bd97581edf89b1ddb1ad",
         "benchmarks/artifact_chunk_sbf/rust-toolchain.toml": "92d22712000a7d8c1a6c236f19967550b431b6c3ec8d89d798b214da15dd3c7f",
-        "benchmarks/artifact_chunk_sbf/src/lib.rs": "087cd861751943f262bcca56c3b1e36d94dc46d1097bc09868838a4b512fc210",
-        "benchmarks/artifact_chunk_sbf/summarize_benchmark.py": "2c9846211ebd4b34947ebb512e3846832392c6caae13df671cc46f6036d71856",
-        "benchmarks/artifact_chunk_sbf/tests/actual_sbf.rs": "078d91c3b5e77bfd1e78c7ffd4c482fdb02744c6bb06da7f0a20ab2f50805285"
+        "benchmarks/artifact_chunk_sbf/src/lib.rs": "640df80bc3c3c899ce5d194fe2b928e89c34808355bd6e52299a302d18fc2535",
+        "benchmarks/artifact_chunk_sbf/summarize_benchmark.py": "f97184e6cf371791f2ab268694d7c224d0330045abfb7fd91bbeab3457e100dc",
+        "benchmarks/artifact_chunk_sbf/tests/actual_sbf.rs": "fb8914dc940da1724ec2f9f4799f7c80287c04666a24da2e7765028066620742"
     }
 }

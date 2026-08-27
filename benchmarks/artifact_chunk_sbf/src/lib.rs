@@ -12,11 +12,15 @@ solana_program::entrypoint!(process_instruction);
 pub const BENCHMARK_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0xA5; 32]);
 pub const BENCHMARK_DATA_ACCOUNT_ID: Pubkey = Pubkey::new_from_array([0x5A; 32]);
 pub const MAX_ARTIFACT_BYTES: usize = 2 * 1024 * 1024;
+pub const PROGRAMDATA_METADATA_BYTES: usize = 45;
+pub const MAX_RAW_PROGRAMDATA_BYTES: usize = PROGRAMDATA_METADATA_BYTES + MAX_ARTIFACT_BYTES;
 pub const LEAF_DOMAIN: &[u8] = b"AMOEBA_ARTIFACT_CHUNK_V1";
 pub const NODE_DOMAIN: &[u8] = b"AMOEBA_ARTIFACT_NODE_V1";
 
 const MAGIC: &[u8; 8] = b"AMCHSBF1";
+const RAW_HASH_MAGIC: &[u8; 8] = b"AMRAWSF1";
 const FIXED_INSTRUCTION_BYTES: usize = 8 + 4 + 4 + 4 + 4 + 32 + 1;
+const RAW_HASH_INSTRUCTION_BYTES: usize = 8 + 32;
 
 #[repr(u32)]
 enum BenchmarkError {
@@ -27,6 +31,7 @@ enum BenchmarkError {
     ArithmeticOverflow = 5,
     WrongProofDepth = 6,
     RootMismatch = 7,
+    RawHashMismatch = 8,
 }
 
 impl From<BenchmarkError> for ProgramError {
@@ -53,9 +58,23 @@ pub fn process_instruction(
         || artifact.is_signer
         || artifact.is_writable
         || artifact.executable
-        || artifact.data_len() != MAX_ARTIFACT_BYTES
+        || artifact.data_len() != MAX_RAW_PROGRAMDATA_BYTES
     {
         return Err(BenchmarkError::WrongAccountContract.into());
+    }
+
+    if instruction_data.len() == RAW_HASH_INSTRUCTION_BYTES
+        && &instruction_data[..RAW_HASH_MAGIC.len()] == RAW_HASH_MAGIC
+    {
+        let expected_hash = instruction_data
+            .get(RAW_HASH_MAGIC.len()..RAW_HASH_INSTRUCTION_BYTES)
+            .ok_or(BenchmarkError::MalformedInstruction)?;
+        let artifact_data = artifact.try_borrow_data()?;
+        let actual_hash = hashv(&[&artifact_data]);
+        if actual_hash.as_ref() != expected_hash {
+            return Err(BenchmarkError::RawHashMismatch.into());
+        }
+        return Ok(());
     }
 
     if instruction_data.len() < FIXED_INSTRUCTION_BYTES || &instruction_data[..MAGIC.len()] != MAGIC
@@ -97,11 +116,12 @@ pub fn process_instruction(
 
     let chunk_offset = (chunk_index as usize)
         .checked_mul(chunk_size)
+        .and_then(|offset| offset.checked_add(PROGRAMDATA_METADATA_BYTES))
         .ok_or(BenchmarkError::ArithmeticOverflow)?;
     let chunk_end = chunk_offset
         .checked_add(actual_len)
         .ok_or(BenchmarkError::ArithmeticOverflow)?;
-    if chunk_end > MAX_ARTIFACT_BYTES {
+    if chunk_end > MAX_RAW_PROGRAMDATA_BYTES {
         return Err(BenchmarkError::MalformedInstruction.into());
     }
 

@@ -6,6 +6,7 @@ repo_root="$(cd "$benchmark_dir/../.." && pwd)"
 run_root="$(mktemp -d /tmp/ameba-artifact-chunk-sbf.XXXXXXXX)"
 elf_name="ameba_artifact_chunk_sbf_benchmark.so"
 platform_tools="${HOME}/.cache/solana/v1.53/platform-tools/llvm/bin"
+evidence_out="${AMOEBA_BENCH_EVIDENCE_OUT:-}"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
     echo "This benchmark must run through the pinned Linux/WSL SBF path." >&2
@@ -75,4 +76,8 @@ done
 python3 "$benchmark_dir/summarize_benchmark.py" "$run_root" "$repo_root" \
     > "$run_root/evidence.json"
 python3 -m json.tool "$run_root/evidence.json" > "$run_root/evidence.pretty.json"
+if [[ -n "$evidence_out" ]]; then
+    mkdir -p "$(dirname "$evidence_out")"
+    cp "$run_root/evidence.pretty.json" "$evidence_out"
+fi
 echo "$run_root/evidence.pretty.json"

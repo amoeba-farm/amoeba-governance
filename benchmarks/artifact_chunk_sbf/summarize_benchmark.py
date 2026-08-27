@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 DEFAULT_COMPUTE_LIMIT = 200_000
+MAX_COMPUTE_LIMIT = 1_400_000
 SELECTION_COMPUTE_CAP = 25_000
 SELECTION_PROCESSOR_FRAME_CAP = 512
 SBF_FRAME_LIMIT = 4096
@@ -87,6 +88,7 @@ def main() -> None:
 
     architectures: dict[str, dict[str, object]] = {}
     all_measurements: list[dict[str, object]] = []
+    raw_hash_measurements: list[dict[str, object]] = []
     all_safe = True
     for arch in ("v0", "v2"):
         arch_root = run_root / arch
@@ -107,15 +109,27 @@ def main() -> None:
             json.loads(match)
             for match in re.findall(r"^AMOEBA_BENCH_RESULT (\{.*\})$", test_log, re.MULTILINE)
         ]
+        raw_measurements = [
+            json.loads(match)
+            for match in re.findall(
+                r"^AMOEBA_RAW_HASH_BENCH_RESULT (\{.*\})$", test_log, re.MULTILINE
+            )
+        ]
         if [item["chunk_bytes"] for item in measurements] != [4096, 8192, 16384]:
             raise RuntimeError(f"{arch} did not emit all required chunk measurements")
         if any(item["execution"] != "actual_sbf_programtest" for item in measurements):
             raise RuntimeError(f"{arch} did not use actual SBF")
+        if len(raw_measurements) != 1 or raw_measurements[0]["execution"] != "actual_sbf_programtest":
+            raise RuntimeError(f"{arch} did not emit one actual-SBF raw-hash measurement")
         if "SBF program from" not in test_log:
             raise RuntimeError(f"{arch} ProgramTest SBF load evidence missing")
         for item in measurements:
             item["compute_usage_basis_points"] = round(
                 int(item["compute_units"]) * 10_000 / DEFAULT_COMPUTE_LIMIT
+            )
+        for item in raw_measurements:
+            item["compute_usage_basis_points"] = round(
+                int(item["compute_units"]) * 10_000 / MAX_COMPUTE_LIMIT
             )
             item["compute_margin_basis_points"] = 10_000 - int(
                 item["compute_usage_basis_points"]
@@ -130,6 +144,7 @@ def main() -> None:
                 "sha256": sha256(elf),
             },
             "measurements": measurements,
+            "raw_programdata_hash_measurement": raw_measurements[0],
             "stack": stack,
             "build_diagnostics": {
                 "compiler_frame_diagnostic_count": len(diagnostic_symbols),
@@ -141,6 +156,7 @@ def main() -> None:
             },
         }
         all_measurements.extend(measurements)
+        raw_hash_measurements.extend(raw_measurements)
 
     selected = [
         item for item in all_measurements if int(item["chunk_bytes"]) == SELECTED_CHUNK_BYTES
@@ -157,6 +173,19 @@ def main() -> None:
     )
     if not decision_passes:
         raise RuntimeError("16 KiB does not satisfy the predeclared conservative selection gates")
+    raw_hash_passes = (
+        len(raw_hash_measurements) == 2
+        and all(
+            int(item["account_bytes"]) == 45 + 2 * 1024 * 1024
+            and int(item["payload_capacity_bytes"]) == 2 * 1024 * 1024
+            and int(item["programdata_metadata_bytes"]) == 45
+            for item in raw_hash_measurements
+        )
+        and max(int(item["compute_units"]) for item in raw_hash_measurements)
+        <= 1_150_000
+    )
+    if not raw_hash_passes:
+        raise RuntimeError("2 MiB raw ProgramData SHA-256 lacks the required compute margin")
 
     result = {
         "schema": "ameba-artifact-chunk-sbf-benchmark-evidence-v1",
@@ -191,6 +220,8 @@ def main() -> None:
             "process_instruction_frame_cap_bytes": SELECTION_PROCESSOR_FRAME_CAP,
             "linked_compiler_frame_or_caller_overlap_allowed": False,
             "actual_sbf_required_for": ["v0", "v2"],
+            "raw_hash_compute_limit": MAX_COMPUTE_LIMIT,
+            "raw_hash_compute_cap": 1_150_000,
         },
         "architectures": architectures,
         "decision": {
@@ -208,6 +239,20 @@ def main() -> None:
                 for arch in ("v0", "v2")
             ),
             "reason": "16 KiB passes both conservative resource gates and minimizes chunk count, bitmap bytes, proof depth, and instruction bytes among the measured candidates.",
+        },
+        "raw_programdata_hash_decision": {
+            "full_account_bytes": 45 + 2 * 1024 * 1024,
+            "payload_capacity_bytes": 2 * 1024 * 1024,
+            "programdata_metadata_bytes": 45,
+            "algorithm": "SHA-256 over exact raw account bytes in one dedicated finalization transaction",
+            "passes_gate": raw_hash_passes,
+            "max_compute_units": max(
+                int(item["compute_units"]) for item in raw_hash_measurements
+            ),
+            "min_compute_margin_units": min(
+                int(item["compute_margin"]) for item in raw_hash_measurements
+            ),
+            "reason": "The raw hash is finalized only after chunk and zero-tail verification, in a separate bounded-compute transaction with no Loader CPI.",
         },
         "source_sha256": {
             str(path.relative_to(repo_root)).replace("\\", "/"): sha256(path)

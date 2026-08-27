@@ -20,19 +20,21 @@ proof passed both SBPF v0 and SBPF v2 under these predeclared gates:
 - no compiler-reported frame-overflow, stack-offset, or caller-frame symbol in
   the linked ELF.
 
-The worst measured 16 KiB case consumed 10,611 units (5.31%), leaving 189,389
-units (94.69%). Its smallest processor-frame margin was 3,840 of 4,096 bytes.
+The worst measured 16 KiB case consumed 10,615 units (5.31%), leaving 189,385
+units (94.69%). Its smallest processor-frame margin was 3,776 of 4,096 bytes.
 It therefore passes the gates while reducing a maximum artifact to 128 chunks,
 128 live bitmap bits (16 used bytes within the fixed 64-byte schema bitmap), a
 seven-node proof, and a 281-byte benchmark instruction.
 
 ## Measured contract
 
-The fixture is one exactly 2,097,152-byte, program-owned, read-only account.
-For each candidate, the benchmark verifies the final leaf and the full proof
-depth at the cap. The SBF processor retains the `AccountInfo::try_borrow_data`
-guard and passes the exact borrowed chunk slice to `hashv`; it does not copy the
-chunk into a `Vec` or a chunk-sized stack array.
+The fixture is one exactly 2,097,197-byte, program-owned, read-only account:
+the Loader-v3 ProgramData metadata width of 45 bytes followed by the full
+2,097,152-byte payload capacity. For each candidate, the benchmark verifies the
+final payload leaf and the full proof depth at the cap. The SBF processor
+retains the `AccountInfo::try_borrow_data` guard and passes the exact borrowed
+chunk slice to `hashv`; it does not copy the chunk into a `Vec` or a chunk-sized
+stack array.
 
 The commitment shapes are:
 
@@ -60,30 +62,44 @@ golden-vector and processor-test obligation.
 
 | Chunk | Chunks | Bitmap | Proof depth | Instruction | v0 CU | v2 CU |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 4 KiB | 512 | 64 B | 9 | 345 B | 4,844 | 4,812 |
-| 8 KiB | 256 | 32 B | 8 | 313 B | 6,705 | 6,673 |
-| 16 KiB | 128 | 16 B | 7 | 281 B | 10,611 | 10,579 |
+| 4 KiB | 512 | 64 B | 9 | 345 B | 4,848 | 4,814 |
+| 8 KiB | 256 | 32 B | 8 | 313 B | 6,709 | 6,675 |
+| 16 KiB | 128 | 16 B | 7 | 281 B | 10,615 | 10,581 |
 
 Both test executions loaded an SBF program account owned by
 `BPFLoader2111111111111111111111111111111111`; no native processor was supplied
 to ProgramTest.
 
-The stripped v0 ELF is 27,608 bytes with SHA-256
-`1b2d94784b6332edf9365d47654f023fbf621fe5f7cc3a60499741184ade0672`.
-The stripped v2 ELF is 27,176 bytes with SHA-256
-`5da5e19d5a23440f1b9e6cb3a84ab743f6626ce4c767ad73d6e2655bc41bf3df`.
+The stripped v0 ELF is 28,048 bytes with SHA-256
+`9e310655ae7c898df17002dd93b5441edd8412381fdfe6f6a70ca1ea794336ce`.
+The stripped v2 ELF is 27,624 bytes with SHA-256
+`67a750820d6a1cf6b960617da1d8b848ff19d37f3c16f1fcee676681597ce902`.
+
+## Exact raw ProgramData hash
+
+The same actual-SBF run separately hashed the entire 2,097,197-byte raw
+ProgramData-shaped account in a dedicated transaction with a 1,400,000-unit
+limit. The predeclared acceptance cap was 1,150,000 units. SBPF v0 consumed
+1,049,726 units and left 350,274; SBPF v2 consumed 1,049,697 and left 350,303.
+Both produced the identical raw SHA-256
+`c9b773fc5e275d257e0849da3b4dd8c619f719662ca461aa3238c809010a8304`.
+
+This proves that exact maximum-size raw ProgramData SHA-256 fits only as its own
+bounded finalization operation with conservative transaction margin. It is not
+authorization to combine the raw hash with a Loader CPI or another full-account
+hash; the composed production finalizer must be benchmarked again.
 
 ## Stack analysis
 
-The v0 linked ELF's hashing processor uses a maximum direct `r10` offset of 232
-bytes, leaving 3,864 bytes in its 4,096-byte frame. Other linked v0 runtime
+The v0 linked ELF's hashing processor uses a maximum direct `r10` offset of 264
+bytes, leaving 3,832 bytes in its 4,096-byte frame. Other linked v0 runtime
 support reaches the exact 4,096-byte offset. That yields no whole-ELF spare
 offset, but it does not exceed the boundary and the build reports no linked
 stack-offset or caller-frame overlap. The 16 v0 compiler diagnostics are exact
 dependency-only generic symbols; all 16 are absent from the final linked ELF.
 
 SBPF v2 uses dynamic frame prologues. The processor and whole linked ELF maximum
-are both 256 bytes, leaving 3,840 bytes. The v2 build emits no frame diagnostic.
+are both 320 bytes, leaving 3,776 bytes. The v2 build emits no frame diagnostic.
 
 This evidence measures one chunk-verification operation, not the future complete
 controller instruction. Production integration must retain direct borrowing and
