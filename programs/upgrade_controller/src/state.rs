@@ -262,6 +262,8 @@ pub struct ControllerConfigV1 {
     pub major_delay_slots: u64,
     pub rollback_delay_slots: u64,
     pub terminal_delay_slots: u64,
+    /// Historical frozen ABI name. Release 1 interprets this exclusively as
+    /// the council review window; token governance remains disabled.
     pub vote_review_slots: u64,
     pub proposal_expiry_slots: u64,
     pub policy_flags: u64,
@@ -271,6 +273,10 @@ pub struct ControllerConfigV1 {
 impl ControllerConfigV1 {
     pub const LEN: usize = 512;
 
+    pub const fn council_review_slots(&self) -> u64 {
+        self.vote_review_slots
+    }
+
     pub fn validate_static(&self) -> GovernanceResult<()> {
         validate_header(
             &self.discriminator,
@@ -279,6 +285,11 @@ impl ControllerConfigV1 {
             self.initialized,
             &self.reserved,
         )?;
+        let minimum_expiry_slots = self
+            .vote_review_slots
+            .checked_add(self.major_delay_slots)
+            .and_then(|slots| slots.checked_add(1))
+            .ok_or(GovernanceError::InvalidControllerConfig)?;
         if self.cluster_domain == [0; 32]
             || [
                 self.target_program,
@@ -292,6 +303,8 @@ impl ControllerConfigV1 {
             .contains(&Pubkey::default())
             || self.current_council_version == 0
             || self.current_policy_version == 0
+            || self.next_proposal_id == 0
+            || self.target_nonce == 0
             || self.routine_delay_slots == 0
             || self.major_delay_slots == 0
             || self.rollback_delay_slots == 0
@@ -301,7 +314,9 @@ impl ControllerConfigV1 {
             || self.rollback_delay_slots > self.routine_delay_slots
             || self.routine_delay_slots > self.major_delay_slots
             || self.major_delay_slots > self.terminal_delay_slots
+            || self.major_delay_slots >= self.proposal_expiry_slots
             || self.vote_review_slots >= self.proposal_expiry_slots
+            || minimum_expiry_slots >= self.proposal_expiry_slots
             || self.policy_flags != 0
         {
             return Err(GovernanceError::InvalidControllerConfig);
@@ -442,6 +457,7 @@ impl ProtocolGateV1 {
             self.target_programdata,
         ]
         .contains(&Pubkey::default())
+            || self.epoch == 0
         {
             return Err(GovernanceError::InvalidGateState);
         }

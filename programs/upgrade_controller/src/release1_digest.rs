@@ -7,7 +7,8 @@ use solana_program::{hash::hashv, pubkey::Pubkey};
 
 use crate::{
     release1_state::{
-        CouncilRotationProposalV1, EmergencyFreezeResolutionV1, StateCheckpointV1,
+        CheckpointAttestationV1, CouncilRotationProposalV1, EmergencyFreezeObservationV1,
+        EmergencyFreezeResolutionV1, ProgramDataFailureObservationV1, StateCheckpointV1,
         UpgradeProposalV2,
     },
     state::OptionalPubkeyV1,
@@ -15,7 +16,7 @@ use crate::{
 };
 
 pub const PROPOSAL_DIGEST_DOMAIN_V2: &[u8] = b"AMOEBA_UPGRADE_PROPOSAL_V2";
-pub const PROPOSAL_DIGEST_MATERIAL_LEN_V2: usize = 1_424;
+pub const PROPOSAL_DIGEST_MATERIAL_LEN_V2: usize = 1_416;
 pub const PROPOSAL_DIGEST_PREIMAGE_LEN_V2: usize =
     PROPOSAL_DIGEST_DOMAIN_V2.len() + PROPOSAL_DIGEST_MATERIAL_LEN_V2;
 
@@ -23,6 +24,10 @@ pub const STATE_CHECKPOINT_DIGEST_DOMAIN_V1: &[u8] = b"AMOEBA_STATE_CHECKPOINT_V
 pub const STATE_CHECKPOINT_DIGEST_MATERIAL_LEN_V1: usize = 573;
 pub const STATE_CHECKPOINT_DIGEST_PREIMAGE_LEN_V1: usize =
     STATE_CHECKPOINT_DIGEST_DOMAIN_V1.len() + STATE_CHECKPOINT_DIGEST_MATERIAL_LEN_V1;
+pub const STATE_CHECKPOINT_HARD_ROOT_DOMAIN_V1: &[u8] = b"AMOEBA_CHECKPOINT_HARD_ROOT_V1";
+pub const STATE_CHECKPOINT_HARD_ROOT_MATERIAL_LEN_V1: usize = 176;
+pub const STATE_CHECKPOINT_HARD_ROOT_PREIMAGE_LEN_V1: usize =
+    STATE_CHECKPOINT_HARD_ROOT_DOMAIN_V1.len() + STATE_CHECKPOINT_HARD_ROOT_MATERIAL_LEN_V1;
 
 pub const COUNCIL_ROTATION_DIGEST_DOMAIN_V1: &[u8] = b"AMOEBA_COUNCIL_ROTATION_V1";
 pub const COUNCIL_ROTATION_DIGEST_MATERIAL_LEN_V1: usize = 240;
@@ -30,9 +35,28 @@ pub const COUNCIL_ROTATION_DIGEST_PREIMAGE_LEN_V1: usize =
     COUNCIL_ROTATION_DIGEST_DOMAIN_V1.len() + COUNCIL_ROTATION_DIGEST_MATERIAL_LEN_V1;
 
 pub const EMERGENCY_RESOLUTION_DIGEST_DOMAIN_V1: &[u8] = b"AMOEBA_EMERGENCY_RESOLUTION_V1";
-pub const EMERGENCY_RESOLUTION_DIGEST_MATERIAL_LEN_V1: usize = 323;
+pub const EMERGENCY_RESOLUTION_DIGEST_MATERIAL_LEN_V1: usize = 442;
 pub const EMERGENCY_RESOLUTION_DIGEST_PREIMAGE_LEN_V1: usize =
     EMERGENCY_RESOLUTION_DIGEST_DOMAIN_V1.len() + EMERGENCY_RESOLUTION_DIGEST_MATERIAL_LEN_V1;
+
+pub const EMERGENCY_FREEZE_OBSERVATION_DIGEST_DOMAIN_V1: &[u8] =
+    b"AMOEBA_EMERGENCY_FREEZE_OBSERVATION_V1";
+pub const EMERGENCY_FREEZE_OBSERVATION_DIGEST_MATERIAL_LEN_V1: usize = 450;
+pub const EMERGENCY_FREEZE_OBSERVATION_DIGEST_PREIMAGE_LEN_V1: usize =
+    EMERGENCY_FREEZE_OBSERVATION_DIGEST_DOMAIN_V1.len()
+        + EMERGENCY_FREEZE_OBSERVATION_DIGEST_MATERIAL_LEN_V1;
+
+pub const PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_DOMAIN_V1: &[u8] =
+    b"AMOEBA_PROGRAMDATA_FAILURE_OBSERVATION_V1";
+pub const PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_MATERIAL_LEN_V1: usize = 444;
+pub const PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_PREIMAGE_LEN_V1: usize =
+    PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_DOMAIN_V1.len()
+        + PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_MATERIAL_LEN_V1;
+
+pub const CHECKPOINT_ATTESTATION_DIGEST_DOMAIN_V1: &[u8] = b"AMOEBA_CHECKPOINT_ATTESTATION_V1";
+pub const CHECKPOINT_ATTESTATION_DIGEST_MATERIAL_LEN_V1: usize = 314;
+pub const CHECKPOINT_ATTESTATION_DIGEST_PREIMAGE_LEN_V1: usize =
+    CHECKPOINT_ATTESTATION_DIGEST_DOMAIN_V1.len() + CHECKPOINT_ATTESTATION_DIGEST_MATERIAL_LEN_V1;
 
 /// Exact immutable V2 proposal commitments. Mutable state, lifecycle slots,
 /// approval accumulators, reason codes, stored digest, and account header are
@@ -61,7 +85,10 @@ pub fn canonical_proposal_digest_material_v2(
     put_u64(&mut out, proposal.creation_council_version);
     put_bytes(&mut out, &proposal.creation_council_hash);
     put_u64(&mut out, proposal.creation_gate_epoch);
-    put_u64(&mut out, proposal.freeze_gate_epoch);
+    // The exact frozen epoch is established only when the target nonce is
+    // consumed.  It is mutable lifecycle evidence and is bound by every
+    // frozen-or-later approval/instruction, not by the immutable creation
+    // digest.
     put_pubkey(&mut out, &proposal.target_program);
     put_pubkey(&mut out, &proposal.target_programdata);
     put_pubkey(&mut out, &proposal.upgradeable_loader);
@@ -156,6 +183,37 @@ pub fn canonical_state_checkpoint_digest_material_v1(
     finish_material(out, STATE_CHECKPOINT_DIGEST_MATERIAL_LEN_V1)
 }
 
+pub fn canonical_state_checkpoint_hard_root_material_v1(
+    checkpoint: &StateCheckpointV1,
+) -> GovernanceResult<Vec<u8>> {
+    let mut out = Vec::with_capacity(STATE_CHECKPOINT_HARD_ROOT_MATERIAL_LEN_V1);
+    put_bytes(&mut out, &checkpoint.schema_identifier);
+    put_bytes(&mut out, &checkpoint.program_owned_state_root);
+    put_u64(&mut out, checkpoint.program_owned_state_count);
+    put_bytes(&mut out, &checkpoint.logical_compressed_state_root);
+    put_u64(&mut out, checkpoint.logical_compressed_state_count);
+    put_bytes(&mut out, &checkpoint.semantic_custody_accounting_root);
+    put_bytes(&mut out, &checkpoint.external_metadata_observation_root);
+    finish_material(out, STATE_CHECKPOINT_HARD_ROOT_MATERIAL_LEN_V1)
+}
+
+pub fn compute_state_checkpoint_hard_combined_root_v1(
+    checkpoint: &StateCheckpointV1,
+) -> GovernanceResult<[u8; 32]> {
+    let material = canonical_state_checkpoint_hard_root_material_v1(checkpoint)?;
+    Ok(hashv(&[STATE_CHECKPOINT_HARD_ROOT_DOMAIN_V1, &material]).to_bytes())
+}
+
+pub fn validate_state_checkpoint_hard_combined_root_v1(
+    checkpoint: &StateCheckpointV1,
+) -> GovernanceResult<()> {
+    if compute_state_checkpoint_hard_combined_root_v1(checkpoint)? != checkpoint.hard_combined_root
+    {
+        return Err(GovernanceError::Release1DigestMismatch);
+    }
+    Ok(())
+}
+
 pub fn compute_state_checkpoint_digest_v1(
     checkpoint: &StateCheckpointV1,
 ) -> GovernanceResult<[u8; 32]> {
@@ -165,6 +223,7 @@ pub fn compute_state_checkpoint_digest_v1(
 
 pub fn validate_state_checkpoint_digest_v1(checkpoint: &StateCheckpointV1) -> GovernanceResult<()> {
     checkpoint.validate_schema()?;
+    validate_state_checkpoint_hard_combined_root_v1(checkpoint)?;
     if compute_state_checkpoint_digest_v1(checkpoint)? != checkpoint.checkpoint_digest {
         return Err(GovernanceError::Release1DigestMismatch);
     }
@@ -216,6 +275,7 @@ pub fn canonical_emergency_resolution_digest_material_v1(
     put_pubkey(&mut out, &resolution.protocol_gate);
     put_pubkey(&mut out, &resolution.target_program);
     put_pubkey(&mut out, &resolution.target_programdata);
+    put_pubkey(&mut out, &resolution.emergency_freeze_observation);
     put_u64(&mut out, resolution.frozen_epoch);
     put_u64(&mut out, resolution.freeze_slot);
     put_u16(&mut out, resolution.freeze_reason_code);
@@ -223,11 +283,20 @@ pub fn canonical_emergency_resolution_digest_material_v1(
     put_u64(&mut out, resolution.not_before_slot);
     put_u64(&mut out, resolution.expiry_slot);
     put_u64(&mut out, resolution.target_nonce);
+    put_pubkey(&mut out, &resolution.observed_program_owner);
+    put_bool(&mut out, resolution.observed_program_executable);
+    put_u64(&mut out, resolution.observed_program_data_length);
+    put_bool(&mut out, resolution.observed_program_header_present);
+    put_optional_pubkey(&mut out, &resolution.observed_linked_programdata);
+    put_pubkey(&mut out, &resolution.observed_programdata_owner);
+    put_bool(&mut out, resolution.observed_programdata_executable);
+    put_u64(&mut out, resolution.observed_programdata_data_length);
+    put_bool(&mut out, resolution.observed_programdata_header_present);
     put_u64(&mut out, resolution.observed_programdata_slot);
-    put_bytes(&mut out, &resolution.observed_payload_hash);
+    put_bool(&mut out, resolution.observed_raw_hash_complete);
     put_bytes(&mut out, &resolution.observed_raw_programdata_hash);
     put_u64(&mut out, resolution.observed_capacity);
-    put_pubkey(&mut out, &resolution.observed_authority);
+    put_optional_pubkey(&mut out, &resolution.observed_authority);
     put_pubkey(&mut out, &resolution.emergency_checkpoint);
     finish_material(out, EMERGENCY_RESOLUTION_DIGEST_MATERIAL_LEN_V1)
 }
@@ -244,6 +313,148 @@ pub fn validate_emergency_resolution_digest_v1(
 ) -> GovernanceResult<()> {
     resolution.validate_schema()?;
     if compute_emergency_resolution_digest_v1(resolution)? != resolution.resolution_digest {
+        return Err(GovernanceError::Release1DigestMismatch);
+    }
+    Ok(())
+}
+
+pub fn canonical_emergency_freeze_observation_digest_material_v1(
+    observation: &EmergencyFreezeObservationV1,
+) -> GovernanceResult<Vec<u8>> {
+    let mut out = Vec::with_capacity(EMERGENCY_FREEZE_OBSERVATION_DIGEST_MATERIAL_LEN_V1);
+    put_pubkey(&mut out, &observation.controller_program);
+    put_pubkey(&mut out, &observation.controller_config);
+    put_pubkey(&mut out, &observation.protocol_gate);
+    put_pubkey(&mut out, &observation.target_program);
+    put_pubkey(&mut out, &observation.target_programdata);
+    put_pubkey(&mut out, &observation.upgradeable_loader);
+    put_pubkey(&mut out, &observation.controller_authority);
+    put_u64(&mut out, observation.frozen_epoch);
+    put_u64(&mut out, observation.freeze_slot);
+    put_u16(&mut out, observation.freeze_reason_code);
+    put_pubkey(&mut out, &observation.actual_program_owner);
+    put_bool(&mut out, observation.actual_program_executable);
+    put_u64(&mut out, observation.actual_program_data_length);
+    put_bool(&mut out, observation.program_header_present);
+    put_optional_pubkey(&mut out, &observation.actual_linked_programdata);
+    put_pubkey(&mut out, &observation.actual_programdata_owner);
+    put_bool(&mut out, observation.actual_programdata_executable);
+    put_u64(&mut out, observation.actual_programdata_data_length);
+    put_bool(&mut out, observation.programdata_header_present);
+    put_u64(&mut out, observation.deployed_programdata_slot);
+    put_bool(&mut out, observation.raw_hash_complete);
+    put_bytes(&mut out, &observation.raw_programdata_sha256);
+    put_u64(&mut out, observation.capacity);
+    put_optional_pubkey(&mut out, &observation.observed_authority);
+    put_bool(&mut out, observation.finalized);
+    put_u64(&mut out, observation.finalized_slot);
+    finish_material(out, EMERGENCY_FREEZE_OBSERVATION_DIGEST_MATERIAL_LEN_V1)
+}
+
+pub fn compute_emergency_freeze_observation_digest_v1(
+    observation: &EmergencyFreezeObservationV1,
+) -> GovernanceResult<[u8; 32]> {
+    let material = canonical_emergency_freeze_observation_digest_material_v1(observation)?;
+    Ok(hashv(&[EMERGENCY_FREEZE_OBSERVATION_DIGEST_DOMAIN_V1, &material]).to_bytes())
+}
+
+pub fn validate_emergency_freeze_observation_digest_v1(
+    observation: &EmergencyFreezeObservationV1,
+) -> GovernanceResult<()> {
+    observation.validate_schema()?;
+    if compute_emergency_freeze_observation_digest_v1(observation)?
+        != observation.observation_digest
+    {
+        return Err(GovernanceError::Release1DigestMismatch);
+    }
+    Ok(())
+}
+
+pub fn canonical_programdata_failure_observation_digest_material_v1(
+    observation: &ProgramDataFailureObservationV1,
+) -> GovernanceResult<Vec<u8>> {
+    observation.actual_authority.validate()?;
+    let mut out = Vec::with_capacity(PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_MATERIAL_LEN_V1);
+    put_pubkey(&mut out, &observation.controller_config);
+    put_pubkey(&mut out, &observation.protocol_gate);
+    put_pubkey(&mut out, &observation.primary_proposal);
+    put_pubkey(&mut out, &observation.target_program);
+    put_pubkey(&mut out, &observation.target_programdata);
+    put_u64(&mut out, observation.frozen_epoch);
+    put_pubkey(&mut out, &observation.actual_program_owner);
+    put_bool(&mut out, observation.actual_program_executable);
+    put_u64(&mut out, observation.actual_program_data_length);
+    put_bool(&mut out, observation.program_header_present);
+    put_optional_pubkey(&mut out, &observation.actual_linked_programdata);
+    put_bool(&mut out, observation.raw_hash_complete);
+    put_bytes(&mut out, &observation.actual_raw_programdata_sha256);
+    put_pubkey(&mut out, &observation.actual_owner);
+    put_bool(&mut out, observation.actual_executable);
+    put_u64(&mut out, observation.actual_data_length);
+    put_bool(&mut out, observation.programdata_header_present);
+    put_u64(&mut out, observation.actual_programdata_slot);
+    put_u64(&mut out, observation.actual_capacity);
+    put_optional_pubkey(&mut out, &observation.actual_authority);
+    put_u8(&mut out, observation.mismatch_class as u8);
+    put_u32(&mut out, observation.failing_chunk_index);
+    put_bytes(&mut out, &observation.expected_leaf_hash);
+    put_bytes(&mut out, &observation.actual_leaf_hash);
+    put_u64(&mut out, observation.finalized_slot);
+    finish_material(out, PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_MATERIAL_LEN_V1)
+}
+
+pub fn compute_programdata_failure_observation_digest_v1(
+    observation: &ProgramDataFailureObservationV1,
+) -> GovernanceResult<[u8; 32]> {
+    let material = canonical_programdata_failure_observation_digest_material_v1(observation)?;
+    Ok(hashv(&[PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_DOMAIN_V1, &material]).to_bytes())
+}
+
+pub fn validate_programdata_failure_observation_digest_v1(
+    observation: &ProgramDataFailureObservationV1,
+) -> GovernanceResult<()> {
+    observation.validate_schema()?;
+    if compute_programdata_failure_observation_digest_v1(observation)?
+        != observation.observation_digest
+    {
+        return Err(GovernanceError::Release1DigestMismatch);
+    }
+    Ok(())
+}
+
+pub fn canonical_checkpoint_attestation_digest_material_v1(
+    attestation: &CheckpointAttestationV1,
+) -> GovernanceResult<Vec<u8>> {
+    let mut out = Vec::with_capacity(CHECKPOINT_ATTESTATION_DIGEST_MATERIAL_LEN_V1);
+    put_pubkey(&mut out, &attestation.controller_program);
+    put_pubkey(&mut out, &attestation.controller_config);
+    put_pubkey(&mut out, &attestation.checkpoint);
+    put_pubkey(&mut out, &attestation.subject);
+    put_bytes(&mut out, &attestation.subject_digest);
+    put_u8(&mut out, attestation.phase as u8);
+    put_bytes(&mut out, &attestation.checkpoint_digest);
+    put_pubkey(&mut out, &attestation.council);
+    put_u64(&mut out, attestation.council_version);
+    put_bytes(&mut out, &attestation.council_hash);
+    put_u64(&mut out, attestation.gate_epoch);
+    put_u8(&mut out, attestation.seat_index);
+    put_pubkey(&mut out, &attestation.seat_authority);
+    put_u64(&mut out, attestation.attested_slot);
+    finish_material(out, CHECKPOINT_ATTESTATION_DIGEST_MATERIAL_LEN_V1)
+}
+
+pub fn compute_checkpoint_attestation_digest_v1(
+    attestation: &CheckpointAttestationV1,
+) -> GovernanceResult<[u8; 32]> {
+    let material = canonical_checkpoint_attestation_digest_material_v1(attestation)?;
+    Ok(hashv(&[CHECKPOINT_ATTESTATION_DIGEST_DOMAIN_V1, &material]).to_bytes())
+}
+
+pub fn validate_checkpoint_attestation_digest_v1(
+    attestation: &CheckpointAttestationV1,
+) -> GovernanceResult<()> {
+    attestation.validate_schema()?;
+    if compute_checkpoint_attestation_digest_v1(attestation)? != attestation.attestation_digest {
         return Err(GovernanceError::Release1DigestMismatch);
     }
     Ok(())

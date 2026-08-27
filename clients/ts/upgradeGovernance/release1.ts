@@ -10,7 +10,10 @@ import {
   isRelease1ChunkSize,
   validateVerificationBitmapV1,
 } from "./artifactMerkleV1.js";
-import { UPGRADE_SEED_DOMAIN_V1 } from "./v1.js";
+import {
+  BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
+  UPGRADE_SEED_DOMAIN_V1,
+} from "./v1.js";
 
 export const UPGRADE_PROPOSAL_V2_DISCRIMINATOR = Buffer.from("AGVPRP02", "ascii");
 export const BUFFER_VERIFICATION_V1_DISCRIMINATOR = Buffer.from("AGVBFV01", "ascii");
@@ -18,38 +21,69 @@ export const PROGRAMDATA_VERIFICATION_V1_DISCRIMINATOR = Buffer.from("AGVPDV01",
 export const STATE_CHECKPOINT_V1_DISCRIMINATOR = Buffer.from("AGVCKP01", "ascii");
 export const COUNCIL_ROTATION_PROPOSAL_V1_DISCRIMINATOR = Buffer.from("AGVROT01", "ascii");
 export const EMERGENCY_FREEZE_RESOLUTION_V1_DISCRIMINATOR = Buffer.from("AGVEFR01", "ascii");
+export const EMERGENCY_FREEZE_OBSERVATION_V1_DISCRIMINATOR = Buffer.from("AGVEFO01", "ascii");
+export const PROGRAMDATA_FAILURE_OBSERVATION_V1_DISCRIMINATOR = Buffer.from(
+  "AGVPDF01",
+  "ascii",
+);
+export const CHECKPOINT_ATTESTATION_V1_DISCRIMINATOR = Buffer.from("AGVATT01", "ascii");
 
 export const ACCOUNT_VERSION_V2 = 2;
 export const RELEASE1_ACCOUNT_VERSION_V1 = 1;
 export const RELEASE1_APPROVAL_THRESHOLD = 3;
 export const BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1 = 1;
+export const PROPOSAL_EXPIRED_TERMINAL_REASON_V1 = 1;
+export const PROPOSAL_COMPLETED_TERMINAL_REASON_V1 = 2;
+export const PROPOSAL_SUPERSEDED_BY_ROLLBACK_TERMINAL_REASON_V1 = 3;
+export const PROPOSAL_RETIRED_ROLLBACK_TERMINAL_REASON_V1 = 4;
+export const COUNCIL_ROTATION_ACTIVATED_TERMINAL_REASON_V1 = 1;
+export const COUNCIL_ROTATION_EXPIRED_TERMINAL_REASON_V1 = 2;
+export const EMERGENCY_RESOLUTION_EXECUTED_TERMINAL_REASON_V1 = 1;
+export const EMERGENCY_RESOLUTION_EXPIRED_TERMINAL_REASON_V1 = 2;
 
 export const UPGRADE_PROPOSAL_V2_LEN = 1_792;
 export const BUFFER_VERIFICATION_V1_LEN = 512;
 export const PROGRAMDATA_VERIFICATION_V1_LEN = 640;
 export const STATE_CHECKPOINT_V1_LEN = 704;
 export const COUNCIL_ROTATION_PROPOSAL_V1_LEN = 384;
-export const EMERGENCY_FREEZE_RESOLUTION_V1_LEN = 512;
+export const EMERGENCY_FREEZE_RESOLUTION_V1_LEN = 640;
+export const EMERGENCY_FREEZE_OBSERVATION_V1_LEN = 512;
+export const PROGRAMDATA_FAILURE_OBSERVATION_V1_LEN = 512;
+export const CHECKPOINT_ATTESTATION_V1_LEN = 384;
 
 export const UPGRADE_PROPOSAL_V2_RESERVED_LEN = 146;
 export const BUFFER_VERIFICATION_V1_RESERVED_LEN = 72;
 export const PROGRAMDATA_VERIFICATION_V1_RESERVED_LEN = 119;
 export const STATE_CHECKPOINT_V1_RESERVED_LEN = 37;
 export const COUNCIL_ROTATION_PROPOSAL_V1_RESERVED_LEN = 84;
-export const EMERGENCY_FREEZE_RESOLUTION_V1_RESERVED_LEN = 91;
+export const EMERGENCY_FREEZE_RESOLUTION_V1_RESERVED_LEN = 100;
+export const EMERGENCY_FREEZE_OBSERVATION_V1_RESERVED_LEN = 19;
+export const PROGRAMDATA_FAILURE_OBSERVATION_V1_RESERVED_LEN = 24;
+export const CHECKPOINT_ATTESTATION_V1_RESERVED_LEN = 27;
+export const NO_FAILING_CHUNK_INDEX_V1 = 0xffff_ffff;
+export const LOADER_V3_PROGRAMDATA_METADATA_LEN_V1 = 45n;
+export const MAX_ATOMIC_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1 = 1_572_909n;
 
 export const PROPOSAL_DIGEST_DOMAIN_V2 = Buffer.from(
   "AMOEBA_UPGRADE_PROPOSAL_V2",
   "ascii",
 );
-export const PROPOSAL_DIGEST_MATERIAL_LEN_V2 = 1_424;
-export const PROPOSAL_DIGEST_PREIMAGE_LEN_V2 = 1_450;
+export const PROPOSAL_DIGEST_MATERIAL_LEN_V2 = 1_416;
+export const PROPOSAL_DIGEST_PREIMAGE_LEN_V2 = 1_442;
 export const STATE_CHECKPOINT_DIGEST_DOMAIN_V1 = Buffer.from(
   "AMOEBA_STATE_CHECKPOINT_V1",
   "ascii",
 );
 export const STATE_CHECKPOINT_DIGEST_MATERIAL_LEN_V1 = 573;
 export const STATE_CHECKPOINT_DIGEST_PREIMAGE_LEN_V1 = 599;
+export const STATE_CHECKPOINT_HARD_ROOT_DOMAIN_V1 = Buffer.from(
+  "AMOEBA_CHECKPOINT_HARD_ROOT_V1",
+  "ascii",
+);
+export const STATE_CHECKPOINT_HARD_ROOT_MATERIAL_LEN_V1 = 176;
+export const STATE_CHECKPOINT_HARD_ROOT_PREIMAGE_LEN_V1 =
+  STATE_CHECKPOINT_HARD_ROOT_DOMAIN_V1.length +
+  STATE_CHECKPOINT_HARD_ROOT_MATERIAL_LEN_V1;
 export const COUNCIL_ROTATION_DIGEST_DOMAIN_V1 = Buffer.from(
   "AMOEBA_COUNCIL_ROTATION_V1",
   "ascii",
@@ -60,8 +94,32 @@ export const EMERGENCY_RESOLUTION_DIGEST_DOMAIN_V1 = Buffer.from(
   "AMOEBA_EMERGENCY_RESOLUTION_V1",
   "ascii",
 );
-export const EMERGENCY_RESOLUTION_DIGEST_MATERIAL_LEN_V1 = 323;
-export const EMERGENCY_RESOLUTION_DIGEST_PREIMAGE_LEN_V1 = 353;
+export const EMERGENCY_RESOLUTION_DIGEST_MATERIAL_LEN_V1 = 442;
+export const EMERGENCY_RESOLUTION_DIGEST_PREIMAGE_LEN_V1 = 396;
+export const EMERGENCY_FREEZE_OBSERVATION_DIGEST_DOMAIN_V1 = Buffer.from(
+  "AMOEBA_EMERGENCY_FREEZE_OBSERVATION_V1",
+  "ascii",
+);
+export const EMERGENCY_FREEZE_OBSERVATION_DIGEST_MATERIAL_LEN_V1 = 450;
+export const EMERGENCY_FREEZE_OBSERVATION_DIGEST_PREIMAGE_LEN_V1 =
+  EMERGENCY_FREEZE_OBSERVATION_DIGEST_DOMAIN_V1.length +
+  EMERGENCY_FREEZE_OBSERVATION_DIGEST_MATERIAL_LEN_V1;
+export const PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_DOMAIN_V1 = Buffer.from(
+  "AMOEBA_PROGRAMDATA_FAILURE_OBSERVATION_V1",
+  "ascii",
+);
+export const PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_MATERIAL_LEN_V1 = 444;
+export const PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_PREIMAGE_LEN_V1 =
+  PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_DOMAIN_V1.length +
+  PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_MATERIAL_LEN_V1;
+export const CHECKPOINT_ATTESTATION_DIGEST_DOMAIN_V1 = Buffer.from(
+  "AMOEBA_CHECKPOINT_ATTESTATION_V1",
+  "ascii",
+);
+export const CHECKPOINT_ATTESTATION_DIGEST_MATERIAL_LEN_V1 = 314;
+export const CHECKPOINT_ATTESTATION_DIGEST_PREIMAGE_LEN_V1 =
+  CHECKPOINT_ATTESTATION_DIGEST_DOMAIN_V1.length +
+  CHECKPOINT_ATTESTATION_DIGEST_MATERIAL_LEN_V1;
 
 export const ProposalClassV1 = Object.freeze({
   RoutineUpgrade: 0,
@@ -113,16 +171,18 @@ export type ProposalStateV2 = (typeof ProposalStateV2)[keyof typeof ProposalStat
 export const BufferVerificationStatusV1 = Object.freeze({
   Adopted: 0,
   Verifying: 1,
-  Verified: 2,
-  ConsumedByUpgrade: 3,
-  ClosedAbandoned: 4,
+  ReadyToFinalize: 2,
+  Verified: 3,
+  ConsumedByUpgrade: 4,
+  ClosedAbandoned: 5,
 } as const);
 export type BufferVerificationStatusV1 =
   (typeof BufferVerificationStatusV1)[keyof typeof BufferVerificationStatusV1];
 
 export const ProgramDataVerificationStatusV1 = Object.freeze({
   Verifying: 0,
-  Verified: 1,
+  ReadyToFinalize: 1,
+  Verified: 2,
 } as const);
 export type ProgramDataVerificationStatusV1 =
   (typeof ProgramDataVerificationStatusV1)[keyof typeof ProgramDataVerificationStatusV1];
@@ -162,6 +222,16 @@ export const EmergencyFreezeResolutionKindV1 = Object.freeze({
 } as const);
 export type EmergencyFreezeResolutionKindV1 =
   (typeof EmergencyFreezeResolutionKindV1)[keyof typeof EmergencyFreezeResolutionKindV1];
+
+export const ProgramDataMismatchClassV1 = Object.freeze({
+  Header: 0,
+  Authority: 1,
+  Capacity: 2,
+  PayloadLeaf: 3,
+  ZeroTail: 4,
+} as const);
+export type ProgramDataMismatchClassV1 =
+  (typeof ProgramDataMismatchClassV1)[keyof typeof ProgramDataMismatchClassV1];
 
 export interface OptionalPublicKeyV1 {
   present: boolean;
@@ -359,7 +429,7 @@ export interface StateCheckpointV1 {
   approvalBitset: number;
   approvalCount: number;
   accepted: boolean;
-  acceptedSlot: bigint;
+  finalizedSlot: bigint;
   reserved: Buffer;
 }
 
@@ -402,6 +472,7 @@ export interface EmergencyFreezeResolutionV1 {
   protocolGate: PublicKey;
   targetProgram: PublicKey;
   targetProgramdata: PublicKey;
+  emergencyFreezeObservation: PublicKey;
   frozenEpoch: bigint;
   freezeSlot: bigint;
   freezeReasonCode: number;
@@ -410,11 +481,20 @@ export interface EmergencyFreezeResolutionV1 {
   notBeforeSlot: bigint;
   expirySlot: bigint;
   targetNonce: bigint;
+  observedProgramOwner: PublicKey;
+  observedProgramExecutable: boolean;
+  observedProgramDataLength: bigint;
+  observedProgramHeaderPresent: boolean;
+  observedLinkedProgramdata: OptionalPublicKeyV1;
+  observedProgramdataOwner: PublicKey;
+  observedProgramdataExecutable: boolean;
+  observedProgramdataDataLength: bigint;
+  observedProgramdataHeaderPresent: boolean;
   observedProgramdataSlot: bigint;
-  observedPayloadHash: Buffer;
+  observedRawHashComplete: boolean;
   observedRawProgramdataHash: Buffer;
   observedCapacity: bigint;
-  observedAuthority: PublicKey;
+  observedAuthority: OptionalPublicKeyV1;
   emergencyCheckpoint: PublicKey;
   approvalCouncilVersion: bigint;
   approvalCouncilHash: Buffer;
@@ -424,6 +504,99 @@ export interface EmergencyFreezeResolutionV1 {
   executedSlot: bigint;
   cancellationReasonCode: number;
   terminalReasonCode: number;
+  reserved: Buffer;
+}
+
+export interface EmergencyFreezeObservationV1 {
+  discriminator: Buffer;
+  accountVersion: number;
+  bump: number;
+  initialized: boolean;
+  finalized: boolean;
+  controllerProgram: PublicKey;
+  controllerConfig: PublicKey;
+  protocolGate: PublicKey;
+  targetProgram: PublicKey;
+  targetProgramdata: PublicKey;
+  upgradeableLoader: PublicKey;
+  controllerAuthority: PublicKey;
+  frozenEpoch: bigint;
+  freezeSlot: bigint;
+  freezeReasonCode: number;
+  actualProgramOwner: PublicKey;
+  actualProgramExecutable: boolean;
+  actualProgramDataLength: bigint;
+  programHeaderPresent: boolean;
+  actualLinkedProgramdata: OptionalPublicKeyV1;
+  actualProgramdataOwner: PublicKey;
+  actualProgramdataExecutable: boolean;
+  actualProgramdataDataLength: bigint;
+  programdataHeaderPresent: boolean;
+  deployedProgramdataSlot: bigint;
+  rawHashComplete: boolean;
+  rawProgramdataSha256: Buffer;
+  capacity: bigint;
+  observedAuthority: OptionalPublicKeyV1;
+  observationDigest: Buffer;
+  finalizedSlot: bigint;
+  reserved: Buffer;
+}
+
+export interface ProgramDataFailureObservationV1 {
+  discriminator: Buffer;
+  accountVersion: number;
+  bump: number;
+  initialized: boolean;
+  finalized: boolean;
+  controllerConfig: PublicKey;
+  protocolGate: PublicKey;
+  primaryProposal: PublicKey;
+  targetProgram: PublicKey;
+  targetProgramdata: PublicKey;
+  frozenEpoch: bigint;
+  actualProgramOwner: PublicKey;
+  actualProgramExecutable: boolean;
+  actualProgramDataLength: bigint;
+  programHeaderPresent: boolean;
+  actualLinkedProgramdata: OptionalPublicKeyV1;
+  rawHashComplete: boolean;
+  actualRawProgramdataSha256: Buffer;
+  actualOwner: PublicKey;
+  actualExecutable: boolean;
+  actualDataLength: bigint;
+  programdataHeaderPresent: boolean;
+  actualProgramdataSlot: bigint;
+  actualCapacity: bigint;
+  actualAuthority: OptionalPublicKeyV1;
+  mismatchClass: ProgramDataMismatchClassV1;
+  failingChunkIndex: number;
+  expectedLeafHash: Buffer;
+  actualLeafHash: Buffer;
+  finalizedSlot: bigint;
+  observationDigest: Buffer;
+  reserved: Buffer;
+}
+
+export interface CheckpointAttestationV1 {
+  discriminator: Buffer;
+  accountVersion: number;
+  bump: number;
+  initialized: boolean;
+  controllerProgram: PublicKey;
+  controllerConfig: PublicKey;
+  checkpoint: PublicKey;
+  subject: PublicKey;
+  subjectDigest: Buffer;
+  phase: StateCheckpointPhaseV1;
+  checkpointDigest: Buffer;
+  council: PublicKey;
+  councilVersion: bigint;
+  councilHash: Buffer;
+  gateEpoch: bigint;
+  seatIndex: number;
+  seatAuthority: PublicKey;
+  attestedSlot: bigint;
+  attestationDigest: Buffer;
   reserved: Buffer;
 }
 
@@ -467,6 +640,7 @@ export const STATE_CHECKPOINT_V1_OFFSETS = Object.freeze({
   forbiddenDriftCount: 580,
   checkpointDigest: 624,
   accepted: 658,
+  finalizedSlot: 659,
   reserved: 667,
 });
 export const COUNCIL_ROTATION_V1_OFFSETS = Object.freeze({
@@ -479,10 +653,75 @@ export const COUNCIL_ROTATION_V1_OFFSETS = Object.freeze({
 export const EMERGENCY_RESOLUTION_V1_OFFSETS = Object.freeze({
   state: 11,
   controllerConfig: 12,
-  frozenEpoch: 140,
-  resolutionKind: 158,
-  resolutionDigest: 377,
-  reserved: 421,
+  frozenEpoch: 172,
+  resolutionKind: 190,
+  observedProgramOwner: 223,
+  observedProgramExecutable: 255,
+  observedProgramDataLength: 256,
+  observedProgramHeaderPresent: 264,
+  observedLinkedProgramdata: 265,
+  observedProgramdataOwner: 298,
+  observedProgramdataExecutable: 330,
+  observedProgramdataDataLength: 331,
+  observedProgramdataHeaderPresent: 339,
+  observedProgramdataSlot: 340,
+  observedRawHashComplete: 348,
+  observedRawProgramdataHash: 349,
+  resolutionDigest: 496,
+  reserved: 540,
+});
+export const EMERGENCY_FREEZE_OBSERVATION_V1_OFFSETS = Object.freeze({
+  finalized: 11,
+  controllerProgram: 12,
+  frozenEpoch: 236,
+  actualProgramOwner: 254,
+  actualProgramExecutable: 286,
+  actualProgramDataLength: 287,
+  programHeaderPresent: 295,
+  actualLinkedProgramdata: 296,
+  actualProgramdataOwner: 329,
+  actualProgramdataExecutable: 361,
+  actualProgramdataDataLength: 362,
+  programdataHeaderPresent: 370,
+  deployedProgramdataSlot: 371,
+  rawHashComplete: 379,
+  rawProgramdataSha256: 380,
+  observationDigest: 453,
+  reserved: 493,
+});
+export const PROGRAMDATA_FAILURE_OBSERVATION_V1_OFFSETS = Object.freeze({
+  finalized: 11,
+  controllerConfig: 12,
+  frozenEpoch: 172,
+  actualProgramOwner: 180,
+  actualProgramExecutable: 212,
+  actualProgramDataLength: 213,
+  programHeaderPresent: 221,
+  actualLinkedProgramdata: 222,
+  rawHashComplete: 255,
+  actualRawProgramdataSha256: 256,
+  actualProgramdataOwner: 288,
+  actualProgramdataExecutable: 320,
+  actualProgramdataDataLength: 321,
+  programdataHeaderPresent: 329,
+  actualProgramdataSlot: 330,
+  mismatchClass: 379,
+  failingChunkIndex: 380,
+  observationDigest: 456,
+  reserved: 488,
+});
+export const CHECKPOINT_ATTESTATION_V1_OFFSETS = Object.freeze({
+  controllerProgram: 11,
+  controllerConfig: 43,
+  checkpoint: 75,
+  subject: 107,
+  subjectDigest: 139,
+  phase: 171,
+  checkpointDigest: 172,
+  councilVersion: 236,
+  seatIndex: 284,
+  attestationDigest: 325,
+  reserved: 357,
 });
 
 const ZERO_PUBLIC_KEY = new PublicKey(Buffer.alloc(32));
@@ -576,6 +815,56 @@ function optionalPublicKeyBytes(value: OptionalPublicKeyV1, field: string): Buff
   return Buffer.concat([Buffer.from([Number(value.present)]), value.value.toBuffer()]);
 }
 
+function validateProgramdataObservationShape(
+  headerPresent: boolean,
+  dataLength: bigint,
+  deployedSlot: bigint,
+  capacity: bigint,
+  authority: OptionalPublicKeyV1,
+  field: string,
+): void {
+  optionalPublicKeyBytes(authority, `${field}.authority`);
+  if (headerPresent) {
+    if (dataLength !== capacity + LOADER_V3_PROGRAMDATA_METADATA_LEN_V1) {
+      throw new Error(`${field} data length must equal Loader-v3 metadata plus capacity`);
+    }
+  } else if (deployedSlot !== 0n || capacity !== 0n || authority.present) {
+    throw new Error(`${field} has invalid absent-header metadata`);
+  }
+}
+
+function validateProgramObservationShape(
+  headerPresent: boolean,
+  dataLength: bigint,
+  linkedProgramdata: OptionalPublicKeyV1,
+  field: string,
+): void {
+  optionalPublicKeyBytes(linkedProgramdata, `${field}.linkedProgramdata`);
+  if (headerPresent) {
+    if (dataLength !== 36n || !linkedProgramdata.present) {
+      throw new Error(`${field} has invalid Loader-v3 Program header evidence`);
+    }
+  } else if (linkedProgramdata.present) {
+    throw new Error(`${field} has invalid absent Program header evidence`);
+  }
+}
+
+function validateRawProgramdataHashShape(
+  complete: boolean,
+  rawHash: Uint8Array,
+  dataLength: bigint,
+  field: string,
+): void {
+  requireBool(complete, `${field}.complete`);
+  requireU64(dataLength, `${field}.dataLength`);
+  const hashIsZero = isZero32(rawHash);
+  const withinAtomicCeiling =
+    dataLength <= MAX_ATOMIC_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1;
+  if (complete !== withinAtomicCeiling || complete === hashIsZero) {
+    throw new Error(`${field} is not canonically complete or incomplete`);
+  }
+}
+
 function popcount(value: number): number {
   let count = 0;
   let remaining = value;
@@ -611,6 +900,258 @@ function validateVersionedApproval(
   const pinned = councilVersion !== 0n && !hashIsZero && count !== 0;
   if (!empty && !pinned) {
     throw new Error(`${field} council binding is not canonical`);
+  }
+}
+
+function validateUpgradeProposalLifecycleShape(value: UpgradeProposalV2): void {
+  if (
+    (value.state === ProposalStateV2.Retired &&
+      value.proposalClass !== ProposalClassV1.EmergencyRollback) ||
+    (value.state === ProposalStateV2.SupersededByRollback &&
+      value.proposalClass === ProposalClassV1.EmergencyRollback)
+  ) {
+    throw new Error("Release 1 proposal terminal class is not canonical");
+  }
+  if (
+    value.councilApprovalCount > RELEASE1_APPROVAL_THRESHOLD ||
+    value.cancellationApprovalCount > RELEASE1_APPROVAL_THRESHOLD ||
+    value.unfreezeApprovalCount > RELEASE1_APPROVAL_THRESHOLD
+  ) {
+    throw new Error("Release 1 proposal approval count exceeds threshold");
+  }
+
+  const cancellationStarted = value.cancellationApprovalCount !== 0;
+  if (cancellationStarted !== (value.cancellationReasonCode !== 0)) {
+    throw new Error("Release 1 proposal cancellation reason is not canonical");
+  }
+  if (value.state === ProposalStateV2.Cancelled) {
+    if (
+      value.cancellationApprovalCount !== RELEASE1_APPROVAL_THRESHOLD ||
+      value.terminalReasonCode !== value.cancellationReasonCode
+    ) {
+      throw new Error("cancelled proposal lacks canonical quorum or reason");
+    }
+  } else if (value.cancellationApprovalCount === RELEASE1_APPROVAL_THRESHOLD) {
+    throw new Error("cancellation quorum must transition the proposal");
+  }
+
+  const firstApprovalPresent = value.firstApprovalSlot !== 0n;
+  const councilApprovedPresent = value.councilApprovedSlot !== 0n;
+  if (
+    firstApprovalPresent !== (value.councilApprovalCount !== 0) ||
+    councilApprovedPresent !==
+      (value.councilApprovalCount === RELEASE1_APPROVAL_THRESHOLD)
+  ) {
+    throw new Error("Release 1 proposal initial approval slots are not canonical");
+  }
+  if (
+    firstApprovalPresent &&
+    (value.firstApprovalSlot < value.reviewStartSlot ||
+      value.firstApprovalSlot > value.reviewEndSlot ||
+      value.firstApprovalSlot >= value.expirySlot)
+  ) {
+    throw new Error("Release 1 proposal first approval is outside review timing");
+  }
+  if (
+    councilApprovedPresent &&
+    (value.councilApprovedSlot < value.firstApprovalSlot ||
+      value.councilApprovedSlot > value.reviewEndSlot ||
+      value.councilApprovedSlot >= value.expirySlot)
+  ) {
+    throw new Error("Release 1 proposal quorum slot is outside review timing");
+  }
+
+  const governanceSatisfied = value.governanceSatisfiedSlot !== 0n;
+  const queued = value.queuedSlot !== 0n;
+  if (
+    (governanceSatisfied && !councilApprovedPresent) ||
+    (queued && !governanceSatisfied) ||
+    (governanceSatisfied && value.governanceSatisfiedSlot >= value.expirySlot) ||
+    (queued && value.queuedSlot >= value.expirySlot)
+  ) {
+    throw new Error("Release 1 proposal governance slot prefix is invalid");
+  }
+
+  let prefreezeShape: boolean;
+  switch (value.state) {
+    case ProposalStateV2.Draft:
+    case ProposalStateV2.BufferAdopted:
+      prefreezeShape =
+        value.councilApprovalCount === 0 && !governanceSatisfied && !queued;
+      break;
+    case ProposalStateV2.BufferVerified:
+      prefreezeShape =
+        value.councilApprovalCount < RELEASE1_APPROVAL_THRESHOLD &&
+        !governanceSatisfied &&
+        !queued;
+      break;
+    case ProposalStateV2.CouncilApproved:
+      prefreezeShape =
+        value.councilApprovalCount === RELEASE1_APPROVAL_THRESHOLD &&
+        !governanceSatisfied &&
+        !queued;
+      break;
+    case ProposalStateV2.GovernanceSatisfied:
+      prefreezeShape =
+        value.councilApprovalCount === RELEASE1_APPROVAL_THRESHOLD &&
+        governanceSatisfied &&
+        !queued;
+      break;
+    case ProposalStateV2.Timelocked:
+    case ProposalStateV2.Retired:
+      prefreezeShape =
+        value.councilApprovalCount === RELEASE1_APPROVAL_THRESHOLD &&
+        governanceSatisfied &&
+        queued;
+      break;
+    case ProposalStateV2.Cancelled:
+    case ProposalStateV2.Expired:
+      prefreezeShape = true;
+      break;
+    case ProposalStateV2.TokenReviewOpen:
+      prefreezeShape = false;
+      break;
+    default:
+      prefreezeShape =
+        value.councilApprovalCount === RELEASE1_APPROVAL_THRESHOLD &&
+        governanceSatisfied &&
+        queued;
+      break;
+  }
+  if (!prefreezeShape) {
+    throw new Error("Release 1 proposal pre-freeze state is not canonical");
+  }
+
+  const frozenRequired =
+    value.state === ProposalStateV2.Frozen ||
+    value.state === ProposalStateV2.Extended ||
+    value.state === ProposalStateV2.UpgradeExecuted ||
+    value.state === ProposalStateV2.ProgramDataVerified ||
+    value.state === ProposalStateV2.PoststateAccepted ||
+    value.state === ProposalStateV2.UnfreezeApproved ||
+    value.state === ProposalStateV2.Completed ||
+    value.state === ProposalStateV2.SupersededByRollback;
+  if (
+    (value.frozenSlot !== 0n) !== frozenRequired ||
+    (frozenRequired &&
+      (value.frozenSlot < value.notBeforeSlot || value.frozenSlot >= value.expirySlot))
+  ) {
+    throw new Error("Release 1 proposal freeze slot is not canonical");
+  }
+
+  const extensionRequired = value.extensionDelta !== 0n;
+  const extensionSlotRequired =
+    extensionRequired &&
+    (value.state === ProposalStateV2.Extended ||
+      value.state === ProposalStateV2.UpgradeExecuted ||
+      value.state === ProposalStateV2.ProgramDataVerified ||
+      value.state === ProposalStateV2.PoststateAccepted ||
+      value.state === ProposalStateV2.UnfreezeApproved ||
+      value.state === ProposalStateV2.Completed ||
+      value.state === ProposalStateV2.SupersededByRollback);
+  if (
+    (value.state === ProposalStateV2.Extended && !extensionRequired) ||
+    (value.extensionExecutedSlot !== 0n) !== extensionSlotRequired ||
+    value.extensionExecutedSlot >= value.expirySlot
+  ) {
+    throw new Error("Release 1 proposal extension slot is not canonical");
+  }
+
+  const upgradeExecuted =
+    value.state === ProposalStateV2.UpgradeExecuted ||
+    value.state === ProposalStateV2.ProgramDataVerified ||
+    value.state === ProposalStateV2.PoststateAccepted ||
+    value.state === ProposalStateV2.UnfreezeApproved ||
+    value.state === ProposalStateV2.Completed ||
+    value.state === ProposalStateV2.SupersededByRollback;
+  if (
+    (value.upgradeExecutedSlot !== 0n) !== upgradeExecuted ||
+    value.upgradeExecutedSlot >= value.expirySlot ||
+    (extensionSlotRequired &&
+      upgradeExecuted &&
+      value.extensionExecutedSlot >= value.upgradeExecutedSlot)
+  ) {
+    throw new Error("Release 1 proposal upgrade slot is not canonical");
+  }
+
+  const programdataVerifiedRequired =
+    value.state === ProposalStateV2.ProgramDataVerified ||
+    value.state === ProposalStateV2.PoststateAccepted ||
+    value.state === ProposalStateV2.UnfreezeApproved ||
+    value.state === ProposalStateV2.Completed;
+  const programdataVerifiedAllowed =
+    programdataVerifiedRequired || value.state === ProposalStateV2.SupersededByRollback;
+  if (
+    (programdataVerifiedRequired && value.programdataVerifiedSlot === 0n) ||
+    (!programdataVerifiedAllowed && value.programdataVerifiedSlot !== 0n)
+  ) {
+    throw new Error("Release 1 proposal ProgramData verification slot is not canonical");
+  }
+
+  const poststateAccepted =
+    value.state === ProposalStateV2.PoststateAccepted ||
+    value.state === ProposalStateV2.UnfreezeApproved ||
+    value.state === ProposalStateV2.Completed;
+  if ((value.poststateAcceptedSlot !== 0n) !== poststateAccepted) {
+    throw new Error("Release 1 proposal poststate slot is not canonical");
+  }
+
+  const unfreezeApproved =
+    value.state === ProposalStateV2.UnfreezeApproved ||
+    value.state === ProposalStateV2.Completed;
+  const unfreezeShape =
+    value.state === ProposalStateV2.PoststateAccepted
+      ? value.unfreezeApprovalCount < RELEASE1_APPROVAL_THRESHOLD
+      : unfreezeApproved
+        ? value.unfreezeApprovalCount === RELEASE1_APPROVAL_THRESHOLD
+        : value.unfreezeApprovalCount === 0;
+  if (!unfreezeShape || (value.unfreezeApprovedSlot !== 0n) !== unfreezeApproved) {
+    throw new Error("Release 1 proposal unfreeze approval state is not canonical");
+  }
+
+  const expectedTerminalReason =
+    value.state === ProposalStateV2.Completed
+      ? PROPOSAL_COMPLETED_TERMINAL_REASON_V1
+      : value.state === ProposalStateV2.Cancelled
+        ? value.cancellationReasonCode
+        : value.state === ProposalStateV2.Expired
+          ? PROPOSAL_EXPIRED_TERMINAL_REASON_V1
+          : value.state === ProposalStateV2.SupersededByRollback
+            ? PROPOSAL_SUPERSEDED_BY_ROLLBACK_TERMINAL_REASON_V1
+            : value.state === ProposalStateV2.Retired
+              ? PROPOSAL_RETIRED_ROLLBACK_TERMINAL_REASON_V1
+              : 0;
+  const terminal = expectedTerminalReason !== 0;
+  if (
+    (value.terminalSlot !== 0n) !== terminal ||
+    value.terminalReasonCode !== expectedTerminalReason ||
+    (value.state === ProposalStateV2.Cancelled && value.terminalSlot >= value.expirySlot) ||
+    (value.state === ProposalStateV2.Expired && value.terminalSlot < value.expirySlot)
+  ) {
+    throw new Error("Release 1 proposal terminal state is not canonical");
+  }
+
+  let previous = 0n;
+  for (const slot of [
+    value.creationSlot,
+    value.firstApprovalSlot,
+    value.councilApprovedSlot,
+    value.governanceSatisfiedSlot,
+    value.queuedSlot,
+    value.frozenSlot,
+    value.extensionExecutedSlot,
+    value.upgradeExecutedSlot,
+    value.programdataVerifiedSlot,
+    value.poststateAcceptedSlot,
+    value.unfreezeApprovedSlot,
+    value.terminalSlot,
+  ]) {
+    if (slot !== 0n) {
+      if (slot < previous) {
+        throw new Error("Release 1 proposal lifecycle slots are out of order");
+      }
+      previous = slot;
+    }
   }
 }
 
@@ -799,6 +1340,7 @@ const CHECKPOINT_PHASE_VALUES = Object.values(StateCheckpointPhaseV1);
 const ROTATION_STATE_VALUES = Object.values(CouncilRotationStateV1);
 const EMERGENCY_STATE_VALUES = Object.values(EmergencyFreezeResolutionStateV1);
 const EMERGENCY_KIND_VALUES = Object.values(EmergencyFreezeResolutionKindV1);
+const PROGRAMDATA_MISMATCH_CLASS_VALUES = Object.values(ProgramDataMismatchClassV1);
 
 function sha256(domain: Uint8Array, material: Uint8Array): Buffer {
   return createHash("sha256").update(domain).update(material).digest();
@@ -815,6 +1357,9 @@ export function validateUpgradeProposalV2(value: UpgradeProposalV2): void {
     UPGRADE_PROPOSAL_V2_RESERVED_LEN,
     "UpgradeProposalV2",
   );
+  requireU8(value.bump, "bump");
+  requireBool(value.zeroTailRequired, "zeroTailRequired");
+  requireU8(value.proposalFlags, "proposalFlags");
   enumValue(value.proposalClass, PROPOSAL_CLASS_VALUES, "ProposalClassV1");
   enumValue(value.state, PROPOSAL_STATE_V2_VALUES, "ProposalStateV2");
   enumValue(value.creationGateStatus, GATE_STATUS_VALUES, "GateStatusV1");
@@ -858,7 +1403,6 @@ export function validateUpgradeProposalV2(value: UpgradeProposalV2): void {
     value.creationCouncilVersion === 0n ||
     isZero32(value.creationCouncilHash) ||
     value.creationGateEpoch === 0n ||
-    value.freezeGateEpoch === 0n ||
     value.proposalId === 0n ||
     value.targetNonce === 0n ||
     value.creationSlot === 0n ||
@@ -867,6 +1411,18 @@ export function validateUpgradeProposalV2(value: UpgradeProposalV2): void {
     isZero32(value.proposalDigest)
   ) {
     throw new Error("invalid Release 1 proposal commitment");
+  }
+  const requiresFrozenEpoch =
+    value.state === ProposalStateV2.Frozen ||
+    value.state === ProposalStateV2.Extended ||
+    value.state === ProposalStateV2.UpgradeExecuted ||
+    value.state === ProposalStateV2.ProgramDataVerified ||
+    value.state === ProposalStateV2.PoststateAccepted ||
+    value.state === ProposalStateV2.UnfreezeApproved ||
+    value.state === ProposalStateV2.Completed ||
+    value.state === ProposalStateV2.SupersededByRollback;
+  if ((value.freezeGateEpoch !== 0n) !== requiresFrozenEpoch) {
+    throw new Error("invalid Release 1 proposal frozen epoch");
   }
   validateArtifactCommitment(
     value.artifactLength,
@@ -909,9 +1465,22 @@ export function validateUpgradeProposalV2(value: UpgradeProposalV2): void {
     ["reviewEndSlot", value.reviewEndSlot],
     ["notBeforeSlot", value.notBeforeSlot],
     ["expirySlot", value.expirySlot],
+    ["firstApprovalSlot", value.firstApprovalSlot],
+    ["councilApprovedSlot", value.councilApprovedSlot],
+    ["governanceSatisfiedSlot", value.governanceSatisfiedSlot],
+    ["queuedSlot", value.queuedSlot],
+    ["frozenSlot", value.frozenSlot],
+    ["extensionExecutedSlot", value.extensionExecutedSlot],
+    ["upgradeExecutedSlot", value.upgradeExecutedSlot],
+    ["programdataVerifiedSlot", value.programdataVerifiedSlot],
+    ["poststateAcceptedSlot", value.poststateAcceptedSlot],
+    ["unfreezeApprovedSlot", value.unfreezeApprovedSlot],
+    ["terminalSlot", value.terminalSlot],
   ] as const) {
     requireU64(numeric, field);
   }
+  requireU16(value.cancellationReasonCode, "cancellationReasonCode");
+  requireU16(value.terminalReasonCode, "terminalReasonCode");
   if (
     value.currentCapacity + value.extensionDelta !== value.expectedPostCapacity ||
     value.currentCapacity === 0n ||
@@ -990,6 +1559,7 @@ export function validateUpgradeProposalV2(value: UpgradeProposalV2): void {
     value.unfreezeApprovalCount,
     "unfreeze approval",
   );
+  validateUpgradeProposalLifecycleShape(value);
 }
 
 export function serializeUpgradeProposalV2(value: UpgradeProposalV2): Buffer {
@@ -1205,6 +1775,7 @@ export function validateBufferVerificationV1(value: BufferVerificationV1): void 
     BUFFER_VERIFICATION_V1_RESERVED_LEN,
     "BufferVerificationV1",
   );
+  requireU8(value.bump, "bump");
   enumValue(value.status, BUFFER_STATUS_VALUES, "BufferVerificationStatusV1");
   requireNondefaultKeys([
     ["controllerConfig", value.controllerConfig],
@@ -1227,6 +1798,9 @@ export function validateBufferVerificationV1(value: BufferVerificationV1): void 
     value.chunkCount,
     value.verifiedChunkCount,
   );
+  requireU64(value.adoptedSlot, "adoptedSlot");
+  requireU64(value.finalizedSlot, "finalizedSlot");
+  requireU64(value.terminalSlot, "terminalSlot");
   if (value.adoptedSlot === 0n || isZero32(value.sealedBufferHeaderHash)) {
     throw new Error("invalid adopted buffer evidence");
   }
@@ -1240,6 +1814,10 @@ export function validateBufferVerificationV1(value: BufferVerificationV1): void 
       value.verifiedChunkCount < value.chunkCount &&
       value.finalizedSlot === 0n &&
       value.terminalSlot === 0n) ||
+    (value.status === BufferVerificationStatusV1.ReadyToFinalize &&
+      value.verifiedChunkCount === value.chunkCount &&
+      value.finalizedSlot === 0n &&
+      value.terminalSlot === 0n) ||
     (value.status === BufferVerificationStatusV1.Verified &&
       value.verifiedChunkCount === value.chunkCount &&
       value.finalizedSlot !== 0n &&
@@ -1250,10 +1828,19 @@ export function validateBufferVerificationV1(value: BufferVerificationV1): void 
       value.terminalSlot !== 0n) ||
     (value.status === BufferVerificationStatusV1.ClosedAbandoned &&
       value.terminalSlot !== 0n &&
-      ((value.finalizedSlot === 0n && value.verifiedChunkCount < value.chunkCount) ||
+      ((value.finalizedSlot === 0n && value.verifiedChunkCount <= value.chunkCount) ||
         (value.finalizedSlot !== 0n && value.verifiedChunkCount === value.chunkCount)));
   if (!statusIsCanonical) {
     throw new Error("invalid buffer verification lifecycle evidence");
+  }
+  if (
+    (value.finalizedSlot !== 0n && value.finalizedSlot < value.adoptedSlot) ||
+    (value.terminalSlot !== 0n && value.terminalSlot < value.adoptedSlot) ||
+    (value.finalizedSlot !== 0n &&
+      value.terminalSlot !== 0n &&
+      value.terminalSlot < value.finalizedSlot)
+  ) {
+    throw new Error("buffer verification slots are out of order");
   }
 }
 
@@ -1332,6 +1919,7 @@ export function validateProgramDataVerificationV1(value: ProgramDataVerification
     PROGRAMDATA_VERIFICATION_V1_RESERVED_LEN,
     "ProgramDataVerificationV1",
   );
+  requireU8(value.bump, "bump");
   enumValue(value.status, PROGRAMDATA_STATUS_VALUES, "ProgramDataVerificationStatusV1");
   requireNondefaultKeys([
     ["controllerConfig", value.controllerConfig],
@@ -1349,13 +1937,20 @@ export function validateProgramDataVerificationV1(value: ProgramDataVerification
     value.chunkSize,
     value.payloadChunkCount,
   );
+  requireU64(value.deployedSlot, "deployedSlot");
+  requireU64(value.capacity, "capacity");
+  requireU64(value.tailLength, "tailLength");
+  requireU32(value.tailChunkCount, "tailChunkCount");
+  requireU32(value.verifiedPayloadChunkCount, "verifiedPayloadChunkCount");
+  requireU32(value.verifiedTailChunkCount, "verifiedTailChunkCount");
+  requireBool(value.zeroTailVerified, "zeroTailVerified");
+  requireU64(value.finalizedSlot, "finalizedSlot");
   if (
     value.deployedSlot === 0n ||
     value.capacity < value.artifactLength ||
     value.capacity > BigInt(MAX_ARTIFACT_BYTES_V1) ||
     value.tailLength !== value.capacity - value.artifactLength ||
-    value.tailChunkCount !== artifactChunkCountAllowEmpty(value.tailLength, value.chunkSize) ||
-    isZero32(value.rawProgramdataHash)
+    value.tailChunkCount !== artifactChunkCountAllowEmpty(value.tailLength, value.chunkSize)
   ) {
     throw new Error("invalid ProgramData verification observation");
   }
@@ -1373,11 +1968,33 @@ export function validateProgramDataVerificationV1(value: ProgramDataVerification
     value.verifiedPayloadChunkCount === value.payloadChunkCount &&
     value.verifiedTailChunkCount === value.tailChunkCount;
   if (value.status === ProgramDataVerificationStatusV1.Verifying) {
-    if (complete || value.zeroTailVerified || value.finalizedSlot !== 0n) {
+    if (
+      complete ||
+      value.zeroTailVerified ||
+      !isZero32(value.rawProgramdataHash) ||
+      value.finalizedSlot !== 0n
+    ) {
       throw new Error("invalid in-progress ProgramData verification evidence");
     }
-  } else if (!complete || !value.zeroTailVerified || value.finalizedSlot === 0n) {
+  } else if (value.status === ProgramDataVerificationStatusV1.ReadyToFinalize) {
+    if (
+      !complete ||
+      value.zeroTailVerified ||
+      !isZero32(value.rawProgramdataHash) ||
+      value.finalizedSlot !== 0n
+    ) {
+      throw new Error("invalid ready ProgramData verification evidence");
+    }
+  } else if (
+    !complete ||
+    !value.zeroTailVerified ||
+    isZero32(value.rawProgramdataHash) ||
+    value.finalizedSlot === 0n
+  ) {
     throw new Error("invalid completed ProgramData verification evidence");
+  }
+  if (value.finalizedSlot !== 0n && value.finalizedSlot < value.deployedSlot) {
+    throw new Error("ProgramData verification slots are out of order");
   }
 }
 
@@ -1482,12 +2099,27 @@ export function validateStateCheckpointV1(value: StateCheckpointV1): void {
     STATE_CHECKPOINT_V1_RESERVED_LEN,
     "StateCheckpointV1",
   );
+  requireU8(value.bump, "bump");
   enumValue(value.phase, CHECKPOINT_PHASE_VALUES, "StateCheckpointPhaseV1");
   requireNondefaultKeys([
     ["controllerConfig", value.controllerConfig],
     ["targetProgram", value.targetProgram],
     ["targetProgramdata", value.targetProgramdata],
   ]);
+  for (const [field, numeric] of [
+    ["finalizedObservationSlot", value.finalizedObservationSlot],
+    ["gateEpoch", value.gateEpoch],
+    ["targetProgramdataSlot", value.targetProgramdataSlot],
+    ["targetCapacity", value.targetCapacity],
+    ["programOwnedStateCount", value.programOwnedStateCount],
+    ["logicalCompressedStateCount", value.logicalCompressedStateCount],
+    ["admittedPositiveDonationCount", value.admittedPositiveDonationCount],
+    ["finalizedSlot", value.finalizedSlot],
+  ] as const) {
+    requireU64(numeric, field);
+  }
+  requireU32(value.forbiddenDriftCount, "forbiddenDriftCount");
+  requireBool(value.accepted, "accepted");
   const normalSubject =
     !isDefaultKey(value.proposal) && isDefaultKey(value.emergencyResolution);
   const emergencySubject =
@@ -1510,7 +2142,6 @@ export function validateStateCheckpointV1(value: StateCheckpointV1): void {
     isZero32(value.hardCombinedRoot) ||
     isZero32(value.externalMetadataObservationRoot) ||
     isZero32(value.externalRawBalanceObservationRoot) ||
-    value.forbiddenDriftCount !== 0 ||
     isZero32(value.checkpointDigest) ||
     ((value.admittedPositiveDonationCount === 0n) !==
       isZero32(value.admittedPositiveDonationRoot))
@@ -1524,16 +2155,17 @@ export function validateStateCheckpointV1(value: StateCheckpointV1): void {
     value.approvalCount,
     "checkpoint approval",
   );
-  if (value.accepted) {
-    if (value.approvalCount < RELEASE1_APPROVAL_THRESHOLD || value.acceptedSlot === 0n) {
-      throw new Error("accepted checkpoint lacks quorum or slot");
-    }
-  } else if (
-    value.acceptedSlot !== 0n ||
-    value.approvalCount >= RELEASE1_APPROVAL_THRESHOLD
+  if (
+    value.approvalCount !== RELEASE1_APPROVAL_THRESHOLD ||
+    value.finalizedSlot === 0n ||
+    value.finalizedObservationSlot > value.finalizedSlot
   ) {
-    throw new Error("unaccepted checkpoint has terminal approval evidence");
+    throw new Error("finalized checkpoint lacks quorum or finalization slot");
   }
+  if (value.accepted !== (value.forbiddenDriftCount === 0)) {
+    throw new Error("checkpoint acceptance disagrees with forbidden drift evidence");
+  }
+  validateStateCheckpointHardCombinedRootV1(value);
 }
 
 export function serializeStateCheckpointV1(value: StateCheckpointV1): Buffer {
@@ -1575,7 +2207,7 @@ export function serializeStateCheckpointV1(value: StateCheckpointV1): Buffer {
     .u8(value.approvalBitset, "approvalBitset")
     .u8(value.approvalCount, "approvalCount")
     .bool(value.accepted, "accepted")
-    .u64(value.acceptedSlot, "acceptedSlot")
+    .u64(value.finalizedSlot, "finalizedSlot")
     .bytes(value.reserved, STATE_CHECKPOINT_V1_RESERVED_LEN, "reserved");
   return writer.finish(STATE_CHECKPOINT_V1_LEN, "StateCheckpointV1");
 }
@@ -1618,7 +2250,7 @@ export function deserializeStateCheckpointV1(bytes: Uint8Array): StateCheckpoint
     approvalBitset: reader.u8(),
     approvalCount: reader.u8(),
     accepted: reader.bool("accepted"),
-    acceptedSlot: reader.u64(),
+    finalizedSlot: reader.u64(),
     reserved: reader.bytes(STATE_CHECKPOINT_V1_RESERVED_LEN),
   };
   reader.end("StateCheckpointV1");
@@ -1639,6 +2271,7 @@ export function validateCouncilRotationProposalV1(
     COUNCIL_ROTATION_PROPOSAL_V1_RESERVED_LEN,
     "CouncilRotationProposalV1",
   );
+  requireU8(value.bump, "bump");
   enumValue(value.state, ROTATION_STATE_VALUES, "CouncilRotationStateV1");
   requireNondefaultKeys([
     ["controllerConfig", value.controllerConfig],
@@ -1646,10 +2279,24 @@ export function validateCouncilRotationProposalV1(
     ["currentCouncil", value.currentCouncil],
     ["candidateCouncil", value.candidateCouncil],
   ]);
+  for (const [field, numeric] of [
+    ["currentCouncilVersion", value.currentCouncilVersion],
+    ["candidateCouncilVersion", value.candidateCouncilVersion],
+    ["creationSlot", value.creationSlot],
+    ["notBeforeSlot", value.notBeforeSlot],
+    ["expirySlot", value.expirySlot],
+    ["targetNonce", value.targetNonce],
+    ["activatedSlot", value.activatedSlot],
+  ] as const) {
+    requireU64(numeric, field);
+  }
+  requireU16(value.cancellationReasonCode, "cancellationReasonCode");
+  requireU16(value.terminalReasonCode, "terminalReasonCode");
   if (
     value.currentCouncilVersion === 0n ||
     value.currentCouncilVersion === U64_MAX ||
-    value.candidateCouncilVersion !== value.currentCouncilVersion + 1n ||
+    value.candidateCouncilVersion <= value.currentCouncilVersion ||
+    value.candidateCouncilVersion === U64_MAX ||
     isZero32(value.currentCouncilHash) ||
     isZero32(value.candidateCouncilHash) ||
     value.targetNonce === 0n ||
@@ -1666,7 +2313,50 @@ export function validateCouncilRotationProposalV1(
     "rotation cancellation approval",
   );
   if (
-    (value.state === CouncilRotationStateV1.Activated) !== (value.activatedSlot !== 0n)
+    value.approvalCount > RELEASE1_APPROVAL_THRESHOLD ||
+    value.cancellationApprovalCount > RELEASE1_APPROVAL_THRESHOLD
+  ) {
+    throw new Error("council rotation approval count exceeds threshold");
+  }
+  const cancellationStarted = value.cancellationApprovalCount !== 0;
+  if (cancellationStarted !== (value.cancellationReasonCode !== 0)) {
+    throw new Error("council rotation cancellation reason is not canonical");
+  }
+  if (value.state === CouncilRotationStateV1.Cancelled) {
+    if (
+      value.cancellationApprovalCount !== RELEASE1_APPROVAL_THRESHOLD ||
+      value.terminalReasonCode !== value.cancellationReasonCode
+    ) {
+      throw new Error("cancelled council rotation lacks canonical quorum or reason");
+    }
+  } else if (value.cancellationApprovalCount === RELEASE1_APPROVAL_THRESHOLD) {
+    throw new Error("council rotation cancellation quorum must transition state");
+  }
+  const approvalShape =
+    value.state === CouncilRotationStateV1.Draft
+      ? value.approvalCount < RELEASE1_APPROVAL_THRESHOLD
+      : value.state === CouncilRotationStateV1.CouncilApproved ||
+          value.state === CouncilRotationStateV1.Timelocked ||
+          value.state === CouncilRotationStateV1.Activated
+        ? value.approvalCount === RELEASE1_APPROVAL_THRESHOLD
+        : true;
+  if (!approvalShape) {
+    throw new Error("council rotation approval state is not canonical");
+  }
+  const expectedTerminalReason =
+    value.state === CouncilRotationStateV1.Activated
+      ? COUNCIL_ROTATION_ACTIVATED_TERMINAL_REASON_V1
+      : value.state === CouncilRotationStateV1.Cancelled
+        ? value.cancellationReasonCode
+        : value.state === CouncilRotationStateV1.Expired
+          ? COUNCIL_ROTATION_EXPIRED_TERMINAL_REASON_V1
+          : 0;
+  const activated = value.state === CouncilRotationStateV1.Activated;
+  if (
+    activated !== (value.activatedSlot !== 0n) ||
+    (activated &&
+      (value.activatedSlot < value.notBeforeSlot || value.activatedSlot >= value.expirySlot)) ||
+    value.terminalReasonCode !== expectedTerminalReason
   ) {
     throw new Error("invalid council rotation activation evidence");
   }
@@ -1761,6 +2451,7 @@ export function validateEmergencyFreezeResolutionV1(
     EMERGENCY_FREEZE_RESOLUTION_V1_RESERVED_LEN,
     "EmergencyFreezeResolutionV1",
   );
+  requireU8(value.bump, "bump");
   enumValue(
     value.state,
     EMERGENCY_STATE_VALUES,
@@ -1776,25 +2467,68 @@ export function validateEmergencyFreezeResolutionV1(
     ["protocolGate", value.protocolGate],
     ["targetProgram", value.targetProgram],
     ["targetProgramdata", value.targetProgramdata],
-    ["observedAuthority", value.observedAuthority],
+    ["emergencyFreezeObservation", value.emergencyFreezeObservation],
     ["emergencyCheckpoint", value.emergencyCheckpoint],
   ]);
+  optionalPublicKeyBytes(value.observedAuthority, "observedAuthority");
+  optionalPublicKeyBytes(value.observedLinkedProgramdata, "observedLinkedProgramdata");
+  requireBool(value.observedProgramExecutable, "observedProgramExecutable");
+  requireBool(value.observedProgramHeaderPresent, "observedProgramHeaderPresent");
+  requireBool(value.observedProgramdataExecutable, "observedProgramdataExecutable");
+  requireBool(value.observedProgramdataHeaderPresent, "observedProgramdataHeaderPresent");
+  requireBool(value.observedRawHashComplete, "observedRawHashComplete");
+  for (const [field, numeric] of [
+    ["frozenEpoch", value.frozenEpoch],
+    ["freezeSlot", value.freezeSlot],
+    ["creationSlot", value.creationSlot],
+    ["notBeforeSlot", value.notBeforeSlot],
+    ["expirySlot", value.expirySlot],
+    ["targetNonce", value.targetNonce],
+    ["observedProgramDataLength", value.observedProgramDataLength],
+    ["observedProgramdataDataLength", value.observedProgramdataDataLength],
+    ["observedProgramdataSlot", value.observedProgramdataSlot],
+    ["observedCapacity", value.observedCapacity],
+    ["executedSlot", value.executedSlot],
+  ] as const) {
+    requireU64(numeric, field);
+  }
+  requireU16(value.freezeReasonCode, "freezeReasonCode");
+  requireU16(value.cancellationReasonCode, "cancellationReasonCode");
+  requireU16(value.terminalReasonCode, "terminalReasonCode");
   if (
     value.frozenEpoch === 0n ||
     value.freezeSlot === 0n ||
     value.freezeReasonCode === 0 ||
     value.freezeReasonCode === BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1 ||
-    value.creationSlot >= value.notBeforeSlot ||
+    value.creationSlot < value.freezeSlot ||
+    value.creationSlot >= value.expirySlot ||
+    value.freezeSlot >= value.notBeforeSlot ||
     value.notBeforeSlot >= value.expirySlot ||
     value.targetNonce === 0n ||
-    value.observedProgramdataSlot === 0n ||
-    isZero32(value.observedPayloadHash) ||
-    isZero32(value.observedRawProgramdataHash) ||
-    value.observedCapacity === 0n ||
     isZero32(value.resolutionDigest)
   ) {
     throw new Error("invalid EmergencyFreezeResolutionV1 commitment");
   }
+  validateProgramObservationShape(
+    value.observedProgramHeaderPresent,
+    value.observedProgramDataLength,
+    value.observedLinkedProgramdata,
+    "emergency Program observation",
+  );
+  validateRawProgramdataHashShape(
+    value.observedRawHashComplete,
+    value.observedRawProgramdataHash,
+    value.observedProgramdataDataLength,
+    "emergency raw ProgramData hash",
+  );
+  validateProgramdataObservationShape(
+    value.observedProgramdataHeaderPresent,
+    value.observedProgramdataDataLength,
+    value.observedProgramdataSlot,
+    value.observedCapacity,
+    value.observedAuthority,
+    "emergency ProgramData observation",
+  );
   validateVersionedApproval(
     value.approvalCouncilVersion,
     value.approvalCouncilHash,
@@ -1803,8 +2537,50 @@ export function validateEmergencyFreezeResolutionV1(
     "emergency resolution approval",
   );
   if (
-    (value.state === EmergencyFreezeResolutionStateV1.Executed) !==
-    (value.executedSlot !== 0n)
+    value.approvalCount > RELEASE1_APPROVAL_THRESHOLD ||
+    value.state === EmergencyFreezeResolutionStateV1.Cancelled ||
+    value.cancellationReasonCode !== 0
+  ) {
+    throw new Error("emergency resolution contains unreachable cancellation state");
+  }
+  const approvalShape =
+    value.state === EmergencyFreezeResolutionStateV1.Draft
+      ? value.approvalCount < RELEASE1_APPROVAL_THRESHOLD
+      : value.state === EmergencyFreezeResolutionStateV1.CouncilApproved ||
+          value.state === EmergencyFreezeResolutionStateV1.Timelocked ||
+          value.state === EmergencyFreezeResolutionStateV1.Executed
+        ? value.approvalCount === RELEASE1_APPROVAL_THRESHOLD
+        : true;
+  if (!approvalShape) {
+    throw new Error("emergency resolution approval state is not canonical");
+  }
+  const expectedTerminalReason =
+    value.state === EmergencyFreezeResolutionStateV1.Executed
+      ? EMERGENCY_RESOLUTION_EXECUTED_TERMINAL_REASON_V1
+      : value.state === EmergencyFreezeResolutionStateV1.Expired
+        ? EMERGENCY_RESOLUTION_EXPIRED_TERMINAL_REASON_V1
+        : 0;
+  const executed = value.state === EmergencyFreezeResolutionStateV1.Executed;
+  if (
+    executed !== (value.executedSlot !== 0n) ||
+    (executed &&
+      (value.executedSlot < value.notBeforeSlot ||
+        value.executedSlot < value.creationSlot ||
+        value.executedSlot >= value.expirySlot)) ||
+    (executed &&
+      (!value.observedRawHashComplete ||
+        !value.observedProgramOwner.equals(BPF_LOADER_UPGRADEABLE_PROGRAM_ID) ||
+        !value.observedProgramExecutable ||
+        !value.observedProgramHeaderPresent ||
+        !value.observedLinkedProgramdata.present ||
+        !value.observedLinkedProgramdata.value.equals(value.targetProgramdata) ||
+        !value.observedProgramdataOwner.equals(BPF_LOADER_UPGRADEABLE_PROGRAM_ID) ||
+        value.observedProgramdataExecutable ||
+        !value.observedProgramdataHeaderPresent ||
+        value.observedProgramdataSlot === 0n ||
+        value.observedCapacity === 0n ||
+        !value.observedAuthority.present)) ||
+    value.terminalReasonCode !== expectedTerminalReason
   ) {
     throw new Error("invalid emergency resolution execution evidence");
   }
@@ -1825,6 +2601,7 @@ export function serializeEmergencyFreezeResolutionV1(
     .key(value.protocolGate)
     .key(value.targetProgram)
     .key(value.targetProgramdata)
+    .key(value.emergencyFreezeObservation)
     .u64(value.frozenEpoch, "frozenEpoch")
     .u64(value.freezeSlot, "freezeSlot")
     .u16(value.freezeReasonCode, "freezeReasonCode")
@@ -1833,11 +2610,20 @@ export function serializeEmergencyFreezeResolutionV1(
     .u64(value.notBeforeSlot, "notBeforeSlot")
     .u64(value.expirySlot, "expirySlot")
     .u64(value.targetNonce, "targetNonce")
+    .key(value.observedProgramOwner)
+    .bool(value.observedProgramExecutable, "observedProgramExecutable")
+    .u64(value.observedProgramDataLength, "observedProgramDataLength")
+    .bool(value.observedProgramHeaderPresent, "observedProgramHeaderPresent")
+    .optionalKey(value.observedLinkedProgramdata, "observedLinkedProgramdata")
+    .key(value.observedProgramdataOwner)
+    .bool(value.observedProgramdataExecutable, "observedProgramdataExecutable")
+    .u64(value.observedProgramdataDataLength, "observedProgramdataDataLength")
+    .bool(value.observedProgramdataHeaderPresent, "observedProgramdataHeaderPresent")
     .u64(value.observedProgramdataSlot, "observedProgramdataSlot")
-    .bytes(value.observedPayloadHash, 32, "observedPayloadHash")
+    .bool(value.observedRawHashComplete, "observedRawHashComplete")
     .bytes(value.observedRawProgramdataHash, 32, "observedRawProgramdataHash")
     .u64(value.observedCapacity, "observedCapacity")
-    .key(value.observedAuthority)
+    .optionalKey(value.observedAuthority, "observedAuthority")
     .key(value.emergencyCheckpoint)
     .u64(value.approvalCouncilVersion, "approvalCouncilVersion")
     .bytes(value.approvalCouncilHash, 32, "approvalCouncilHash")
@@ -1872,6 +2658,7 @@ export function deserializeEmergencyFreezeResolutionV1(
     protocolGate: reader.key(),
     targetProgram: reader.key(),
     targetProgramdata: reader.key(),
+    emergencyFreezeObservation: reader.key(),
     frozenEpoch: reader.u64(),
     freezeSlot: reader.u64(),
     freezeReasonCode: reader.u16(),
@@ -1883,11 +2670,20 @@ export function deserializeEmergencyFreezeResolutionV1(
     notBeforeSlot: reader.u64(),
     expirySlot: reader.u64(),
     targetNonce: reader.u64(),
+    observedProgramOwner: reader.key(),
+    observedProgramExecutable: reader.bool("observedProgramExecutable"),
+    observedProgramDataLength: reader.u64(),
+    observedProgramHeaderPresent: reader.bool("observedProgramHeaderPresent"),
+    observedLinkedProgramdata: reader.optionalKey("observedLinkedProgramdata"),
+    observedProgramdataOwner: reader.key(),
+    observedProgramdataExecutable: reader.bool("observedProgramdataExecutable"),
+    observedProgramdataDataLength: reader.u64(),
+    observedProgramdataHeaderPresent: reader.bool("observedProgramdataHeaderPresent"),
     observedProgramdataSlot: reader.u64(),
-    observedPayloadHash: reader.bytes(32),
+    observedRawHashComplete: reader.bool("observedRawHashComplete"),
     observedRawProgramdataHash: reader.bytes(32),
     observedCapacity: reader.u64(),
-    observedAuthority: reader.key(),
+    observedAuthority: reader.optionalKey("observedAuthority"),
     emergencyCheckpoint: reader.key(),
     approvalCouncilVersion: reader.u64(),
     approvalCouncilHash: reader.bytes(32),
@@ -1901,6 +2697,472 @@ export function deserializeEmergencyFreezeResolutionV1(
   };
   reader.end("EmergencyFreezeResolutionV1");
   validateEmergencyFreezeResolutionV1(value);
+  return value;
+}
+
+export function validateEmergencyFreezeObservationV1(
+  value: EmergencyFreezeObservationV1,
+): void {
+  validateHeader(
+    value.discriminator,
+    EMERGENCY_FREEZE_OBSERVATION_V1_DISCRIMINATOR,
+    value.accountVersion,
+    RELEASE1_ACCOUNT_VERSION_V1,
+    value.initialized,
+    value.reserved,
+    EMERGENCY_FREEZE_OBSERVATION_V1_RESERVED_LEN,
+    "EmergencyFreezeObservationV1",
+  );
+  requireU8(value.bump, "bump");
+  requireBool(value.finalized, "finalized");
+  requireBool(value.actualProgramExecutable, "actualProgramExecutable");
+  requireBool(value.programHeaderPresent, "programHeaderPresent");
+  requireBool(value.actualProgramdataExecutable, "actualProgramdataExecutable");
+  requireBool(value.programdataHeaderPresent, "programdataHeaderPresent");
+  requireBool(value.rawHashComplete, "rawHashComplete");
+  requireNondefaultKeys([
+    ["controllerProgram", value.controllerProgram],
+    ["controllerConfig", value.controllerConfig],
+    ["protocolGate", value.protocolGate],
+    ["targetProgram", value.targetProgram],
+    ["targetProgramdata", value.targetProgramdata],
+    ["upgradeableLoader", value.upgradeableLoader],
+    ["controllerAuthority", value.controllerAuthority],
+  ]);
+  optionalPublicKeyBytes(value.actualLinkedProgramdata, "actualLinkedProgramdata");
+  optionalPublicKeyBytes(value.observedAuthority, "observedAuthority");
+  requireU64(value.frozenEpoch, "frozenEpoch");
+  requireU64(value.freezeSlot, "freezeSlot");
+  requireU16(value.freezeReasonCode, "freezeReasonCode");
+  requireU64(value.actualProgramDataLength, "actualProgramDataLength");
+  requireU64(value.actualProgramdataDataLength, "actualProgramdataDataLength");
+  requireU64(value.deployedProgramdataSlot, "deployedProgramdataSlot");
+  requireU64(value.capacity, "capacity");
+  requireU64(value.finalizedSlot, "finalizedSlot");
+  if (
+    !value.finalized ||
+    value.frozenEpoch === 0n ||
+    value.freezeSlot === 0n ||
+    value.freezeReasonCode === 0 ||
+    value.freezeReasonCode === BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1 ||
+    isZero32(value.observationDigest) ||
+    value.finalizedSlot !== value.freezeSlot
+  ) {
+    throw new Error("invalid EmergencyFreezeObservationV1 commitment");
+  }
+  validateProgramObservationShape(
+    value.programHeaderPresent,
+    value.actualProgramDataLength,
+    value.actualLinkedProgramdata,
+    "guardian Program observation",
+  );
+  validateRawProgramdataHashShape(
+    value.rawHashComplete,
+    value.rawProgramdataSha256,
+    value.actualProgramdataDataLength,
+    "guardian raw ProgramData hash",
+  );
+  validateProgramdataObservationShape(
+    value.programdataHeaderPresent,
+    value.actualProgramdataDataLength,
+    value.deployedProgramdataSlot,
+    value.capacity,
+    value.observedAuthority,
+    "guardian ProgramData observation",
+  );
+}
+
+export function serializeEmergencyFreezeObservationV1(
+  value: EmergencyFreezeObservationV1,
+): Buffer {
+  validateEmergencyFreezeObservationV1(value);
+  return new Writer()
+    .bytes(value.discriminator, 8, "discriminator")
+    .u8(value.accountVersion, "accountVersion")
+    .u8(value.bump, "bump")
+    .bool(value.initialized, "initialized")
+    .bool(value.finalized, "finalized")
+    .key(value.controllerProgram)
+    .key(value.controllerConfig)
+    .key(value.protocolGate)
+    .key(value.targetProgram)
+    .key(value.targetProgramdata)
+    .key(value.upgradeableLoader)
+    .key(value.controllerAuthority)
+    .u64(value.frozenEpoch, "frozenEpoch")
+    .u64(value.freezeSlot, "freezeSlot")
+    .u16(value.freezeReasonCode, "freezeReasonCode")
+    .key(value.actualProgramOwner)
+    .bool(value.actualProgramExecutable, "actualProgramExecutable")
+    .u64(value.actualProgramDataLength, "actualProgramDataLength")
+    .bool(value.programHeaderPresent, "programHeaderPresent")
+    .optionalKey(value.actualLinkedProgramdata, "actualLinkedProgramdata")
+    .key(value.actualProgramdataOwner)
+    .bool(value.actualProgramdataExecutable, "actualProgramdataExecutable")
+    .u64(value.actualProgramdataDataLength, "actualProgramdataDataLength")
+    .bool(value.programdataHeaderPresent, "programdataHeaderPresent")
+    .u64(value.deployedProgramdataSlot, "deployedProgramdataSlot")
+    .bool(value.rawHashComplete, "rawHashComplete")
+    .bytes(value.rawProgramdataSha256, 32, "rawProgramdataSha256")
+    .u64(value.capacity, "capacity")
+    .optionalKey(value.observedAuthority, "observedAuthority")
+    .bytes(value.observationDigest, 32, "observationDigest")
+    .u64(value.finalizedSlot, "finalizedSlot")
+    .bytes(value.reserved, EMERGENCY_FREEZE_OBSERVATION_V1_RESERVED_LEN, "reserved")
+    .finish(EMERGENCY_FREEZE_OBSERVATION_V1_LEN, "EmergencyFreezeObservationV1");
+}
+
+export function deserializeEmergencyFreezeObservationV1(
+  bytes: Uint8Array,
+): EmergencyFreezeObservationV1 {
+  const reader = new Reader(
+    bytes,
+    EMERGENCY_FREEZE_OBSERVATION_V1_LEN,
+    "EmergencyFreezeObservationV1",
+  );
+  const value: EmergencyFreezeObservationV1 = {
+    discriminator: reader.bytes(8),
+    accountVersion: reader.u8(),
+    bump: reader.u8(),
+    initialized: reader.bool("initialized"),
+    finalized: reader.bool("finalized"),
+    controllerProgram: reader.key(),
+    controllerConfig: reader.key(),
+    protocolGate: reader.key(),
+    targetProgram: reader.key(),
+    targetProgramdata: reader.key(),
+    upgradeableLoader: reader.key(),
+    controllerAuthority: reader.key(),
+    frozenEpoch: reader.u64(),
+    freezeSlot: reader.u64(),
+    freezeReasonCode: reader.u16(),
+    actualProgramOwner: reader.key(),
+    actualProgramExecutable: reader.bool("actualProgramExecutable"),
+    actualProgramDataLength: reader.u64(),
+    programHeaderPresent: reader.bool("programHeaderPresent"),
+    actualLinkedProgramdata: reader.optionalKey("actualLinkedProgramdata"),
+    actualProgramdataOwner: reader.key(),
+    actualProgramdataExecutable: reader.bool("actualProgramdataExecutable"),
+    actualProgramdataDataLength: reader.u64(),
+    programdataHeaderPresent: reader.bool("programdataHeaderPresent"),
+    deployedProgramdataSlot: reader.u64(),
+    rawHashComplete: reader.bool("rawHashComplete"),
+    rawProgramdataSha256: reader.bytes(32),
+    capacity: reader.u64(),
+    observedAuthority: reader.optionalKey("observedAuthority"),
+    observationDigest: reader.bytes(32),
+    finalizedSlot: reader.u64(),
+    reserved: reader.bytes(EMERGENCY_FREEZE_OBSERVATION_V1_RESERVED_LEN),
+  };
+  reader.end("EmergencyFreezeObservationV1");
+  validateEmergencyFreezeObservationV1(value);
+  return value;
+}
+
+export function validateProgramDataFailureObservationV1(
+  value: ProgramDataFailureObservationV1,
+): void {
+  validateHeader(
+    value.discriminator,
+    PROGRAMDATA_FAILURE_OBSERVATION_V1_DISCRIMINATOR,
+    value.accountVersion,
+    RELEASE1_ACCOUNT_VERSION_V1,
+    value.initialized,
+    value.reserved,
+    PROGRAMDATA_FAILURE_OBSERVATION_V1_RESERVED_LEN,
+    "ProgramDataFailureObservationV1",
+  );
+  requireU8(value.bump, "bump");
+  requireBool(value.finalized, "finalized");
+  requireBool(value.actualProgramExecutable, "actualProgramExecutable");
+  requireBool(value.programHeaderPresent, "programHeaderPresent");
+  requireBool(value.rawHashComplete, "rawHashComplete");
+  requireBool(value.actualExecutable, "actualExecutable");
+  requireBool(value.programdataHeaderPresent, "programdataHeaderPresent");
+  requireNondefaultKeys([
+    ["controllerConfig", value.controllerConfig],
+    ["protocolGate", value.protocolGate],
+    ["primaryProposal", value.primaryProposal],
+    ["targetProgram", value.targetProgram],
+    ["targetProgramdata", value.targetProgramdata],
+  ]);
+  optionalPublicKeyBytes(value.actualLinkedProgramdata, "actualLinkedProgramdata");
+  optionalPublicKeyBytes(value.actualAuthority, "actualAuthority");
+  enumValue(value.mismatchClass, PROGRAMDATA_MISMATCH_CLASS_VALUES, "ProgramDataMismatchClassV1");
+  requireU64(value.frozenEpoch, "frozenEpoch");
+  requireU64(value.actualProgramDataLength, "actualProgramDataLength");
+  requireU64(value.actualDataLength, "actualDataLength");
+  requireU64(value.actualProgramdataSlot, "actualProgramdataSlot");
+  requireU64(value.actualCapacity, "actualCapacity");
+  requireU32(value.failingChunkIndex, "failingChunkIndex");
+  requireU64(value.finalizedSlot, "finalizedSlot");
+  if (
+    !value.finalized ||
+    value.frozenEpoch === 0n ||
+    value.finalizedSlot === 0n ||
+    isZero32(value.observationDigest)
+  ) {
+    throw new Error("invalid ProgramDataFailureObservationV1 commitment");
+  }
+  validateProgramObservationShape(
+    value.programHeaderPresent,
+    value.actualProgramDataLength,
+    value.actualLinkedProgramdata,
+    "failure Program observation",
+  );
+  validateRawProgramdataHashShape(
+    value.rawHashComplete,
+    value.actualRawProgramdataSha256,
+    value.actualDataLength,
+    "failure raw ProgramData hash",
+  );
+  validateProgramdataObservationShape(
+    value.programdataHeaderPresent,
+    value.actualDataLength,
+    value.actualProgramdataSlot,
+    value.actualCapacity,
+    value.actualAuthority,
+    "failure ProgramData observation",
+  );
+  if (
+    !value.programdataHeaderPresent &&
+    value.mismatchClass !== ProgramDataMismatchClassV1.Header
+  ) {
+    throw new Error("invalid absent ProgramData header evidence");
+  }
+  const leafFailure =
+    value.mismatchClass === ProgramDataMismatchClassV1.PayloadLeaf ||
+    value.mismatchClass === ProgramDataMismatchClassV1.ZeroTail;
+  if (leafFailure && !value.rawHashComplete) {
+    throw new Error("ProgramData leaf failure requires a complete raw hash");
+  }
+  const leafShape = leafFailure
+    ? value.failingChunkIndex !== NO_FAILING_CHUNK_INDEX_V1 &&
+      !isZero32(value.expectedLeafHash) &&
+      !isZero32(value.actualLeafHash) &&
+      !requireBytes(value.expectedLeafHash, 32, "expectedLeafHash").equals(
+        requireBytes(value.actualLeafHash, 32, "actualLeafHash"),
+      )
+    : value.failingChunkIndex === NO_FAILING_CHUNK_INDEX_V1 &&
+      isZero32(value.expectedLeafHash) &&
+      isZero32(value.actualLeafHash);
+  if (!leafShape) {
+    throw new Error("invalid ProgramData failure leaf evidence");
+  }
+  if (value.programdataHeaderPresent) {
+    const headerShape =
+      value.mismatchClass === ProgramDataMismatchClassV1.Header ||
+      (value.mismatchClass === ProgramDataMismatchClassV1.Authority &&
+        value.actualProgramdataSlot !== 0n &&
+        value.actualCapacity !== 0n) ||
+      (value.mismatchClass === ProgramDataMismatchClassV1.Capacity &&
+        value.actualProgramdataSlot !== 0n &&
+        value.actualAuthority.present) ||
+      ((value.mismatchClass === ProgramDataMismatchClassV1.PayloadLeaf ||
+        value.mismatchClass === ProgramDataMismatchClassV1.ZeroTail) &&
+        value.actualProgramdataSlot !== 0n &&
+        value.actualCapacity !== 0n &&
+        value.actualAuthority.present);
+    if (!headerShape) {
+      throw new Error("invalid parsed ProgramData header evidence");
+    }
+  }
+}
+
+export function serializeProgramDataFailureObservationV1(
+  value: ProgramDataFailureObservationV1,
+): Buffer {
+  validateProgramDataFailureObservationV1(value);
+  return new Writer()
+    .bytes(value.discriminator, 8, "discriminator")
+    .u8(value.accountVersion, "accountVersion")
+    .u8(value.bump, "bump")
+    .bool(value.initialized, "initialized")
+    .bool(value.finalized, "finalized")
+    .key(value.controllerConfig)
+    .key(value.protocolGate)
+    .key(value.primaryProposal)
+    .key(value.targetProgram)
+    .key(value.targetProgramdata)
+    .u64(value.frozenEpoch, "frozenEpoch")
+    .key(value.actualProgramOwner)
+    .bool(value.actualProgramExecutable, "actualProgramExecutable")
+    .u64(value.actualProgramDataLength, "actualProgramDataLength")
+    .bool(value.programHeaderPresent, "programHeaderPresent")
+    .optionalKey(value.actualLinkedProgramdata, "actualLinkedProgramdata")
+    .bool(value.rawHashComplete, "rawHashComplete")
+    .bytes(value.actualRawProgramdataSha256, 32, "actualRawProgramdataSha256")
+    .key(value.actualOwner)
+    .bool(value.actualExecutable, "actualExecutable")
+    .u64(value.actualDataLength, "actualDataLength")
+    .bool(value.programdataHeaderPresent, "programdataHeaderPresent")
+    .u64(value.actualProgramdataSlot, "actualProgramdataSlot")
+    .u64(value.actualCapacity, "actualCapacity")
+    .optionalKey(value.actualAuthority, "actualAuthority")
+    .u8(value.mismatchClass, "mismatchClass")
+    .u32(value.failingChunkIndex, "failingChunkIndex")
+    .bytes(value.expectedLeafHash, 32, "expectedLeafHash")
+    .bytes(value.actualLeafHash, 32, "actualLeafHash")
+    .u64(value.finalizedSlot, "finalizedSlot")
+    .bytes(value.observationDigest, 32, "observationDigest")
+    .bytes(value.reserved, PROGRAMDATA_FAILURE_OBSERVATION_V1_RESERVED_LEN, "reserved")
+    .finish(
+      PROGRAMDATA_FAILURE_OBSERVATION_V1_LEN,
+      "ProgramDataFailureObservationV1",
+    );
+}
+
+export function deserializeProgramDataFailureObservationV1(
+  bytes: Uint8Array,
+): ProgramDataFailureObservationV1 {
+  const reader = new Reader(
+    bytes,
+    PROGRAMDATA_FAILURE_OBSERVATION_V1_LEN,
+    "ProgramDataFailureObservationV1",
+  );
+  const value: ProgramDataFailureObservationV1 = {
+    discriminator: reader.bytes(8),
+    accountVersion: reader.u8(),
+    bump: reader.u8(),
+    initialized: reader.bool("initialized"),
+    finalized: reader.bool("finalized"),
+    controllerConfig: reader.key(),
+    protocolGate: reader.key(),
+    primaryProposal: reader.key(),
+    targetProgram: reader.key(),
+    targetProgramdata: reader.key(),
+    frozenEpoch: reader.u64(),
+    actualProgramOwner: reader.key(),
+    actualProgramExecutable: reader.bool("actualProgramExecutable"),
+    actualProgramDataLength: reader.u64(),
+    programHeaderPresent: reader.bool("programHeaderPresent"),
+    actualLinkedProgramdata: reader.optionalKey("actualLinkedProgramdata"),
+    rawHashComplete: reader.bool("rawHashComplete"),
+    actualRawProgramdataSha256: reader.bytes(32),
+    actualOwner: reader.key(),
+    actualExecutable: reader.bool("actualExecutable"),
+    actualDataLength: reader.u64(),
+    programdataHeaderPresent: reader.bool("programdataHeaderPresent"),
+    actualProgramdataSlot: reader.u64(),
+    actualCapacity: reader.u64(),
+    actualAuthority: reader.optionalKey("actualAuthority"),
+    mismatchClass: reader.enum(
+      PROGRAMDATA_MISMATCH_CLASS_VALUES,
+      "ProgramDataMismatchClassV1",
+    ),
+    failingChunkIndex: reader.u32(),
+    expectedLeafHash: reader.bytes(32),
+    actualLeafHash: reader.bytes(32),
+    finalizedSlot: reader.u64(),
+    observationDigest: reader.bytes(32),
+    reserved: reader.bytes(PROGRAMDATA_FAILURE_OBSERVATION_V1_RESERVED_LEN),
+  };
+  reader.end("ProgramDataFailureObservationV1");
+  validateProgramDataFailureObservationV1(value);
+  return value;
+}
+
+export function validateCheckpointAttestationV1(
+  value: CheckpointAttestationV1,
+): void {
+  validateHeader(
+    value.discriminator,
+    CHECKPOINT_ATTESTATION_V1_DISCRIMINATOR,
+    value.accountVersion,
+    RELEASE1_ACCOUNT_VERSION_V1,
+    value.initialized,
+    value.reserved,
+    CHECKPOINT_ATTESTATION_V1_RESERVED_LEN,
+    "CheckpointAttestationV1",
+  );
+  requireU8(value.bump, "bump");
+  enumValue(value.phase, CHECKPOINT_PHASE_VALUES, "StateCheckpointPhaseV1");
+  requireNondefaultKeys([
+    ["controllerProgram", value.controllerProgram],
+    ["controllerConfig", value.controllerConfig],
+    ["checkpoint", value.checkpoint],
+    ["subject", value.subject],
+    ["council", value.council],
+    ["seatAuthority", value.seatAuthority],
+  ]);
+  requireU64(value.councilVersion, "councilVersion");
+  requireU64(value.gateEpoch, "gateEpoch");
+  requireU8(value.seatIndex, "seatIndex");
+  requireU64(value.attestedSlot, "attestedSlot");
+  if (
+    isZero32(value.subjectDigest) ||
+    isZero32(value.checkpointDigest) ||
+    value.councilVersion === 0n ||
+    isZero32(value.councilHash) ||
+    value.gateEpoch === 0n ||
+    value.seatIndex >= 5 ||
+    value.attestedSlot === 0n ||
+    isZero32(value.attestationDigest)
+  ) {
+    throw new Error("invalid CheckpointAttestationV1 commitment");
+  }
+}
+
+export function serializeCheckpointAttestationV1(
+  value: CheckpointAttestationV1,
+): Buffer {
+  validateCheckpointAttestationV1(value);
+  return new Writer()
+    .bytes(value.discriminator, 8, "discriminator")
+    .u8(value.accountVersion, "accountVersion")
+    .u8(value.bump, "bump")
+    .bool(value.initialized, "initialized")
+    .key(value.controllerProgram)
+    .key(value.controllerConfig)
+    .key(value.checkpoint)
+    .key(value.subject)
+    .bytes(value.subjectDigest, 32, "subjectDigest")
+    .u8(value.phase, "phase")
+    .bytes(value.checkpointDigest, 32, "checkpointDigest")
+    .key(value.council)
+    .u64(value.councilVersion, "councilVersion")
+    .bytes(value.councilHash, 32, "councilHash")
+    .u64(value.gateEpoch, "gateEpoch")
+    .u8(value.seatIndex, "seatIndex")
+    .key(value.seatAuthority)
+    .u64(value.attestedSlot, "attestedSlot")
+    .bytes(value.attestationDigest, 32, "attestationDigest")
+    .bytes(value.reserved, CHECKPOINT_ATTESTATION_V1_RESERVED_LEN, "reserved")
+    .finish(CHECKPOINT_ATTESTATION_V1_LEN, "CheckpointAttestationV1");
+}
+
+export function deserializeCheckpointAttestationV1(
+  bytes: Uint8Array,
+): CheckpointAttestationV1 {
+  const reader = new Reader(
+    bytes,
+    CHECKPOINT_ATTESTATION_V1_LEN,
+    "CheckpointAttestationV1",
+  );
+  const value: CheckpointAttestationV1 = {
+    discriminator: reader.bytes(8),
+    accountVersion: reader.u8(),
+    bump: reader.u8(),
+    initialized: reader.bool("initialized"),
+    controllerProgram: reader.key(),
+    controllerConfig: reader.key(),
+    checkpoint: reader.key(),
+    subject: reader.key(),
+    subjectDigest: reader.bytes(32),
+    phase: reader.enum(CHECKPOINT_PHASE_VALUES, "StateCheckpointPhaseV1"),
+    checkpointDigest: reader.bytes(32),
+    council: reader.key(),
+    councilVersion: reader.u64(),
+    councilHash: reader.bytes(32),
+    gateEpoch: reader.u64(),
+    seatIndex: reader.u8(),
+    seatAuthority: reader.key(),
+    attestedSlot: reader.u64(),
+    attestationDigest: reader.bytes(32),
+    reserved: reader.bytes(CHECKPOINT_ATTESTATION_V1_RESERVED_LEN),
+  };
+  reader.end("CheckpointAttestationV1");
+  validateCheckpointAttestationV1(value);
   return value;
 }
 
@@ -1926,7 +3188,6 @@ export function canonicalProposalDigestMaterialV2(value: UpgradeProposalV2): Buf
     .u64(value.creationCouncilVersion, "creationCouncilVersion")
     .bytes(value.creationCouncilHash, 32, "creationCouncilHash")
     .u64(value.creationGateEpoch, "creationGateEpoch")
-    .u64(value.freezeGateEpoch, "freezeGateEpoch")
     .key(value.targetProgram)
     .key(value.targetProgramdata)
     .key(value.upgradeableLoader)
@@ -2023,6 +3284,40 @@ export function canonicalStateCheckpointDigestMaterialV1(
   );
 }
 
+export function canonicalStateCheckpointHardRootMaterialV1(
+  value: StateCheckpointV1,
+): Buffer {
+  return new Writer()
+    .bytes(value.schemaIdentifier, 32, "schemaIdentifier")
+    .bytes(value.programOwnedStateRoot, 32, "programOwnedStateRoot")
+    .u64(value.programOwnedStateCount, "programOwnedStateCount")
+    .bytes(value.logicalCompressedStateRoot, 32, "logicalCompressedStateRoot")
+    .u64(value.logicalCompressedStateCount, "logicalCompressedStateCount")
+    .bytes(value.semanticCustodyAccountingRoot, 32, "semanticCustodyAccountingRoot")
+    .bytes(value.externalMetadataObservationRoot, 32, "externalMetadataObservationRoot")
+    .finish(
+      STATE_CHECKPOINT_HARD_ROOT_MATERIAL_LEN_V1,
+      "StateCheckpointV1 hard combined root material",
+    );
+}
+
+export function stateCheckpointHardCombinedRootV1(
+  value: StateCheckpointV1,
+): Buffer {
+  return sha256(
+    STATE_CHECKPOINT_HARD_ROOT_DOMAIN_V1,
+    canonicalStateCheckpointHardRootMaterialV1(value),
+  );
+}
+
+export function validateStateCheckpointHardCombinedRootV1(
+  value: StateCheckpointV1,
+): void {
+  if (!stateCheckpointHardCombinedRootV1(value).equals(value.hardCombinedRoot)) {
+    throw new Error("StateCheckpointV1 hard combined root mismatch");
+  }
+}
+
 export function stateCheckpointDigestV1(value: StateCheckpointV1): Buffer {
   return sha256(
     STATE_CHECKPOINT_DIGEST_DOMAIN_V1,
@@ -2084,6 +3379,7 @@ export function canonicalEmergencyResolutionDigestMaterialV1(
     .key(value.protocolGate)
     .key(value.targetProgram)
     .key(value.targetProgramdata)
+    .key(value.emergencyFreezeObservation)
     .u64(value.frozenEpoch, "frozenEpoch")
     .u64(value.freezeSlot, "freezeSlot")
     .u16(value.freezeReasonCode, "freezeReasonCode")
@@ -2091,11 +3387,20 @@ export function canonicalEmergencyResolutionDigestMaterialV1(
     .u64(value.notBeforeSlot, "notBeforeSlot")
     .u64(value.expirySlot, "expirySlot")
     .u64(value.targetNonce, "targetNonce")
+    .key(value.observedProgramOwner)
+    .bool(value.observedProgramExecutable, "observedProgramExecutable")
+    .u64(value.observedProgramDataLength, "observedProgramDataLength")
+    .bool(value.observedProgramHeaderPresent, "observedProgramHeaderPresent")
+    .optionalKey(value.observedLinkedProgramdata, "observedLinkedProgramdata")
+    .key(value.observedProgramdataOwner)
+    .bool(value.observedProgramdataExecutable, "observedProgramdataExecutable")
+    .u64(value.observedProgramdataDataLength, "observedProgramdataDataLength")
+    .bool(value.observedProgramdataHeaderPresent, "observedProgramdataHeaderPresent")
     .u64(value.observedProgramdataSlot, "observedProgramdataSlot")
-    .bytes(value.observedPayloadHash, 32, "observedPayloadHash")
+    .bool(value.observedRawHashComplete, "observedRawHashComplete")
     .bytes(value.observedRawProgramdataHash, 32, "observedRawProgramdataHash")
     .u64(value.observedCapacity, "observedCapacity")
-    .key(value.observedAuthority)
+    .optionalKey(value.observedAuthority, "observedAuthority")
     .key(value.emergencyCheckpoint);
   return writer.finish(
     EMERGENCY_RESOLUTION_DIGEST_MATERIAL_LEN_V1,
@@ -2119,12 +3424,170 @@ export function validateEmergencyResolutionDigestV1(
   }
 }
 
+export function canonicalEmergencyFreezeObservationDigestMaterialV1(
+  value: EmergencyFreezeObservationV1,
+): Buffer {
+  return new Writer()
+    .key(value.controllerProgram)
+    .key(value.controllerConfig)
+    .key(value.protocolGate)
+    .key(value.targetProgram)
+    .key(value.targetProgramdata)
+    .key(value.upgradeableLoader)
+    .key(value.controllerAuthority)
+    .u64(value.frozenEpoch, "frozenEpoch")
+    .u64(value.freezeSlot, "freezeSlot")
+    .u16(value.freezeReasonCode, "freezeReasonCode")
+    .key(value.actualProgramOwner)
+    .bool(value.actualProgramExecutable, "actualProgramExecutable")
+    .u64(value.actualProgramDataLength, "actualProgramDataLength")
+    .bool(value.programHeaderPresent, "programHeaderPresent")
+    .optionalKey(value.actualLinkedProgramdata, "actualLinkedProgramdata")
+    .key(value.actualProgramdataOwner)
+    .bool(value.actualProgramdataExecutable, "actualProgramdataExecutable")
+    .u64(value.actualProgramdataDataLength, "actualProgramdataDataLength")
+    .bool(value.programdataHeaderPresent, "programdataHeaderPresent")
+    .u64(value.deployedProgramdataSlot, "deployedProgramdataSlot")
+    .bool(value.rawHashComplete, "rawHashComplete")
+    .bytes(value.rawProgramdataSha256, 32, "rawProgramdataSha256")
+    .u64(value.capacity, "capacity")
+    .optionalKey(value.observedAuthority, "observedAuthority")
+    .bool(value.finalized, "finalized")
+    .u64(value.finalizedSlot, "finalizedSlot")
+    .finish(
+      EMERGENCY_FREEZE_OBSERVATION_DIGEST_MATERIAL_LEN_V1,
+      "EmergencyFreezeObservationV1 digest material",
+    );
+}
+
+export function emergencyFreezeObservationDigestV1(
+  value: EmergencyFreezeObservationV1,
+): Buffer {
+  return sha256(
+    EMERGENCY_FREEZE_OBSERVATION_DIGEST_DOMAIN_V1,
+    canonicalEmergencyFreezeObservationDigestMaterialV1(value),
+  );
+}
+
+export function validateEmergencyFreezeObservationDigestV1(
+  value: EmergencyFreezeObservationV1,
+): void {
+  validateEmergencyFreezeObservationV1(value);
+  if (!emergencyFreezeObservationDigestV1(value).equals(value.observationDigest)) {
+    throw new Error("EmergencyFreezeObservationV1 digest mismatch");
+  }
+}
+
+export function canonicalProgramDataFailureObservationDigestMaterialV1(
+  value: ProgramDataFailureObservationV1,
+): Buffer {
+  return new Writer()
+    .key(value.controllerConfig)
+    .key(value.protocolGate)
+    .key(value.primaryProposal)
+    .key(value.targetProgram)
+    .key(value.targetProgramdata)
+    .u64(value.frozenEpoch, "frozenEpoch")
+    .key(value.actualProgramOwner)
+    .bool(value.actualProgramExecutable, "actualProgramExecutable")
+    .u64(value.actualProgramDataLength, "actualProgramDataLength")
+    .bool(value.programHeaderPresent, "programHeaderPresent")
+    .optionalKey(value.actualLinkedProgramdata, "actualLinkedProgramdata")
+    .bool(value.rawHashComplete, "rawHashComplete")
+    .bytes(value.actualRawProgramdataSha256, 32, "actualRawProgramdataSha256")
+    .key(value.actualOwner)
+    .bool(value.actualExecutable, "actualExecutable")
+    .u64(value.actualDataLength, "actualDataLength")
+    .bool(value.programdataHeaderPresent, "programdataHeaderPresent")
+    .u64(value.actualProgramdataSlot, "actualProgramdataSlot")
+    .u64(value.actualCapacity, "actualCapacity")
+    .optionalKey(value.actualAuthority, "actualAuthority")
+    .u8(value.mismatchClass, "mismatchClass")
+    .u32(value.failingChunkIndex, "failingChunkIndex")
+    .bytes(value.expectedLeafHash, 32, "expectedLeafHash")
+    .bytes(value.actualLeafHash, 32, "actualLeafHash")
+    .u64(value.finalizedSlot, "finalizedSlot")
+    .finish(
+      PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_MATERIAL_LEN_V1,
+      "ProgramDataFailureObservationV1 digest material",
+    );
+}
+
+export function programDataFailureObservationDigestV1(
+  value: ProgramDataFailureObservationV1,
+): Buffer {
+  return sha256(
+    PROGRAMDATA_FAILURE_OBSERVATION_DIGEST_DOMAIN_V1,
+    canonicalProgramDataFailureObservationDigestMaterialV1(value),
+  );
+}
+
+export function validateProgramDataFailureObservationDigestV1(
+  value: ProgramDataFailureObservationV1,
+): void {
+  validateProgramDataFailureObservationV1(value);
+  if (!programDataFailureObservationDigestV1(value).equals(value.observationDigest)) {
+    throw new Error("ProgramDataFailureObservationV1 digest mismatch");
+  }
+}
+
+export function canonicalCheckpointAttestationDigestMaterialV1(
+  value: CheckpointAttestationV1,
+): Buffer {
+  return new Writer()
+    .key(value.controllerProgram)
+    .key(value.controllerConfig)
+    .key(value.checkpoint)
+    .key(value.subject)
+    .bytes(value.subjectDigest, 32, "subjectDigest")
+    .u8(value.phase, "phase")
+    .bytes(value.checkpointDigest, 32, "checkpointDigest")
+    .key(value.council)
+    .u64(value.councilVersion, "councilVersion")
+    .bytes(value.councilHash, 32, "councilHash")
+    .u64(value.gateEpoch, "gateEpoch")
+    .u8(value.seatIndex, "seatIndex")
+    .key(value.seatAuthority)
+    .u64(value.attestedSlot, "attestedSlot")
+    .finish(
+      CHECKPOINT_ATTESTATION_DIGEST_MATERIAL_LEN_V1,
+      "CheckpointAttestationV1 digest material",
+    );
+}
+
+export function checkpointAttestationDigestV1(
+  value: CheckpointAttestationV1,
+): Buffer {
+  return sha256(
+    CHECKPOINT_ATTESTATION_DIGEST_DOMAIN_V1,
+    canonicalCheckpointAttestationDigestMaterialV1(value),
+  );
+}
+
+export function validateCheckpointAttestationDigestV1(
+  value: CheckpointAttestationV1,
+): void {
+  validateCheckpointAttestationV1(value);
+  if (!checkpointAttestationDigestV1(value).equals(value.attestationDigest)) {
+    throw new Error("CheckpointAttestationV1 digest mismatch");
+  }
+}
+
 const PROGRAMDATA_CHECK_SEED = Buffer.from("programdata-check", "ascii");
 const CHECKPOINT_SEED = Buffer.from("checkpoint", "ascii");
 const BUFFER_CHECK_SEED = Buffer.from("buffer-check", "ascii");
 const EMERGENCY_RESOLUTION_SEED = Buffer.from("emergency-resolution", "ascii");
 const EMERGENCY_CHECKPOINT_SEED = Buffer.from("emergency-checkpoint", "ascii");
 const COUNCIL_ROTATION_SEED = Buffer.from("council-rotation", "ascii");
+const EMERGENCY_FREEZE_OBSERVATION_SEED = Buffer.from(
+  "emergency-observation",
+  "ascii",
+);
+const PROGRAMDATA_FAILURE_OBSERVATION_SEED = Buffer.from(
+  "programdata-failure",
+  "ascii",
+);
+const CHECKPOINT_ATTESTATION_SEED = Buffer.from("checkpoint-attestation", "ascii");
 
 function u64Seed(value: bigint): Buffer {
   const out = Buffer.alloc(8);
@@ -2214,6 +3677,51 @@ export function deriveCouncilRotationPda(
     COUNCIL_ROTATION_SEED,
     targetProgram.toBuffer(),
     u64Seed(candidateCouncilVersion),
+  ]);
+}
+
+export function deriveEmergencyFreezeObservationPda(
+  controllerProgram: PublicKey,
+  targetProgram: PublicKey,
+  frozenEpoch: bigint,
+): [PublicKey, number] {
+  return derivePda(controllerProgram, [
+    UPGRADE_SEED_DOMAIN_V1,
+    EMERGENCY_FREEZE_OBSERVATION_SEED,
+    targetProgram.toBuffer(),
+    u64Seed(frozenEpoch),
+  ]);
+}
+
+export function deriveProgramDataFailureObservationPda(
+  controllerProgram: PublicKey,
+  primaryProposal: PublicKey,
+  frozenEpoch: bigint,
+): [PublicKey, number] {
+  return derivePda(controllerProgram, [
+    UPGRADE_SEED_DOMAIN_V1,
+    PROGRAMDATA_FAILURE_OBSERVATION_SEED,
+    primaryProposal.toBuffer(),
+    u64Seed(frozenEpoch),
+  ]);
+}
+
+export function deriveCheckpointAttestationPda(
+  controllerProgram: PublicKey,
+  checkpoint: PublicKey,
+  councilVersion: bigint,
+  seatIndex: number,
+): [PublicKey, number] {
+  requireU8(seatIndex, "seatIndex");
+  if (seatIndex >= 5) {
+    throw new RangeError("seatIndex must identify one of the five council seats");
+  }
+  return derivePda(controllerProgram, [
+    UPGRADE_SEED_DOMAIN_V1,
+    CHECKPOINT_ATTESTATION_SEED,
+    checkpoint.toBuffer(),
+    u64Seed(councilVersion),
+    Buffer.from([seatIndex]),
   ]);
 }
 

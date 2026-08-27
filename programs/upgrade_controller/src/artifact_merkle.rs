@@ -1,10 +1,11 @@
 //! Deterministic, bounded Release 1 artifact Merkle commitments.
 //!
-//! The tree commits the exact loader payload bytes.  The fixed 512-leaf upper
-//! bound keeps both verification bitmaps and proof depth bounded.  Release 1's
-//! final chunk size is the 16 KiB candidate selected by actual SBF v0/v2
-//! benchmarking. The smaller constants remain named only as benchmark history;
-//! production commitment utilities reject them.
+//! The tree commits the exact loader payload bytes.  The fixed 512-bit bitmap
+//! ABI remains available, while the selected 1.5 MiB/16 KiB policy admits at
+//! most 96 real chunks and pads its tree to at most 128 leaves (depth seven).
+//! Release 1's final chunk size is the 16 KiB candidate selected by actual SBF
+//! v0/v2 benchmarking. The smaller constants remain named only as benchmark
+//! history; production commitment utilities reject them.
 
 use solana_program::hash::hashv;
 
@@ -28,13 +29,17 @@ pub const BENCHMARK_ARTIFACT_CHUNK_SIZE_CANDIDATES_V1: [u32; 3] = [
     ARTIFACT_CHUNK_SIZE_16_KIB,
 ];
 pub const RELEASE1_ARTIFACT_CHUNK_SIZE_V1: u32 = ARTIFACT_CHUNK_SIZE_16_KIB;
-pub const MAX_ARTIFACT_BYTES_V1: u64 = 2 * 1024 * 1024;
+pub const MAX_ARTIFACT_BYTES_V1: u64 = 1_572_864;
 /// The audited fixed bitmap capacity remains 512 bits even though the selected
-/// 16 KiB scheme can populate at most 128 of them.
-pub const MAX_ARTIFACT_CHUNKS_V1: usize =
-    MAX_ARTIFACT_BYTES_V1 as usize / ARTIFACT_CHUNK_SIZE_4_KIB as usize;
+/// 16 KiB scheme can populate at most 96 of them. The bitmap ABI remains fixed
+/// at 64 bytes; lowering the Release 1 executable payload ceiling must not
+/// silently resize the account schemas.
+pub const MAX_ARTIFACT_CHUNKS_V1: usize = 512;
 pub const MAX_SELECTED_ARTIFACT_CHUNKS_V1: usize =
     MAX_ARTIFACT_BYTES_V1 as usize / RELEASE1_ARTIFACT_CHUNK_SIZE_V1 as usize;
+/// Next-power-of-two tree width for the 96-real-chunk Release 1 maximum.
+/// This bound is only for canonical empty leaves and padding subtrees.
+pub const MAX_PADDED_ARTIFACT_CHUNKS_V1: usize = 128;
 pub const MAX_ARTIFACT_PROOF_DEPTH_V1: usize = 7;
 
 pub const fn is_benchmark_chunk_size_candidate(chunk_size: u32) -> bool {
@@ -90,7 +95,7 @@ pub fn artifact_chunk_node_hash(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
 }
 
 pub fn artifact_chunk_empty_hash(padded_index: u32) -> GovernanceResult<[u8; 32]> {
-    if padded_index as usize >= MAX_SELECTED_ARTIFACT_CHUNKS_V1 {
+    if padded_index as usize >= MAX_PADDED_ARTIFACT_CHUNKS_V1 {
         return Err(GovernanceError::InvalidMerkleParameters);
     }
     Ok(hashv(&[ARTIFACT_CHUNK_EMPTY_DOMAIN_V1, &padded_index.to_le_bytes()]).to_bytes())
@@ -181,7 +186,14 @@ pub fn verify_artifact_chunk_proof(
 
     let mut current = artifact_chunk_leaf_hash(chunk_index, exact_chunk)?;
     let mut index = chunk_index;
-    for sibling in proof {
+    for (proof_level, sibling) in proof.iter().enumerate() {
+        validate_canonical_padding_sibling(
+            sibling,
+            index,
+            proof_level,
+            chunk_count as usize,
+            padded_count,
+        )?;
         current = if index & 1 == 0 {
             artifact_chunk_node_hash(&current, sibling)
         } else {
@@ -193,6 +205,76 @@ pub fn verify_artifact_chunk_proof(
         return Err(GovernanceError::InvalidMerkleProof);
     }
     Ok(())
+}
+
+/// A Merkle proof cannot choose its own hashes for the portion of the final
+/// power-of-two tree that lies beyond the artifact's real chunks.  Whenever a
+/// proof sibling covers only padded leaves, recompute that entire sibling from
+/// the canonical index-separated empty leaves and require exact equality.
+///
+/// A sibling that contains at least one real chunk remains opaque to this
+/// single-chunk verifier.  Complete buffer verification checks every real
+/// chunk, so the final real chunk necessarily exposes every all-padding range
+/// at the right edge of a partial tree.
+fn validate_canonical_padding_sibling(
+    sibling: &[u8; 32],
+    node_index: u32,
+    proof_level: usize,
+    chunk_count: usize,
+    padded_count: usize,
+) -> GovernanceResult<()> {
+    if proof_level >= MAX_ARTIFACT_PROOF_DEPTH_V1 {
+        return Err(GovernanceError::InvalidMerkleProof);
+    }
+    let sibling_leaf_count = 1usize
+        .checked_shl(proof_level as u32)
+        .ok_or(GovernanceError::InvalidMerkleProof)?;
+    let sibling_node_index = (node_index as usize) ^ 1;
+    let sibling_start = sibling_node_index
+        .checked_mul(sibling_leaf_count)
+        .ok_or(GovernanceError::InvalidMerkleProof)?;
+    let sibling_end = sibling_start
+        .checked_add(sibling_leaf_count)
+        .ok_or(GovernanceError::InvalidMerkleProof)?;
+    if sibling_end > padded_count {
+        return Err(GovernanceError::InvalidMerkleProof);
+    }
+    if sibling_start < chunk_count {
+        return Ok(());
+    }
+
+    let canonical = artifact_padding_subtree_hash(sibling_start, sibling_leaf_count)?;
+    if sibling != &canonical {
+        return Err(GovernanceError::InvalidMerkleProof);
+    }
+    Ok(())
+}
+
+fn artifact_padding_subtree_hash(
+    padded_start: usize,
+    padded_leaf_count: usize,
+) -> GovernanceResult<[u8; 32]> {
+    let padded_end = padded_start
+        .checked_add(padded_leaf_count)
+        .ok_or(GovernanceError::InvalidMerkleProof)?;
+    if padded_leaf_count == 0
+        || !padded_leaf_count.is_power_of_two()
+        || padded_start % padded_leaf_count != 0
+        || padded_end > MAX_PADDED_ARTIFACT_CHUNKS_V1
+    {
+        return Err(GovernanceError::InvalidMerkleProof);
+    }
+
+    let mut level = Vec::with_capacity(padded_leaf_count);
+    for padded_index in padded_start..padded_end {
+        let padded_index =
+            u32::try_from(padded_index).map_err(|_| GovernanceError::InvalidMerkleProof)?;
+        level.push(
+            artifact_chunk_empty_hash(padded_index)
+                .map_err(|_| GovernanceError::InvalidMerkleProof)?,
+        );
+    }
+    reduce_tree(level).map_err(|_| GovernanceError::InvalidMerkleProof)
 }
 
 fn reduce_tree(mut level: Vec<[u8; 32]>) -> GovernanceResult<[u8; 32]> {

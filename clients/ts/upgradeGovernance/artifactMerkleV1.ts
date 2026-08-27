@@ -30,13 +30,15 @@ export const BENCHMARK_ARTIFACT_CHUNK_SIZE_CANDIDATES_V1 = Object.freeze([
   ARTIFACT_CHUNK_SIZE_16_KIB,
 ] as const);
 export const RELEASE1_ARTIFACT_CHUNK_SIZE_V1 = ARTIFACT_CHUNK_SIZE_16_KIB;
-export const MAX_ARTIFACT_BYTES_V1 = 2 * 1024 * 1024;
-export const MAX_ARTIFACT_CHUNKS_V1 =
-  MAX_ARTIFACT_BYTES_V1 / ARTIFACT_CHUNK_SIZE_4_KIB;
+export const MAX_ARTIFACT_BYTES_V1 = 1_572_864;
+// The bitmap width is frozen account ABI capacity. The Release 1 payload cap
+// is lower, but shrinking this bound would silently change persisted layouts.
+export const MAX_ARTIFACT_CHUNKS_V1 = 512;
 export const MAX_SELECTED_ARTIFACT_CHUNKS_V1 =
   MAX_ARTIFACT_BYTES_V1 / RELEASE1_ARTIFACT_CHUNK_SIZE_V1;
+export const MAX_PADDED_ARTIFACT_CHUNKS_V1 = 128;
 export const MAX_ARTIFACT_PROOF_DEPTH_V1 = 7;
-export const VERIFICATION_BITMAP_BYTES_V1 = MAX_ARTIFACT_CHUNKS_V1 / 8;
+export const VERIFICATION_BITMAP_BYTES_V1 = 64;
 
 function sha256(...parts: readonly Uint8Array[]): Buffer {
   const hash = createHash("sha256");
@@ -149,7 +151,7 @@ export function artifactChunkEmptyHash(paddedIndex: number): Buffer {
   if (
     !Number.isInteger(paddedIndex) ||
     paddedIndex < 0 ||
-    paddedIndex >= MAX_SELECTED_ARTIFACT_CHUNKS_V1
+    paddedIndex >= MAX_PADDED_ARTIFACT_CHUNKS_V1
   ) {
     throw new RangeError("invalid Release 1 padding index");
   }
@@ -252,8 +254,20 @@ export function verifyArtifactChunkProof(
     }
     let current = artifactChunkLeafHash(chunkIndex, chunk);
     let index = chunkIndex;
-    for (const siblingBytes of proof) {
+    for (let proofLevel = 0; proofLevel < proof.length; proofLevel += 1) {
+      const siblingBytes = proof[proofLevel]!;
       const sibling = requireHash(siblingBytes, "proof sibling");
+      if (
+        !isCanonicalPaddingSibling(
+          sibling,
+          index,
+          proofLevel,
+          chunkCount,
+          paddedCount,
+        )
+      ) {
+        return false;
+      }
       current =
         (index & 1) === 0
           ? artifactChunkNodeHash(current, sibling)
@@ -264,6 +278,62 @@ export function verifyArtifactChunkProof(
   } catch {
     return false;
   }
+}
+
+function isCanonicalPaddingSibling(
+  sibling: Buffer,
+  nodeIndex: number,
+  proofLevel: number,
+  chunkCount: number,
+  paddedCount: number,
+): boolean {
+  if (
+    !Number.isInteger(proofLevel) ||
+    proofLevel < 0 ||
+    proofLevel >= MAX_ARTIFACT_PROOF_DEPTH_V1
+  ) {
+    return false;
+  }
+  const siblingLeafCount = 2 ** proofLevel;
+  const siblingNodeIndex = nodeIndex ^ 1;
+  const siblingStart = siblingNodeIndex * siblingLeafCount;
+  const siblingEnd = siblingStart + siblingLeafCount;
+  if (
+    !Number.isSafeInteger(siblingStart) ||
+    siblingStart < 0 ||
+    siblingEnd > paddedCount
+  ) {
+    return false;
+  }
+  if (siblingStart < chunkCount) {
+    return true;
+  }
+  return sibling.equals(
+    artifactPaddingSubtreeHash(siblingStart, siblingLeafCount),
+  );
+}
+
+function artifactPaddingSubtreeHash(
+  paddedStart: number,
+  paddedLeafCount: number,
+): Buffer {
+  const paddedEnd = paddedStart + paddedLeafCount;
+  if (
+    !Number.isSafeInteger(paddedStart) ||
+    !Number.isSafeInteger(paddedLeafCount) ||
+    paddedStart < 0 ||
+    paddedLeafCount <= 0 ||
+    (paddedLeafCount & (paddedLeafCount - 1)) !== 0 ||
+    paddedStart % paddedLeafCount !== 0 ||
+    paddedEnd > MAX_PADDED_ARTIFACT_CHUNKS_V1
+  ) {
+    throw new RangeError("invalid Release 1 padding subtree");
+  }
+  const level: Buffer[] = [];
+  for (let paddedIndex = paddedStart; paddedIndex < paddedEnd; paddedIndex += 1) {
+    level.push(artifactChunkEmptyHash(paddedIndex));
+  }
+  return reduceMerkleLevel(level);
 }
 
 export function validateVerificationBitmapV1(

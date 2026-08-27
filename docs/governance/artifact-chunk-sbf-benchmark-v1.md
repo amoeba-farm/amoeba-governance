@@ -1,14 +1,23 @@
 # Release 1 artifact-chunk actual-SBF benchmark
 
-Status: measured and selected for the Release 1 schema/design baseline
+Status: measured chunk-size evidence; artifact-cap decision superseded by the
+composed guardian raw-hash benchmark
 
 Scope: standalone benchmark only. It adds no production controller instruction,
 dispatcher tag, account ABI, deployment path, signer, RPC write, or live identity.
 
 ## Decision
 
-Release 1 uses a fixed artifact chunk size of **16 KiB (16,384 bytes)** for the
-2 MiB maximum artifact policy.
+Release 1 uses a fixed artifact chunk size of **16 KiB (16,384 bytes)**. The
+current maximum artifact policy is **1.5 MiB (1,572,864 bytes)**, selected after
+the composed guardian raw-ProgramData benchmark established an inclusive
+1,572,909-byte raw-account hashing ceiling (payload plus the 45-byte Loader-v3
+metadata prefix). See
+[`guardian-raw-programdata-sbf-benchmark-v1.md`](guardian-raw-programdata-sbf-benchmark-v1.md).
+
+This earlier benchmark intentionally exercised a 2 MiB payload as a
+conservative chunk-hashing measurement. Its 2 MiB fixture and results remain
+historical evidence; they no longer define the Release 1 artifact cap.
 
 The selection was admitted only after the 16 KiB leaf plus its maximum-depth
 proof passed both SBPF v0 and SBPF v2 under these predeclared gates:
@@ -22,9 +31,12 @@ proof passed both SBPF v0 and SBPF v2 under these predeclared gates:
 
 The worst measured 16 KiB case consumed 10,615 units (5.31%), leaving 189,385
 units (94.69%). Its smallest processor-frame margin was 3,776 of 4,096 bytes.
-It therefore passes the gates while reducing a maximum artifact to 128 chunks,
-128 live bitmap bits (16 used bytes within the fixed 64-byte schema bitmap), a
-seven-node proof, and a 281-byte benchmark instruction.
+It therefore passes the gates while reducing the selected 1.5 MiB maximum
+artifact to 96 real chunks. The binary tree pads deterministically to 128
+leaves, so proofs remain seven nodes. The fixed ABI retains its 512-bit
+(64-byte) verification bitmap, of which the first 96 bits represent real
+chunks; padding leaves are never verification-bitmap entries. The benchmark
+instruction remains 281 bytes.
 
 ## Measured contract
 
@@ -53,7 +65,8 @@ SHA256(
 )
 ```
 
-At the exact 2 MiB cap, all three candidate sizes divide the artifact evenly.
+At the exact 2 MiB benchmark size, all three candidate sizes divide the
+artifact evenly.
 The final leaf is therefore full; the proof depth is still the maximum depth for
 that candidate at the cap. Final-partial-chunk semantics remain a separate
 golden-vector and processor-test obligation.
@@ -75,7 +88,7 @@ The stripped v0 ELF is 28,048 bytes with SHA-256
 The stripped v2 ELF is 27,624 bytes with SHA-256
 `67a750820d6a1cf6b960617da1d8b848ff19d37f3c16f1fcee676681597ce902`.
 
-## Exact raw ProgramData hash
+## Historical standalone exact raw ProgramData hash
 
 The same actual-SBF run separately hashed the entire 2,097,197-byte raw
 ProgramData-shaped account in a dedicated transaction with a 1,400,000-unit
@@ -84,10 +97,11 @@ limit. The predeclared acceptance cap was 1,150,000 units. SBPF v0 consumed
 Both produced the identical raw SHA-256
 `c9b773fc5e275d257e0849da3b4dd8c619f719662ca461aa3238c809010a8304`.
 
-This proves that exact maximum-size raw ProgramData SHA-256 fits only as its own
-bounded finalization operation with conservative transaction margin. It is not
-authorization to combine the raw hash with a Loader CPI or another full-account
-hash; the composed production finalizer must be benchmarked again.
+This proves that the historical 2 MiB fixture's raw ProgramData SHA-256 fit as
+its own bounded finalization operation. It did not authorize composing that
+hash with controller state work. The later composed guardian benchmark did that
+measurement and selected the lower 1.5 MiB payload ceiling to preserve at least
+550,000 CU of integration margin.
 
 ## Stack analysis
 

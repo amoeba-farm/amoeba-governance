@@ -36,6 +36,7 @@ fn account_layouts_have_exact_deterministic_lengths() {
 fn config_and_gate_static_invariants_fail_closed() {
     let mut config = controller_config();
     assert_eq!(config.validate_static(), Ok(()));
+    assert_eq!(config.council_review_slots(), config.vote_review_slots);
     config.token_governance_enabled = true;
     assert!(config.validate_static().is_err());
 
@@ -44,16 +45,37 @@ fn config_and_gate_static_invariants_fail_closed() {
         |config: &mut ControllerConfigV1| config.vote_programdata = super::support::key(91),
         |config: &mut ControllerConfigV1| config.vote_config = super::support::key(92),
         |config: &mut ControllerConfigV1| config.vote_mint = super::support::key(93),
+        |config: &mut ControllerConfigV1| config.next_proposal_id = 0,
+        |config: &mut ControllerConfigV1| config.target_nonce = 0,
+        |config: &mut ControllerConfigV1| config.proposal_expiry_slots = config.major_delay_slots,
     ] {
         let mut config = controller_config();
         mutate(&mut config);
         assert!(config.validate_static().is_err());
     }
 
+    let mut exact_boundary = controller_config();
+    exact_boundary.proposal_expiry_slots = exact_boundary
+        .vote_review_slots
+        .checked_add(exact_boundary.major_delay_slots)
+        .and_then(|slots| slots.checked_add(1))
+        .unwrap();
+    assert!(exact_boundary.validate_static().is_err());
+    exact_boundary.proposal_expiry_slots += 1;
+    assert_eq!(exact_boundary.validate_static(), Ok(()));
+
+    let mut overflow = controller_config();
+    overflow.vote_review_slots = u64::MAX;
+    assert!(overflow.validate_static().is_err());
+
     let mut invalid_gate = gate();
     assert_eq!(invalid_gate.validate_static(), Ok(()));
     invalid_gate.freeze_slot = 1;
     assert!(invalid_gate.validate_static().is_err());
+
+    let mut zero_epoch_gate = gate();
+    zero_epoch_gate.epoch = 0;
+    assert!(zero_epoch_gate.validate_static().is_err());
 
     let mut gate = gate();
     gate.status = GateStatusV1::EmergencyFrozen;

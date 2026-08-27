@@ -15,6 +15,9 @@ pub const PROGRAMDATA_CHECK_SEED: &[u8] = b"programdata-check";
 pub const EMERGENCY_RESOLUTION_SEED: &[u8] = b"emergency-resolution";
 pub const EMERGENCY_CHECKPOINT_SEED: &[u8] = b"emergency-checkpoint";
 pub const COUNCIL_ROTATION_SEED: &[u8] = b"council-rotation";
+pub const EMERGENCY_FREEZE_OBSERVATION_SEED: &[u8] = b"emergency-observation";
+pub const PROGRAMDATA_FAILURE_OBSERVATION_SEED: &[u8] = b"programdata-failure";
+pub const CHECKPOINT_ATTESTATION_SEED: &[u8] = b"checkpoint-attestation";
 pub const UPGRADEABLE_LOADER_ID: Pubkey = pubkey!("BPFLoaderUpgradeab1e11111111111111111111111");
 
 pub fn derive_upgradeable_programdata_address(target_program: &Pubkey) -> (Pubkey, u8) {
@@ -189,6 +192,60 @@ pub fn derive_council_rotation_pda(
     )
 }
 
+pub fn derive_emergency_freeze_observation_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+    frozen_epoch: u64,
+) -> (Pubkey, u8) {
+    let epoch = frozen_epoch.to_le_bytes();
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            EMERGENCY_FREEZE_OBSERVATION_SEED,
+            target_program.as_ref(),
+            &epoch,
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_programdata_failure_observation_pda(
+    controller_program: &Pubkey,
+    primary_proposal: &Pubkey,
+    frozen_epoch: u64,
+) -> (Pubkey, u8) {
+    let epoch = frozen_epoch.to_le_bytes();
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            PROGRAMDATA_FAILURE_OBSERVATION_SEED,
+            primary_proposal.as_ref(),
+            &epoch,
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_checkpoint_attestation_pda(
+    controller_program: &Pubkey,
+    checkpoint: &Pubkey,
+    council_version: u64,
+    seat_index: u8,
+) -> (Pubkey, u8) {
+    let version = council_version.to_le_bytes();
+    let seat = [seat_index];
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            CHECKPOINT_ATTESTATION_SEED,
+            checkpoint.as_ref(),
+            &version,
+            &seat,
+        ],
+        controller_program,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,6 +270,9 @@ mod tests {
             derive_emergency_resolution_pda(&controller, &target, 7).0,
             derive_emergency_checkpoint_pda(&controller, &target, 7).0,
             derive_council_rotation_pda(&controller, &target, 8).0,
+            derive_emergency_freeze_observation_pda(&controller, &target, 7).0,
+            derive_programdata_failure_observation_pda(&controller, &proposal, 7).0,
+            derive_checkpoint_attestation_pda(&controller, &proposal, 7, 2).0,
         ];
         for (index, address) in addresses.iter().enumerate() {
             assert!(
@@ -263,6 +323,81 @@ mod tests {
         assert_ne!(
             resolution,
             derive_emergency_resolution_pda(&controller, &target, version.swap_bytes()).0
+        );
+
+        let (observation, bump) =
+            derive_emergency_freeze_observation_pda(&controller, &target, version);
+        let bump_seed = [bump];
+        let expected = Pubkey::create_program_address(
+            &[
+                UPGRADE_SEED_DOMAIN_V1,
+                EMERGENCY_FREEZE_OBSERVATION_SEED,
+                target.as_ref(),
+                &version.to_le_bytes(),
+                &bump_seed,
+            ],
+            &controller,
+        )
+        .unwrap();
+        assert_eq!(observation, expected);
+        assert_ne!(
+            observation,
+            derive_emergency_freeze_observation_pda(&controller, &target, version.swap_bytes()).0
+        );
+
+        let proposal = derive_proposal_pda(&controller, &target, 9).0;
+        let (failure, bump) =
+            derive_programdata_failure_observation_pda(&controller, &proposal, version);
+        let bump_seed = [bump];
+        let expected = Pubkey::create_program_address(
+            &[
+                UPGRADE_SEED_DOMAIN_V1,
+                PROGRAMDATA_FAILURE_OBSERVATION_SEED,
+                proposal.as_ref(),
+                &version.to_le_bytes(),
+                &bump_seed,
+            ],
+            &controller,
+        )
+        .unwrap();
+        assert_eq!(failure, expected);
+        assert_ne!(
+            failure,
+            derive_programdata_failure_observation_pda(
+                &controller,
+                &proposal,
+                version.swap_bytes()
+            )
+            .0
+        );
+
+        let checkpoint =
+            derive_checkpoint_pda(&controller, &proposal, CheckpointPhaseV1::Prestate).0;
+        let (attestation, bump) =
+            derive_checkpoint_attestation_pda(&controller, &checkpoint, version, 3);
+        let bump_seed = [bump];
+        let version_seed = version.to_le_bytes();
+        let seat_seed = [3];
+        let expected = Pubkey::create_program_address(
+            &[
+                UPGRADE_SEED_DOMAIN_V1,
+                CHECKPOINT_ATTESTATION_SEED,
+                checkpoint.as_ref(),
+                &version_seed,
+                &seat_seed,
+                &bump_seed,
+            ],
+            &controller,
+        )
+        .unwrap();
+        assert_eq!(attestation, expected);
+        assert_ne!(
+            attestation,
+            derive_checkpoint_attestation_pda(&controller, &checkpoint, version, 4).0
+        );
+        assert_ne!(
+            attestation,
+            derive_checkpoint_attestation_pda(&controller, &checkpoint, version.swap_bytes(), 3).0
         );
     }
 }

@@ -72,6 +72,16 @@ increase; it requires new consensus meanings that cannot be inferred from V1:
 Silently interpreting V1 reserved bytes as any of these fields would invalidate
 the claimed frozen V1 ABI and is prohibited.
 
+Two additional immutable observation accounts and one replaceable pre-
+finalization attestation account are introduced rather than
+placing freeze-time or failed-verification evidence into any V1 or V2 reserved
+region. `EmergencyFreezeObservationV1` records the guardian freeze boundary;
+`ProgramDataFailureObservationV1` records exact failed post-upgrade evidence.
+`CheckpointAttestationV1` prevents a permissionless binder or one seat from
+squatting the one canonical checkpoint PDA. Their separate discriminators,
+PDA domains, and digest domains prevent any record from being confused with a
+proposal, finalized checkpoint, or verification accumulator.
+
 ## 4. Release 1 common encoding rules
 
 - Integers are fixed-width little-endian.
@@ -98,8 +108,8 @@ account_version: 2
 exact length: 1,792 bytes
 reserved: 146 zero bytes
 digest domain: AMOEBA_UPGRADE_PROPOSAL_V2
-digest material: 1,424 bytes
-digest preimage: 1,450 bytes
+digest material: 1,416 bytes
+digest preimage: 1,442 bytes
 ```
 
 | Offsets | Fields |
@@ -107,7 +117,7 @@ digest preimage: 1,450 bytes
 | 0-15 | discriminator, version, bump, initialized, class, state, creation gate status, zero-tail-required, zero flags |
 | 16-39 | proposal ID, target nonce, creation slot |
 | 40-167 | cluster domain, controller program, controller config, gate |
-| 168-263 | policy version/hash, pinned creation council version/hash, creation epoch, expected frozen epoch |
+| 168-263 | policy version/hash, pinned creation council version/hash, creation epoch, lifecycle frozen epoch |
 | 264-423 | target Program, target ProgramData, loader, authority PDA, canonical treasury |
 | 424-615 | buffer, loader owner, uploader authority, final authority, BufferVerification PDA, ProgramDataVerification PDA |
 | 616-727 | artifact length, SHA-256, Merkle root, scheme/domain ID, chunk size/count |
@@ -126,8 +136,12 @@ digest preimage: 1,450 bytes
 | 1646-1791 | zero reserved bytes |
 
 The V2 digest includes every immutable field from cluster/controller identity
-through fixed timing. It excludes header/bump, mutable state, lifecycle slots,
-approval accumulators, reason codes, stored digest, and reserved bytes.
+through fixed timing. It excludes header/bump, mutable state, the lifecycle
+`freeze_gate_epoch`, lifecycle slots, approval accumulators, reason codes,
+stored digest, and reserved bytes. `freeze_gate_epoch` is zero at creation,
+becomes the exact current gate epoch only when the nonce-consuming freeze or
+continuous emergency-to-upgrade conversion succeeds, and is bound separately
+by every frozen-or-later transition and approval.
 
 To avoid a digest cycle, a primary proposal binds the rollback proposal PDA,
 buffer, artifact SHA-256, and artifact Merkle root. A rollback proposal binds
@@ -144,6 +158,23 @@ execution loads the bound primary and its completed
 deployed slot/raw observation. It requires
 `config.target_nonce == primary.target_nonce + 1` and does not consume a second
 nonce or create a second Active-to-Frozen transition.
+
+`expected_execution_pre_payload_hash` and
+`expected_execution_pre_chunk_root` use one exact Release 1 byte region despite
+the historical `payload` field name: the complete Loader ProgramData capacity
+region `[45 .. 45 + expected_pre_capacity)`. The SHA-256 covers those exact
+bytes, including any committed zero tail. The Merkle root treats
+`expected_pre_capacity` as the artifact length, uses the proposal's fixed
+16-KiB chunk size and the canonical artifact leaf/node/padding domains, and
+derives the final partial-chunk length and chunk count from that capacity.
+Ordinary proposals set `expected_pre_capacity = current_capacity`. A rollback
+proposal derives its expected-pre bytes as the linked primary artifact followed
+by the exact zero tail through the primary's committed post-capacity; its
+expected-pre capacity is therefore the linked primary's post-capacity. Freeze,
+extension, upgrade, and rollback activation processors must recompute these
+commitments from the exact ProgramData account or linked mechanically verified
+primary evidence. No caller-supplied payload length, omitted tail, alternate
+padding rule, or receipt-only assertion is accepted.
 
 The rollback shares the primary target nonce. When governance activates it
 against a still-frozen failed primary, the gate remains frozen, changes its
@@ -173,16 +204,23 @@ controller authority, artifact length/SHA/root/scheme, selected chunk size/count
 a 512-bit bitmap, verified count, adoption/finalization slots, status, the
 sealed loader-header commitment, and a terminal slot.
 
-Release 1 caps artifacts at 2 MiB. The 512-bit bitmap covers the worst permitted
-case of 512 4-KiB chunks. SBF measurements compare 4, 8, and 16 KiB; after the
-benchmark, the processor admits exactly one selected Release 1 chunk size. Bits
-outside the selected `chunk_count` remain zero.
+Release 1 caps artifacts at 1,572,864 bytes (1.5 MiB). The 512-bit bitmap ABI
+remains fixed at 64 bytes; it is intentionally not resized when this executable
+payload ceiling is lowered. The selected 16-KiB scheme uses at most 96 bits and
+has proof depth seven. Its maximum Merkle tree pads to 128 leaves, so canonical
+empty-leaf indices are separately bounded by 128 while real leaf indices remain
+bounded by 96. SBF measurements compared 4, 8, and 16 KiB; the processor admits
+exactly the selected Release 1 size. Bits outside `chunk_count` remain zero.
 
-Statuses are `Adopted`, `Verifying`, `Verified`, `ConsumedByUpgrade`, and
-`ClosedAbandoned`. `ConsumedByUpgrade` and `ClosedAbandoned` are distinct
-terminal evidence; neither can be rewritten into the other. Duplicate chunks,
-wrong proof/index/actual length, bitmap/count mismatch, or any buffer authority,
-header, payload-length, or account drift fails before mutation.
+Statuses are `Adopted`, `Verifying`, `ReadyToFinalize`, `Verified`,
+`ConsumedByUpgrade`, and `ClosedAbandoned`. The last chunk moves the account to
+`ReadyToFinalize`; complete bitmap/count evidence is invalid while still marked
+`Verifying`. A separate finalization instruction re-reads the sealed buffer and
+moves only the exact complete account to `Verified`. `ConsumedByUpgrade` and
+`ClosedAbandoned` are distinct terminal evidence; neither can be rewritten into
+the other. Duplicate chunks, wrong proof/index/actual length, bitmap/count
+mismatch, or any buffer authority, header, payload-length, or account drift
+fails before mutation.
 
 ## 7. `ProgramDataVerificationV1`
 
@@ -198,6 +236,15 @@ target, ProgramData, loader, controller authority, artifact length/SHA/root/
 scheme/chunk parameters, deployed slot, exact capacity, payload verification,
 zero-tail verification, raw ProgramData observation, and finalization slot.
 
+Statuses are `Verifying`, `ReadyToFinalize`, and `Verified`.
+`raw_programdata_hash` is canonical zero in the first two states. The last
+required payload/tail chunk moves the account to `ReadyToFinalize`; a complete
+bitmap is invalid while still marked `Verifying`. The raw hash is written only
+by the separate finalization instruction after both bitmaps are complete, the
+exact loader header/authority/capacity are re-read, and the exact raw account
+SHA-256 is recomputed. A caller cannot seed a purported raw hash into an
+in-progress or awaiting-finalization account.
+
 It has two independent 512-bit bitmaps:
 
 1. payload chunks proven against the proposal's Merkle root; and
@@ -209,6 +256,63 @@ unused capacity is zero, and a large tail cannot safely be scanned in one SBF
 transaction. Finalization requires exact bitmap/count parity for both regions,
 canonical Program/ProgramData linkage and loader header, exact deployed slot,
 authority, capacity, payload length, and zero tail.
+
+Zero-tail chunks use a separate, non-Merkle leaf domain:
+
+```text
+SHA256(
+  "AMOEBA_PROGRAMDATA_ZERO_TAIL_CHUNK_V1"
+  || tail_relative_chunk_index_u32_le
+  || actual_chunk_length_u32_le
+  || exact_chunk_bytes
+)
+```
+
+The index is relative to the first byte after the deployed artifact, not to the
+start of the ProgramData account or payload. For tail chunk `i`, the processor
+derives the byte range as
+`artifact_length + i * chunk_size .. min(capacity, start + chunk_size)` and
+derives the exact final-partial-chunk length from that range. It hashes the
+actual bytes and, independently, an equal-length canonical all-zero byte slice
+under the same domain and tail-relative index. Verification succeeds only when
+those two processor-derived hashes are equal. Neither hash is trusted from the
+caller. A zero-tail chunk always carries an empty `FixedMerkleProofV1`; it is
+not a member of the artifact Merkle tree and any nonempty proof is rejected.
+
+Failure evidence is canonical rather than caller-selected. The processor
+chooses the first applicable mismatch in this strict order:
+
+```text
+Header -> Authority -> Capacity -> lowest mismatching payload index
+       -> lowest mismatching zero-tail index
+```
+
+For either chunked class, every lower index in that phase must already be
+verified before a failure at index `i` can be finalized. A zero-tail failure is
+not admissible until every payload chunk is verified. The instruction's
+`expected_leaf_hash` is only a stale-plan guard: the processor recomputes the
+expected artifact leaf or canonical zero-tail leaf and the actual leaf from the
+supplied account bytes. The immutable failure record stores those derived
+values. This prevents an operator from selecting a later or less severe failure
+and hiding an earlier header, authority, capacity, payload, or tail mismatch.
+
+Every ProgramData verification or failure path also receives the exact target
+Program account. The controller must prove that both accounts are the pinned
+proposal/config identities, that the Program account is loader-owned,
+executable, exactly the Loader-v3 Program layout, and names the supplied
+ProgramData address. ProgramData owner/executable/header metadata are then
+checked or recorded from the exact linked account. A standalone ProgramData
+account, an alternate Program that points at it, or a caller assertion of the
+link is not evidence.
+
+Post-extension exactness does not require a second pre-upgrade full payload
+hash. It follows from the closed transition chain: the frozen boundary has one
+exact raw ProgramData hash; the controller admits only the exact checked
+extension committed by the proposal; extension is in a strictly earlier slot;
+the controller re-reads the exact post-extension header, authority, and
+capacity; and the upgrade envelope rejects any intervening sibling or target/
+loader mutator. Any broken link leaves the gate frozen and the proposal
+non-executable.
 
 ## 8. `StateCheckpointV1`
 
@@ -228,14 +332,69 @@ finalized observation slot, gate epoch, ProgramData slot, payload/raw
 commitments, capacity, program-owned root/count, logical-compressed root/count,
 semantic custody/accounting root, hard combined root, external metadata root,
 external raw-balance root, schema ID, admitted-positive-donation root/count,
-and a forbidden-drift count that must be zero.
+and a forbidden-drift count that is digest-bound evidence.
 
-The immutable checkpoint digest ends before approval-council fields. The first
-approval pins the exact current council version/hash. If that council rotates
-before quorum, the next approval atomically discards the incomplete bitset and
-repins the new current council. An accepted checkpoint is immutable and cannot
-reset. Approval instruction data additionally binds checkpoint digest, subject
-digest, current council version/hash, and gate epoch.
+The canonical checkpoint PDA never exists in a draft or partially approved
+state. Seats instead write their own `CheckpointAttestationV1` accounts. A
+permissionless finalizer receives exactly three distinct canonical read-only
+attestations from the current council and the exact candidate checkpoint bytes.
+It requires byte-for-byte agreement on checkpoint digest, subject/digest,
+phase, gate epoch, council PDA/version/hash, and controller/config identities,
+then atomically creates and fully populates the canonical checkpoint with the
+derived approval bitset/count and nonzero `finalized_slot`. This removes the
+single-binder/one-seat PDA-squatting deadlock: no caller can reserve or populate
+the canonical checkpoint before quorum evidence exists.
+
+The immutable checkpoint digest ends before approval-council fields. A
+finalized checkpoint records exactly the three agreeing 3-of-5 attestations
+consumed by the finalizer and is immutable.
+An accepted checkpoint requires `forbidden_drift_count == 0`. A rejected
+checkpoint requires `accepted == false` and an explicit nonzero
+`forbidden_drift_count`; it is not an empty draft. That count remains covered by
+the checkpoint digest and therefore serves as explicit 3-of-5-attested failure
+evidence for the frozen rollback path without falsely accepting bad poststate.
+Hard-root equality and all other acceptance predicates are recomputed by the
+finalizer; any hard mismatch must be represented by the rejected shape.
+Poststate finalization additionally receives the canonical accepted Prestate
+checkpoint as a separate read-only baseline alongside the exact verified
+`ProgramDataVerificationV1` evidence. It compares schema, counts, hard roots,
+semantic custody, identity metadata, and explicit donation evidence. Prestate
+and Emergency finalization omit the baseline account, giving each phase an
+exact account count rather than accepting a dummy alias.
+
+`FinalizeCheckpointV1.phase_evidence` is a phase-selected typed account, not a
+generic evidence slot:
+
+| Candidate phase | Subject | Exact `phase_evidence` | Additional baseline |
+|---|---|---|---|
+| `Prestate` | exact frozen `UpgradeProposalV2` | its canonical, fully `Verified` `BufferVerificationV1` | none |
+| `Poststate` | exact `UpgradeProposalV2` in `ProgramDataVerified` | its canonical, fully `Verified` `ProgramDataVerificationV1` | canonical immutable accepted `Prestate` checkpoint for the same proposal/schema/epoch |
+| `Emergency` | exact `EmergencyFreezeResolutionV1` | canonical immutable `EmergencyFreezeObservationV1` for the resolution's target and frozen epoch | none |
+
+The processor selects the discriminator, exact length, PDA, embedded config,
+target, subject, digest, gate epoch, and terminal status from `candidate.phase`.
+It never accepts a different Release 1 account with coincidentally matching
+bytes or digest. For Poststate, both the ProgramData evidence and accepted
+Prestate baseline are required and must be distinct. For Prestate and Emergency,
+supplying a baseline or dummy alias changes the account count and fails.
+
+Slot ordering is part of the account contract. The phase evidence must satisfy
+`evidence.finalized_slot <= candidate.finalized_observation_slot`; a Poststate
+baseline must satisfy the same inequality. For Emergency, the freeze observation
+is atomically final at `freeze_slot` and
+`resolution.creation_slot <= candidate.finalized_observation_slot`. Every
+attestation must satisfy
+`attested_slot >= candidate.finalized_observation_slot` and must not precede the
+phase evidence's finalization slot or optional baseline's finalization slot. The
+checkpoint finalizer derives a nonzero `finalized_slot` from Clock that is at or
+after the candidate observation, phase evidence, optional Prestate baseline,
+and all three attestation slots.
+Prestate evidence must precede extension/upgrade; Poststate ProgramData evidence
+must follow upgrade and precede Poststate acceptance; Emergency evidence must
+belong to the exact continuously frozen epoch. These relational checks remain a
+Gate C processor requirement; the current fixed account schemas enforce the
+nonzero and terminal shapes but cannot establish cross-account slot ordering by
+themselves.
 
 For normal phases, `proposal` is nondefault and `emergency_resolution` is
 default. For emergency phase the inverse holds. This prevents a proposal/
@@ -257,8 +416,63 @@ structural/data state, logical compressed state and counts, semantic custody/
 accounting, external identity/metadata, and schema—not raw balances. Only
 nonnegative deltas classified into the explicit donation root/count are
 admissible. Every negative delta, missing identity, owner/mint/authority/state
-change, or semantic deficit increments `forbidden_drift_count` and blocks both
-checkpoint creation and acceptance.
+change, or semantic deficit increments `forbidden_drift_count` and blocks
+checkpoint acceptance. The unaccepted record remains immutable audit evidence.
+
+`hard_combined_root` is not a free nonzero label. Rust, TypeScript, the
+controller, and the receipt verifier deterministically recompute it as:
+
+```text
+SHA256(
+  "AMOEBA_CHECKPOINT_HARD_ROOT_V1"
+  || schema_identifier
+  || program_owned_state_root
+  || program_owned_state_count_u64_le
+  || logical_compressed_state_root
+  || logical_compressed_state_count_u64_le
+  || semantic_custody_accounting_root
+  || external_metadata_observation_root
+)
+```
+
+The material is exactly 176 bytes and the domain-prefixed preimage is 206
+bytes. Any internal disagreement between the component roots/counts/schema and
+the stored combined root fails schema/digest verification. The external raw
+balance and admitted-donation roots remain separately visible so donation
+policy cannot be smuggled into the hard invariant.
+
+## 8.1 `CheckpointAttestationV1`
+
+```text
+discriminator: AGVATT01
+version: 1
+exact length: 384 bytes
+reserved: 27 zero bytes
+digest domain: AMOEBA_CHECKPOINT_ATTESTATION_V1
+digest material: 314 bytes
+digest preimage: 346 bytes
+PDA: [ameba-upgrade-v1, checkpoint-attestation, checkpoint,
+      council_version_le, seat_index_u8]
+```
+
+Each account binds controller program/config, the not-yet-created canonical
+checkpoint PDA, one typed subject pubkey and subject digest, checkpoint phase,
+exact checkpoint digest, current council PDA/version/hash, gate epoch, seat
+index and authority, attestation slot, bump, and zero reserved bytes. The seat
+authority must be the exact active authority at `seat_index` in that current
+council and must sign directly or through its approved signer-PDA capability.
+
+The seat may recast its own attestation to a different candidate digest only
+while the canonical checkpoint is absent. Recasting writes the same canonical
+seat attestation PDA with a new signed digest and slot; it never creates or
+mutates the checkpoint. Once the checkpoint exists, attest/recast rejects.
+Finalization rejects duplicate accounts, duplicate seat indexes, stale or
+noncurrent councils, wrong PDA/bump/authority, any disagreement between the
+three attestations, any mismatch between an attestation and the candidate
+checkpoint bytes, and any attempt to create an already existing checkpoint.
+The account's own digest separates seat evidence from the checkpoint and
+proposal/resolution digest domains, so signatures cannot replay across seats,
+councils, epochs, phases, subjects, or checkpoints.
 
 ## 9. `CouncilRotationProposalV1`
 
@@ -278,38 +492,162 @@ and the target nonce snapshot. Initial and cancellation approvals have distinct
 bitsets. Activation slot and reason codes are mutable evidence.
 
 The candidate is an ordinary immutable `GovernanceCouncilSetV1`, must contain
-five valid unique authorities, have version `current + 1`, have no deactivation
-slot, and hash its exact authorities and terms. Activation requires the original
+five valid unique authorities, have a version strictly greater than the current
+version, have no deactivation slot, and hash its exact authorities and terms.
+Unused candidate versions may be skipped: an immutable cancelled, expired, or
+losing candidate must never occupy `current + 1` permanently and block all
+future rotation. Activation requires the original
 current council's 3-of-5 approvals, the major delay, unexpired timing, unchanged
 target nonce, and unchanged current council. It updates only
 `config.current_council_version`; the old council remains immutable history.
 
 Binding both current council version and target nonce makes stale and competing
 rotations fail without adding a rotation field to `ControllerConfigV1`.
+Rotation uses lazy staleness and explicit repinning of later approval
+accumulators. It never enumerates, iterates, or rewrites every outstanding
+proposal account.
+
+`CouncilRotationProposalV1` stores an activation slot but has no separate
+cancelled/expired slot. Release 1 therefore treats finalized transaction
+history as the authoritative timestamp for those two terminal transitions.
+Receipt v3 must include and independently verify that transition transaction,
+its finalized slot, the pre/post account bytes, quorum or expiry condition, and
+the immutable expiry commitment. The account's terminal/cancellation reason is
+not presented as a standalone proof of when the transition occurred.
 
 ## 10. `EmergencyFreezeResolutionV1`
 
 ```text
 discriminator: AGVEFR01
 version: 1
-exact length: 512 bytes
-reserved: 91 zero bytes
+exact length: 640 bytes
+reserved: 100 zero bytes
 digest domain: AMOEBA_EMERGENCY_RESOLUTION_V1
-digest material: 323 bytes
-digest preimage: 353 bytes
+digest material: 442 bytes
+digest preimage: 472 bytes
 ```
 
-The account binds config, gate, target, ProgramData, exact emergency epoch,
-freeze slot/reason, `ResumeWithoutUpgrade`, creation/not-before/expiry slots,
-target nonce snapshot, observed ProgramData slot/payload/raw commitments,
-capacity, authority, and emergency checkpoint PDA.
+The account binds config, gate, target, ProgramData, the canonical immutable
+`EmergencyFreezeObservationV1`, exact emergency epoch, freeze slot/reason,
+`ResumeWithoutUpgrade`, creation/not-before/expiry slots, target nonce snapshot,
+the observation's target Program owner/executable/data length/canonical-header/
+linked-ProgramData evidence, ProgramData account owner/executable/data length/
+canonical-header metadata, slot/raw-hash completeness and commitment/capacity/
+optional authority, and the emergency checkpoint PDA. It does not store or
+require a second full payload hash. A complete raw ProgramData SHA-256 covers
+the Loader header, payload, and tail; the emergency checkpoint separately
+commits its audited payload view.
+
+Creation is permissionless and payer-only; it has no proposer seat or privileged
+creator. The processor mechanically derives every immutable field: canonical
+PDA and observation, current config/gate/epoch/nonce, `creation_slot` from
+Clock, `not_before_slot = freeze_slot + routine_delay`, checked
+`expiry_slot = freeze_slot + proposal_expiry`, fixed
+`ResumeWithoutUpgrade`, all ProgramData observations copied byte-for-byte from
+the canonical freeze observation, and the canonical emergency checkpoint PDA.
+A caller cannot select roots, timing, kind, authority, or identity. Council
+approval is a later and separate capability.
 
 Approval council fields and bitset are mutable and excluded from the base
 digest so an incomplete approval accumulator can repin after rotation. Execution
 requires the completed accumulator still match the current council, the routine
 delay, unchanged target nonce, exact unchanged ProgramData observation and
-authority, accepted emergency checkpoint, no active proposal, and the exact
-emergency epoch. The initialization freeze reason is categorically rejected.
+optional authority, accepted emergency checkpoint, no active proposal, and the
+exact emergency epoch. The re-read authority must equal the recorded optional
+authority and both must be `Some(controller_authority)`; `None` or drift remains
+safely frozen and cannot resume. The initialization freeze reason is
+categorically rejected. Executed state additionally requires a complete raw
+hash and the canonical Loader-v3 Program/ProgramData graph; an incomplete or
+malformed freeze observation may be governed and checkpointed but can never
+execute ResumeWithoutUpgrade.
+
+`EmergencyFreezeResolutionV1` stores an execution slot but no separate expired
+slot; its `Cancelled` enum value is mechanically unreachable in Release 1
+because V1 has no independent cancellation accumulator and tag 26 remains
+closed. Finalized transaction history is the authoritative expiry-transition
+timestamp. Receipt v3 must bind the exact expiry transaction and pre/post bytes
+rather than infer a timestamp from the terminal reason alone.
+
+## 10.1 `EmergencyFreezeObservationV1`
+
+```text
+discriminator: AGVEFO01
+version: 1
+exact length: 512 bytes
+reserved: 19 zero bytes
+digest domain: AMOEBA_EMERGENCY_FREEZE_OBSERVATION_V1
+digest material: 450 bytes
+digest preimage: 488 bytes
+PDA: [ameba-upgrade-v1, emergency-observation, target_program, frozen_epoch_le]
+```
+
+Guardian freeze creates this account and finalizes it atomically with the gate
+epoch transition. It binds controller program/config, gate, target Program and
+ProgramData, Upgradeable Loader, canonical controller authority, exact frozen
+epoch/slot/reason, deployed ProgramData slot, exact raw ProgramData SHA-256,
+capacity, exact optional observed authority, target Program runtime evidence,
+raw-hash completeness, and finalization slot.
+`finalized_slot` must equal the freeze slot. Observed authority is a canonical
+`OptionalPubkeyV1`: it may be the controller authority, another authority, or
+`None`, because authority drift or removal must never prevent the guardian from
+freezing. That evidence grants no loader or resume power. Resume separately
+requires an unchanged observation and `Some(controller_authority)`. There is no
+provisional state and no caller-supplied second payload hash. A wrong
+discriminator/version, false initialized/finalized byte, noncanonical optional
+encoding, zero commitment, nonzero reserved byte, or digest drift fails closed.
+
+The observation also binds the actual ProgramData account owner, executable
+flag, and exact data length, plus whether the Upgradeable Loader ProgramData
+header is canonically valid and representable. It separately binds the target
+Program account owner, executable flag, exact data length, canonical Program
+header classification, and canonical optional linked ProgramData key. A
+guardian freeze remains recordable if either account
+has the wrong owner, executable flag, malformed length/header, or no authority.
+The no-header shape requires zero header slot/capacity and absent authority;
+resolution may preserve that immutable evidence but cannot execute resume until
+the current account is the exact canonical loader-owned, non-executable,
+well-formed ProgramData with unchanged metadata and `Some(controller_authority)`.
+
+`program_header_present` and `programdata_header_present` mean canonical-valid
+and representable, not merely byte-decodable. A Program tag whose 32-byte link
+is the default key is recorded with `program_header_present = false` and absent
+link. A ProgramData header containing a noncanonical optional authority such as
+`Some(default)` is recorded with `programdata_header_present = false`, zero
+slot/capacity, and absent authority. Exact owner/executable/data length and the
+raw ProgramData hash-completeness evidence remain recorded, so malformed loader
+bytes cannot block GuardianFreeze account creation.
+
+## 10.2 `ProgramDataFailureObservationV1`
+
+```text
+discriminator: AGVPDF01
+version: 1
+exact length: 512 bytes
+reserved: 24 zero bytes
+digest domain: AMOEBA_PROGRAMDATA_FAILURE_OBSERVATION_V1
+digest material: 444 bytes
+digest preimage: 485 bytes
+PDA: [ameba-upgrade-v1, programdata-failure, primary_proposal, frozen_epoch_le]
+```
+
+This immutable account binds config, gate, primary proposal, target Program and
+ProgramData, frozen epoch, exact actual raw ProgramData SHA-256, actual account
+owner, executable flag, exact data length, whether a canonical ProgramData
+header was present, exact actual header slot/capacity/optional authority, typed
+mismatch class, optional failing chunk evidence, target Program runtime
+evidence, raw-hash completeness, and finalization slot. Raw
+bytes alone do not commit runtime/RPC account metadata, so owner, executable,
+and length are mandatory processor-derived evidence even for a header failure.
+Mismatch classes are `Header`, `Authority`, `Capacity`,
+`PayloadLeaf`, and `ZeroTail`. Header/authority/capacity failures require the
+sentinel chunk index and zero leaf hashes. Payload and zero-tail failures
+require a real chunk index and distinct nonzero expected/actual leaf hashes.
+Absent headers require zero slot/capacity, absent authority, and the `Header`
+class. These combinations are schema-validated so placeholder evidence cannot
+be serialized as a different failure class. `PayloadLeaf` and `ZeroTail`
+require a complete raw hash. `Header`, `Authority`, and `Capacity` may record
+canonical incomplete/zero raw-hash evidence when the exact ProgramData account
+length exceeds the separately benchmarked atomic ceiling.
 
 ## 11. Merkle commitment
 
@@ -368,6 +706,13 @@ the current controller ProgramData upgrade authority as initializer. It pins the
 exact target Program/ProgramData/loader graph and creates config, policy,
 council, and gate exactly once.
 
+Initialization deliberately does **not** require the target ProgramData
+authority already equal the controller authority PDA. The authorized future
+ceremony initializes and verifies the controller first, then makes the
+controller immutable, then installs/verifies the Spread bridge, and only then
+hands off target authority. Requiring target custody at initialization would
+invert that safety order.
+
 The initial values are:
 
 ```text
@@ -386,22 +731,144 @@ The bootstrap reason is not a guardian incident and cannot use emergency
 resume. A future separately authorized bridge-activation ceremony must verify
 the target bridge and authority graph before first activation.
 
-The fixed delay validation remains in `ControllerConfigV1`. Initialization also
-requires checked arithmetic showing the configured proposal expiry can contain
-the review interval and major delay. No Release 1 instruction mutates timing or
-enables vote fields.
+The frozen field name `vote_review_slots` is retained only for ABI compatibility;
+Release 1 interprets it as `council_review_slots` while token governance remains
+mechanically disabled. Validation uses checked arithmetic and requires
+`1 + council_review_slots + major_delay_slots < proposal_expiry_slots`.
+Overflow and the equality boundary fail closed. No Release 1 instruction
+mutates timing or enables vote fields.
 
 ## 14. Instruction/version compatibility
 
-The existing tag-0 `RecordProposalApprovalV1` remains byte-for-byte frozen and
-accepts only `UpgradeProposalV1`. A distinct fixed-width
-`RecordProposalApprovalV2` enforces review start/end, strict pre-expiry timing,
+The existing tag-0 `RecordProposalApprovalV1` codec remains byte-for-byte frozen
+for historical regression vectors, but Release 1 requires processor dispatch to
+reject it. It is codec-only, not an active timeless V1 approval path. The
+versioned V2 approval path enforces review start/end, strict pre-expiry timing,
 current target nonce, creation gate status/epoch, verified buffer, exact pinned
 creation council and digest, duplicate rejection, and one threshold crossing.
 
 Every new decoder rejects unknown tags before payload allocation, unknown
 account versions, truncation, and trailing bytes. No new processor treats a V1
 proposal as V2 and there is no migration instruction.
+
+`FreezeProposalV2` and `ConvertEmergencyFreezeV2` account contracts include
+the exact read-only target Program, ProgramData, Upgradeable Loader, and
+controller authority PDA. They also require the exact reciprocal rollback
+proposal, rollback `BufferVerificationV1`, and sealed rollback buffer as
+read-only accounts. Before consuming the nonce or advancing the epoch, the
+processor proves the rollback is the committed reciprocal proposal, fully
+authority-locked and `Verified`, 3-of-5 approved, governance-satisfied,
+timelocked, unexpired, and has sufficient rollback-delay runway. This lets the
+freeze transition validate the complete authority and rollback graph instead
+of trusting proposal copies. Guardian freeze also uses that exact graph plus
+the canonical emergency observation PDA. No freeze account contract accepts an
+arbitrary loader or writable target graph.
+
+Checkpoint tags 15-17 are the closed anti-squatting surface:
+
+- `CreateCheckpointAttestationV1` is payer + current-seat signer scoped and
+  creates only that seat's canonical attestation PDA;
+- `RecastCheckpointAttestationV1` lets the same current seat replace its own
+  attestation while the checkpoint is absent; and
+- permissionless `FinalizeCheckpointV1` accepts exactly three distinct
+  canonical read-only current-council attestations plus payer/System Program,
+  and atomically creates the canonical finalized checkpoint. Poststate has one
+  additional canonical accepted-Prestate baseline account.
+
+`CreateEmergencyResolutionV1` is payer-only and derives every field from Clock,
+config, policy, gate, and the canonical freeze observation. Guardian/create/
+execute wire data use the same canonical `OptionalInstructionPubkeyV1`
+authority encoding and bind ProgramData metadata. `ExecuteEmergencyResolutionV1`
+also requires the Instructions sysvar and rejects any envelope other than the
+separate canonical emergency-resume transaction.
+
+The corrected fixed instruction vectors are:
+
+| Tag | Instruction | Payload bytes | Exact accounts |
+|---:|---|---:|---:|
+| 6 | `FreezeProposalV2` | 171 | 12 |
+| 9 | `GuardianFreezeV1` | 259 | 10 |
+| 10 | `CreateEmergencyResolutionV1` | 395 | 8 |
+| 13 | `ExecuteEmergencyResolutionV1` | 420 | 12 |
+| 14 | `ConvertEmergencyFreezeV2` | 203 | 13 |
+| 15 | `CreateCheckpointAttestationV1` | 489 | 10 |
+| 16 | `RecastCheckpointAttestationV1` | 521 | 8 |
+| 17 | `FinalizeCheckpointV1` | 488 | 14 for Prestate/Emergency; 15 for Poststate |
+
+Tags 27-38 are the complete typed Loader-v3, deployed-byte-verification,
+rollback-activation, and unfreeze codec surface. Exact wire lengths include the
+one-byte tag. Account order and privileges are consensus-facing; `S+W` means
+signer+writable, `S` signer+read-only, `W` writable, and `R` read-only.
+
+| Tag | Instruction | Payload bytes | Accounts | Exact ordered account contract |
+|---:|---|---:|---:|---|
+| 27 | `AdoptBufferV1` | 163 | 10 | payer `S+W`; config `R`; gate `R`; proposal `W`; buffer `W`; uploader authority `S`; controller authority PDA `R`; BufferVerification `W`; Upgradeable Loader `R`; System Program `R` |
+| 28 | `VerifyBufferChunkV1` | 461 | 7 | config `R`; gate `R`; proposal `R`; buffer `R`; BufferVerification `W`; authority PDA `R`; Loader `R` |
+| 29 | `FinalizeBufferVerificationV1` | 232 | 7 | config `R`; gate `R`; proposal `W`; buffer `R`; BufferVerification `W`; authority PDA `R`; Loader `R` |
+| 30 | `ExtendTargetV1` | 297 | 12 | payer `S+W`; config `R`; gate `R`; proposal `W`; accepted Prestate checkpoint `R`; target ProgramData `W`; target Program `W`; authority PDA `R`; Loader `R`; System Program `R`; Rent sysvar `R`; Instructions sysvar `R` |
+| 31 | `ExecuteUpgradeV1` | 391 | 20 | payer `S+W`; config `R`; policy `R`; gate `R`; proposal `W`; reciprocal counterpart proposal `R`; counterpart BufferVerification `R`; accepted Prestate checkpoint `R`; BufferVerification `W`; ProgramDataVerification `W`; target ProgramData `W`; target Program `W`; sealed buffer `W`; canonical spill treasury `W`; Rent `R`; Clock `R`; authority PDA `R`; Loader `R`; System Program `R`; Instructions sysvar `R` |
+| 32 | `VerifyProgramDataChunkV1` | 530 | 8 | config `R`; gate `R`; proposal `R`; target Program `R`; target ProgramData `R`; authority PDA `R`; Loader `R`; ProgramDataVerification `W` |
+| 33 | `FinalizeProgramDataVerificationV1` | 316 | 8 | config `R`; gate `R`; proposal `W`; target Program `R`; target ProgramData `R`; authority PDA `R`; Loader `R`; ProgramDataVerification `W` |
+| 34 | `ApproveUnfreezeV1` | 252 | 12 | config `R`; policy `R`; current council `R`; gate `R`; proposal `W`; accepted Poststate checkpoint `R`; verified ProgramDataVerification `R`; target Program `R`; target ProgramData `R`; authority PDA `R`; Loader `R`; current seat authority `S` |
+| 35 | `ExecuteUnfreezeV1` | 362 | 13 | config `R`; policy `R`; current council `R`; gate `W`; proposal `W`; reciprocal linked proposal `W`; accepted Poststate checkpoint `R`; verified ProgramDataVerification `R`; target Program `R`; target ProgramData `R`; authority PDA `R`; Loader `R`; Instructions sysvar `R` |
+| 36 | `CloseAbandonedBufferV1` | 240 | 8 | config `R`; gate `R`; proposal `R`; BufferVerification `W`; buffer `W`; canonical spill treasury `W`; authority PDA `R`; Loader `R` |
+| 37 | `ActivateRollbackV1` | 435 | 12 | config `R`; policy `R`; gate `W`; primary proposal `R`; rollback proposal `W`; rollback BufferVerification `R`; primary ProgramDataVerification `R`; typed failure evidence `R`; target Program `R`; target ProgramData `R`; authority PDA `R`; Loader `R` |
+| 38 | `ObserveProgramDataFailureV1` | 624 | 11 | payer `S+W`; config `R`; gate `R`; primary proposal `R`; ProgramDataVerification `R`; target Program `R`; target ProgramData `R`; authority PDA `R`; Loader `R`; failure observation `W`; System Program `R` |
+
+Tag 35 never accepts a default or dummy `linked_proposal`. For primary success it
+must be the committed reciprocal rollback proposal, which becomes `Retired`
+when the primary completes. For rollback success it must be the reciprocal
+primary, which becomes `SupersededByRollback`. The two proposal accounts are
+separately writable because this paired terminalization is atomic with the gate
+becoming Active.
+
+Tag 37's `failure_evidence` is generic only across two closed typed alternatives:
+the canonical finalized `ProgramDataFailureObservationV1` for the primary and
+frozen epoch, or a canonical finalized rejected Poststate `StateCheckpointV1`
+for that same primary, digest, schema, and epoch. The latter must have
+`accepted == false`, nonzero `forbidden_drift_count`, and an exact 3-of-5
+attestation finalization. The payload binds `expected_failure_evidence_digest`;
+the processor selects and recomputes the corresponding observation or checkpoint
+digest after validating the exact account discriminator, length, PDA, and
+embedded identities. No arbitrary account, raw digest, or caller-described
+failure can activate rollback.
+
+The processor contract for all 12 instructions requires rejection of a wrong
+account count/order, privilege shape, identity, owner, executable flag,
+duplicate alias, PDA/bump, embedded relation, or sysvar/program ID before
+mutation. Their fixed expectations are stale-plan guards; processors must
+re-read the gate, proposal, target nonce, loader header, buffer/ProgramData
+authority, verification accumulators, checkpoints, and current council
+immediately before transition or CPI. The current fixed codecs/builders encode
+these closed account vectors; completion of those processor checks and their
+failure-atomic matrix remains an explicit Gate C/D blocker.
+
+### 14.1 Canonical per-state account invariants
+
+The fixed schemas already enforce these local invariants. Cross-account,
+current-slot, CPI, and transition atomicity remain Gate C/D processor work until
+their processors and failure-atomic tests land.
+
+| Account | Canonical per-state shape |
+|---|---|
+| `UpgradeProposalV2` | `TokenReviewOpen` is invalid; `freeze_gate_epoch` is nonzero exactly for Frozen-or-later states. Draft/BufferAdopted have no initial approvals; BufferVerified may have fewer than three; CouncilApproved and every later executable state have exactly three. GovernanceSatisfied requires council quorum; Timelocked and Frozen-or-later also require queued evidence. Extension slot exists exactly when a nonzero extension has executed. Upgrade, ProgramData, Poststate, unfreeze, and terminal slots appear only in their corresponding later states and are monotonically nondecreasing. Cancellation and unfreeze use independent council/version/hash/bitsets. Completed, Cancelled, Expired, SupersededByRollback, and Retired have their one exact terminal reason/slot shape. `Retired` is rollback-only; `SupersededByRollback` is primary-only. |
+| `BufferVerificationV1` | Adopted has zero verified chunks and no final/terminal slot; Verifying has `0 < count < chunk_count`; ReadyToFinalize has the exact complete bitmap/count and no final slot; Verified adds a nonzero final slot; ConsumedByUpgrade requires complete verified evidence plus distinct final and terminal slots; ClosedAbandoned has a terminal slot and preserves whatever canonical partial-or-complete bitmap existed. All states bind the exact proposal/buffer/loader/uploader/controller authority, artifact commitment, selected chunk geometry, adoption slot, and nonzero sealed-header hash. |
+| `ProgramDataVerificationV1` | Verifying is incomplete with zero raw hash, zero-tail flag false, and no final slot. ReadyToFinalize has both exact complete bitmaps/counts but still zero raw hash, false zero-tail flag, and no final slot. Verified requires both complete bitmaps, `zero_tail_verified == true`, nonzero exact raw hash, and nonzero final slot. Every state binds canonical Program/ProgramData/loader/authority identities, artifact commitment, deployed slot, capacity, and `tail_length == capacity - artifact_length`. |
+| `StateCheckpointV1` | Prestate/Poststate have a proposal subject and default emergency subject; Emergency has the inverse. The record is never draft: it is created only with exactly three current-council attestations, a nonzero final slot, and exact bitset/count parity. `accepted` is true exactly when `forbidden_drift_count == 0`; a rejected immutable record has a positive forbidden count. Donation root is nonzero exactly when donation count is positive. Hard root is deterministically recomputed from schema, protected roots/counts, semantic custody, and external metadata. Exact phase evidence and slot ordering are defined in Section 8. |
+| `CouncilRotationProposalV1` | Current/candidate identities and hashes are nondefault; candidate version is strictly greater than current and not `u64::MAX`; creation `<` not-before `<` expiry; nonce/digest are nonzero; approval and cancellation bitsets exactly match their counts and cannot exceed three. Draft has fewer than three approvals; CouncilApproved, Timelocked, and Activated have exactly three. Cancellation participation is present exactly when its reason is nonzero; only Cancelled reaches three cancellation approvals and its terminal reason equals that cancellation reason. Only Activated has a nonzero activation slot, which is at/after not-before and before expiry. Activated and Expired use their exact fixed terminal reasons; nonterminal states have zero terminal reason. Candidate council bytes are immutable; activation changes only config's current council version, never old council history. |
+| `EmergencyFreezeResolutionV1` | Only `ResumeWithoutUpgrade` is representable. The exact non-bootstrap frozen epoch/reason, canonical observation, Program and ProgramData runtime evidence, raw-hash completeness, target nonce, checkpoint, and timing are digest-bound; freeze `<=` creation `<` expiry and freeze `<` not-before `<` expiry. Draft has fewer than three approvals; CouncilApproved, Timelocked, and Executed have exactly three. V1 Cancelled is schema-invalid and its cancellation reason is always zero because tag 26 is closed. Only Executed has a nonzero execution slot, at/after creation and not-before but before expiry; Executed and Expired have exact fixed terminal reasons while nonterminal states have zero. Resume remains blocked unless the current graph is canonical, unchanged, controller-authorized, delayed, unexpired, completely raw-hashed, and backed by the accepted exact Emergency checkpoint. |
+| `ProgramDataFailureObservationV1` | Finalized and immutable; header/authority/capacity classes use the sentinel index and zero leaf hashes. Payload/ZeroTail classes require a real index and distinct nonzero processor-derived expected/actual leaves; ZeroTail uses no proof. Absent header permits only Header. Canonical mismatch precedence and lowest-index rules are above. |
+
+The fixed raw-account hashing ceiling is
+`MAX_ATOMIC_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1 = 1,572,909`: exactly the
+1,572,864-byte payload ceiling plus the 45-byte Loader-v3 ProgramData metadata.
+The composed actual-SBF observation benchmark measured 798,245 CU under SBPF v0
+(601,755 margin) and 798,323 CU under SBPF v2 (601,677 margin) against the
+1,400,000-CU limit. At or below the ceiling, `raw_hash_complete` is true and the
+raw hash is nonzero. Above it, the flag is false and the hash is canonical zero.
+Guardian freeze and Header/Authority/Capacity failure evidence remain
+recordable; ResumeWithoutUpgrade and PayloadLeaf/ZeroTail evidence require a
+complete hash.
 
 ## 15. Audit conclusion
 

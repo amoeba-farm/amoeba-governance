@@ -15,6 +15,7 @@ use crate::{
         MAX_ARTIFACT_BYTES_V1, MAX_ARTIFACT_CHUNKS_V1,
     },
     council::VALID_APPROVAL_MASK,
+    pda::UPGRADEABLE_LOADER_ID,
     state::{GateStatusV1, OptionalPubkeyV1, ProposalClassV1, VoteRequirementV1},
     GovernanceError, GovernanceResult,
 };
@@ -25,19 +26,39 @@ pub const PROGRAMDATA_VERIFICATION_V1_DISCRIMINATOR: [u8; 8] = *b"AGVPDV01";
 pub const STATE_CHECKPOINT_V1_DISCRIMINATOR: [u8; 8] = *b"AGVCKP01";
 pub const COUNCIL_ROTATION_PROPOSAL_V1_DISCRIMINATOR: [u8; 8] = *b"AGVROT01";
 pub const EMERGENCY_FREEZE_RESOLUTION_V1_DISCRIMINATOR: [u8; 8] = *b"AGVEFR01";
+pub const EMERGENCY_FREEZE_OBSERVATION_V1_DISCRIMINATOR: [u8; 8] = *b"AGVEFO01";
+pub const PROGRAMDATA_FAILURE_OBSERVATION_V1_DISCRIMINATOR: [u8; 8] = *b"AGVPDF01";
+pub const CHECKPOINT_ATTESTATION_V1_DISCRIMINATOR: [u8; 8] = *b"AGVATT01";
 
 pub const ACCOUNT_VERSION_V2: u8 = 2;
 pub const RELEASE1_ACCOUNT_VERSION_V1: u8 = 1;
 pub const RELEASE1_APPROVAL_THRESHOLD: u8 = 3;
 pub const BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1: u16 = 1;
+pub const PROPOSAL_EXPIRED_TERMINAL_REASON_V1: u16 = 1;
+pub const PROPOSAL_COMPLETED_TERMINAL_REASON_V1: u16 = 2;
+pub const PROPOSAL_SUPERSEDED_BY_ROLLBACK_TERMINAL_REASON_V1: u16 = 3;
+pub const PROPOSAL_RETIRED_ROLLBACK_TERMINAL_REASON_V1: u16 = 4;
+pub const COUNCIL_ROTATION_ACTIVATED_TERMINAL_REASON_V1: u16 = 1;
+pub const COUNCIL_ROTATION_EXPIRED_TERMINAL_REASON_V1: u16 = 2;
+pub const EMERGENCY_RESOLUTION_EXECUTED_TERMINAL_REASON_V1: u16 = 1;
+pub const EMERGENCY_RESOLUTION_EXPIRED_TERMINAL_REASON_V1: u16 = 2;
 
 pub const UPGRADE_PROPOSAL_V2_RESERVED_LEN: usize = 146;
 pub const BUFFER_VERIFICATION_V1_RESERVED_LEN: usize = 72;
 pub const PROGRAMDATA_VERIFICATION_V1_RESERVED_LEN: usize = 119;
 pub const STATE_CHECKPOINT_V1_RESERVED_LEN: usize = 37;
 pub const COUNCIL_ROTATION_PROPOSAL_V1_RESERVED_LEN: usize = 84;
-pub const EMERGENCY_FREEZE_RESOLUTION_V1_RESERVED_LEN: usize = 91;
+pub const EMERGENCY_FREEZE_RESOLUTION_V1_RESERVED_LEN: usize = 100;
+pub const EMERGENCY_FREEZE_OBSERVATION_V1_RESERVED_LEN: usize = 19;
+pub const PROGRAMDATA_FAILURE_OBSERVATION_V1_RESERVED_LEN: usize = 24;
+pub const CHECKPOINT_ATTESTATION_V1_RESERVED_LEN: usize = 27;
 pub const VERIFICATION_BITMAP_BYTES_V1: usize = MAX_ARTIFACT_CHUNKS_V1 / 8;
+pub const NO_FAILING_CHUNK_INDEX_V1: u32 = u32::MAX;
+pub const LOADER_V3_PROGRAM_ACCOUNT_LEN_V1: u64 = 36;
+pub const LOADER_V3_PROGRAMDATA_METADATA_LEN_V1: u64 = 45;
+/// Largest exact Loader-v3 ProgramData account that the composed guardian and
+/// failure-observation paths hash with a conservative actual-SBF margin.
+pub const MAX_ATOMIC_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1: u64 = 1_572_909;
 
 macro_rules! fixed_u8_enum_borsh {
     ($name:ident { $($variant:ident = $value:expr),+ $(,)? }) => {
@@ -117,27 +138,31 @@ impl Default for ProposalStateV2 {
 pub enum BufferVerificationStatusV1 {
     Adopted = 0,
     Verifying = 1,
-    Verified = 2,
-    ConsumedByUpgrade = 3,
-    ClosedAbandoned = 4,
+    ReadyToFinalize = 2,
+    Verified = 3,
+    ConsumedByUpgrade = 4,
+    ClosedAbandoned = 5,
 }
 fixed_u8_enum_borsh!(BufferVerificationStatusV1 {
     Adopted = 0,
     Verifying = 1,
-    Verified = 2,
-    ConsumedByUpgrade = 3,
-    ClosedAbandoned = 4,
+    ReadyToFinalize = 2,
+    Verified = 3,
+    ConsumedByUpgrade = 4,
+    ClosedAbandoned = 5,
 });
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum ProgramDataVerificationStatusV1 {
     Verifying = 0,
-    Verified = 1,
+    ReadyToFinalize = 1,
+    Verified = 2,
 }
 fixed_u8_enum_borsh!(ProgramDataVerificationStatusV1 {
     Verifying = 0,
-    Verified = 1,
+    ReadyToFinalize = 1,
+    Verified = 2,
 });
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -198,6 +223,25 @@ pub enum EmergencyFreezeResolutionKindV1 {
 }
 fixed_u8_enum_borsh!(EmergencyFreezeResolutionKindV1 {
     ResumeWithoutUpgrade = 0,
+});
+
+/// The first mechanically observed mismatch that prevents ProgramData
+/// verification from finalizing.  This is evidence, not a recovery action.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum ProgramDataMismatchClassV1 {
+    Header = 0,
+    Authority = 1,
+    Capacity = 2,
+    PayloadLeaf = 3,
+    ZeroTail = 4,
+}
+fixed_u8_enum_borsh!(ProgramDataMismatchClassV1 {
+    Header = 0,
+    Authority = 1,
+    Capacity = 2,
+    PayloadLeaf = 3,
+    ZeroTail = 4,
 });
 
 /// Release 1 code-upgrade proposal.  The field order is the wire order.
@@ -344,7 +388,6 @@ impl UpgradeProposalV2 {
             || self.creation_council_version == 0
             || self.creation_council_hash == [0; 32]
             || self.creation_gate_epoch == 0
-            || self.freeze_gate_epoch == 0
             || self.proposal_id == 0
             || self.target_nonce == 0
             || self.creation_slot == 0
@@ -362,6 +405,21 @@ impl UpgradeProposalV2 {
             || self.proposal_digest == [0; 32]
         {
             return Err(GovernanceError::InvalidProposalCommitment);
+        }
+        let has_frozen_epoch = self.freeze_gate_epoch != 0;
+        let requires_frozen_epoch = matches!(
+            self.state,
+            ProposalStateV2::Frozen
+                | ProposalStateV2::Extended
+                | ProposalStateV2::UpgradeExecuted
+                | ProposalStateV2::ProgramDataVerified
+                | ProposalStateV2::PoststateAccepted
+                | ProposalStateV2::UnfreezeApproved
+                | ProposalStateV2::Completed
+                | ProposalStateV2::SupersededByRollback
+        );
+        if has_frozen_epoch != requires_frozen_epoch {
+            return Err(GovernanceError::InvalidProposalEpoch);
         }
         for commitment in [
             self.source_commit_hash,
@@ -448,7 +506,249 @@ impl UpgradeProposalV2 {
             &self.unfreeze_council_hash,
             self.unfreeze_approval_bitset,
             self.unfreeze_approval_count,
-        )
+        )?;
+        self.validate_lifecycle_shape()
+    }
+
+    fn validate_lifecycle_shape(&self) -> GovernanceResult<()> {
+        if matches!(self.state, ProposalStateV2::Retired)
+            && !matches!(self.proposal_class, ProposalClassV1::EmergencyRollback)
+            || matches!(self.state, ProposalStateV2::SupersededByRollback)
+                && matches!(self.proposal_class, ProposalClassV1::EmergencyRollback)
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        if self.council_approval_count > RELEASE1_APPROVAL_THRESHOLD
+            || self.cancellation_approval_count > RELEASE1_APPROVAL_THRESHOLD
+            || self.unfreeze_approval_count > RELEASE1_APPROVAL_THRESHOLD
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+
+        let cancellation_started = self.cancellation_approval_count != 0;
+        if cancellation_started != (self.cancellation_reason_code != 0) {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        if matches!(self.state, ProposalStateV2::Cancelled) {
+            if self.cancellation_approval_count != RELEASE1_APPROVAL_THRESHOLD
+                || self.terminal_reason_code != self.cancellation_reason_code
+            {
+                return Err(GovernanceError::InvalidRelease1Account);
+            }
+        } else if self.cancellation_approval_count == RELEASE1_APPROVAL_THRESHOLD {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+
+        let first_approval_present = self.first_approval_slot != 0;
+        let council_approved_present = self.council_approved_slot != 0;
+        if first_approval_present != (self.council_approval_count != 0)
+            || council_approved_present
+                != (self.council_approval_count == RELEASE1_APPROVAL_THRESHOLD)
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        if first_approval_present
+            && (self.first_approval_slot < self.review_start_slot
+                || self.first_approval_slot > self.review_end_slot
+                || self.first_approval_slot >= self.expiry_slot)
+        {
+            return Err(GovernanceError::InvalidProposalTiming);
+        }
+        if council_approved_present
+            && (self.council_approved_slot < self.first_approval_slot
+                || self.council_approved_slot > self.review_end_slot
+                || self.council_approved_slot >= self.expiry_slot)
+        {
+            return Err(GovernanceError::InvalidProposalTiming);
+        }
+
+        let governance_satisfied = self.governance_satisfied_slot != 0;
+        let queued = self.queued_slot != 0;
+        if governance_satisfied
+            && (!council_approved_present || self.governance_satisfied_slot >= self.expiry_slot)
+            || queued && (!governance_satisfied || self.queued_slot >= self.expiry_slot)
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+
+        let prefreeze_shape = match self.state {
+            ProposalStateV2::Draft | ProposalStateV2::BufferAdopted => {
+                self.council_approval_count == 0 && !governance_satisfied && !queued
+            }
+            ProposalStateV2::BufferVerified => {
+                self.council_approval_count < RELEASE1_APPROVAL_THRESHOLD
+                    && !governance_satisfied
+                    && !queued
+            }
+            ProposalStateV2::CouncilApproved => {
+                self.council_approval_count == RELEASE1_APPROVAL_THRESHOLD
+                    && !governance_satisfied
+                    && !queued
+            }
+            ProposalStateV2::GovernanceSatisfied => {
+                self.council_approval_count == RELEASE1_APPROVAL_THRESHOLD
+                    && governance_satisfied
+                    && !queued
+            }
+            ProposalStateV2::Timelocked | ProposalStateV2::Retired => {
+                self.council_approval_count == RELEASE1_APPROVAL_THRESHOLD
+                    && governance_satisfied
+                    && queued
+            }
+            ProposalStateV2::Cancelled | ProposalStateV2::Expired => true,
+            ProposalStateV2::TokenReviewOpen => false,
+            ProposalStateV2::Frozen
+            | ProposalStateV2::Extended
+            | ProposalStateV2::UpgradeExecuted
+            | ProposalStateV2::ProgramDataVerified
+            | ProposalStateV2::PoststateAccepted
+            | ProposalStateV2::UnfreezeApproved
+            | ProposalStateV2::Completed
+            | ProposalStateV2::SupersededByRollback => {
+                self.council_approval_count == RELEASE1_APPROVAL_THRESHOLD
+                    && governance_satisfied
+                    && queued
+            }
+        };
+        if !prefreeze_shape {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+
+        let frozen_required = matches!(
+            self.state,
+            ProposalStateV2::Frozen
+                | ProposalStateV2::Extended
+                | ProposalStateV2::UpgradeExecuted
+                | ProposalStateV2::ProgramDataVerified
+                | ProposalStateV2::PoststateAccepted
+                | ProposalStateV2::UnfreezeApproved
+                | ProposalStateV2::Completed
+                | ProposalStateV2::SupersededByRollback
+        );
+        if (self.frozen_slot != 0) != frozen_required
+            || frozen_required
+                && (self.frozen_slot < self.not_before_slot || self.frozen_slot >= self.expiry_slot)
+        {
+            return Err(GovernanceError::InvalidProposalTiming);
+        }
+
+        let extension_required = self.extension_delta != 0;
+        let extension_slot_required = extension_required
+            && matches!(
+                self.state,
+                ProposalStateV2::Extended
+                    | ProposalStateV2::UpgradeExecuted
+                    | ProposalStateV2::ProgramDataVerified
+                    | ProposalStateV2::PoststateAccepted
+                    | ProposalStateV2::UnfreezeApproved
+                    | ProposalStateV2::Completed
+                    | ProposalStateV2::SupersededByRollback
+            );
+        if matches!(self.state, ProposalStateV2::Extended) && !extension_required
+            || (self.extension_executed_slot != 0) != extension_slot_required
+            || self.extension_executed_slot >= self.expiry_slot
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+
+        let upgrade_executed = matches!(
+            self.state,
+            ProposalStateV2::UpgradeExecuted
+                | ProposalStateV2::ProgramDataVerified
+                | ProposalStateV2::PoststateAccepted
+                | ProposalStateV2::UnfreezeApproved
+                | ProposalStateV2::Completed
+                | ProposalStateV2::SupersededByRollback
+        );
+        if (self.upgrade_executed_slot != 0) != upgrade_executed
+            || self.upgrade_executed_slot >= self.expiry_slot
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        if extension_slot_required
+            && upgrade_executed
+            && self.extension_executed_slot >= self.upgrade_executed_slot
+        {
+            return Err(GovernanceError::InvalidProposalTiming);
+        }
+
+        let programdata_verified_required = matches!(
+            self.state,
+            ProposalStateV2::ProgramDataVerified
+                | ProposalStateV2::PoststateAccepted
+                | ProposalStateV2::UnfreezeApproved
+                | ProposalStateV2::Completed
+        );
+        let programdata_verified_allowed = programdata_verified_required
+            || matches!(self.state, ProposalStateV2::SupersededByRollback);
+        if programdata_verified_required && self.programdata_verified_slot == 0
+            || !programdata_verified_allowed && self.programdata_verified_slot != 0
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+
+        let poststate_accepted = matches!(
+            self.state,
+            ProposalStateV2::PoststateAccepted
+                | ProposalStateV2::UnfreezeApproved
+                | ProposalStateV2::Completed
+        );
+        if (self.poststate_accepted_slot != 0) != poststate_accepted {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+
+        let unfreeze_approved = matches!(
+            self.state,
+            ProposalStateV2::UnfreezeApproved | ProposalStateV2::Completed
+        );
+        let unfreeze_shape = match self.state {
+            ProposalStateV2::PoststateAccepted => {
+                self.unfreeze_approval_count < RELEASE1_APPROVAL_THRESHOLD
+            }
+            ProposalStateV2::UnfreezeApproved | ProposalStateV2::Completed => {
+                self.unfreeze_approval_count == RELEASE1_APPROVAL_THRESHOLD
+            }
+            _ => self.unfreeze_approval_count == 0,
+        };
+        if !unfreeze_shape || (self.unfreeze_approved_slot != 0) != unfreeze_approved {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+
+        let expected_terminal_reason = match self.state {
+            ProposalStateV2::Completed => PROPOSAL_COMPLETED_TERMINAL_REASON_V1,
+            ProposalStateV2::Cancelled => self.cancellation_reason_code,
+            ProposalStateV2::Expired => PROPOSAL_EXPIRED_TERMINAL_REASON_V1,
+            ProposalStateV2::SupersededByRollback => {
+                PROPOSAL_SUPERSEDED_BY_ROLLBACK_TERMINAL_REASON_V1
+            }
+            ProposalStateV2::Retired => PROPOSAL_RETIRED_ROLLBACK_TERMINAL_REASON_V1,
+            _ => 0,
+        };
+        let terminal = expected_terminal_reason != 0;
+        if (self.terminal_slot != 0) != terminal
+            || self.terminal_reason_code != expected_terminal_reason
+            || matches!(self.state, ProposalStateV2::Cancelled)
+                && self.terminal_slot >= self.expiry_slot
+            || matches!(self.state, ProposalStateV2::Expired)
+                && self.terminal_slot < self.expiry_slot
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+
+        validate_non_decreasing_nonzero_slots(&[
+            self.creation_slot,
+            self.first_approval_slot,
+            self.council_approved_slot,
+            self.governance_satisfied_slot,
+            self.queued_slot,
+            self.frozen_slot,
+            self.extension_executed_slot,
+            self.upgrade_executed_slot,
+            self.programdata_verified_slot,
+            self.poststate_accepted_slot,
+            self.unfreeze_approved_slot,
+            self.terminal_slot,
+        ])
     }
 }
 
@@ -528,6 +828,11 @@ impl BufferVerificationV1 {
                     && self.finalized_slot == 0
                     && self.terminal_slot == 0
             }
+            BufferVerificationStatusV1::ReadyToFinalize => {
+                self.verified_chunk_count == self.chunk_count
+                    && self.finalized_slot == 0
+                    && self.terminal_slot == 0
+            }
             BufferVerificationStatusV1::Verified => {
                 self.verified_chunk_count == self.chunk_count
                     && self.finalized_slot != 0
@@ -540,12 +845,20 @@ impl BufferVerificationV1 {
             }
             BufferVerificationStatusV1::ClosedAbandoned => {
                 self.terminal_slot != 0
-                    && ((self.finalized_slot == 0 && self.verified_chunk_count < self.chunk_count)
+                    && ((self.finalized_slot == 0 && self.verified_chunk_count <= self.chunk_count)
                         || (self.finalized_slot != 0
                             && self.verified_chunk_count == self.chunk_count))
             }
         };
         if !status_is_canonical {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        if self.finalized_slot != 0 && self.finalized_slot < self.adopted_slot
+            || self.terminal_slot != 0 && self.terminal_slot < self.adopted_slot
+            || self.finalized_slot != 0
+                && self.terminal_slot != 0
+                && self.terminal_slot < self.finalized_slot
+        {
             return Err(GovernanceError::InvalidRelease1Account);
         }
         Ok(())
@@ -619,7 +932,6 @@ impl ProgramDataVerificationV1 {
             || self.tail_length != self.capacity - self.artifact_length
             || self.tail_chunk_count
                 != artifact_chunk_count_allow_empty(self.tail_length, self.chunk_size)?
-            || self.raw_programdata_hash == [0; 32]
         {
             return Err(GovernanceError::InvalidRelease1Account);
         }
@@ -637,15 +949,35 @@ impl ProgramDataVerificationV1 {
             && self.verified_tail_chunk_count == self.tail_chunk_count;
         match self.status {
             ProgramDataVerificationStatusV1::Verifying => {
-                if complete || self.zero_tail_verified || self.finalized_slot != 0 {
+                if complete
+                    || self.zero_tail_verified
+                    || self.raw_programdata_hash != [0; 32]
+                    || self.finalized_slot != 0
+                {
+                    return Err(GovernanceError::InvalidRelease1Account);
+                }
+            }
+            ProgramDataVerificationStatusV1::ReadyToFinalize => {
+                if !complete
+                    || self.zero_tail_verified
+                    || self.raw_programdata_hash != [0; 32]
+                    || self.finalized_slot != 0
+                {
                     return Err(GovernanceError::InvalidRelease1Account);
                 }
             }
             ProgramDataVerificationStatusV1::Verified => {
-                if !complete || !self.zero_tail_verified || self.finalized_slot == 0 {
+                if !complete
+                    || !self.zero_tail_verified
+                    || self.raw_programdata_hash == [0; 32]
+                    || self.finalized_slot == 0
+                {
                     return Err(GovernanceError::InvalidRelease1Account);
                 }
             }
+        }
+        if self.finalized_slot != 0 && self.finalized_slot < self.deployed_slot {
+            return Err(GovernanceError::InvalidRelease1Account);
         }
         Ok(())
     }
@@ -688,7 +1020,7 @@ pub struct StateCheckpointV1 {
     pub approval_bitset: u8,
     pub approval_count: u8,
     pub accepted: bool,
-    pub accepted_slot: u64,
+    pub finalized_slot: u64,
     pub reserved: [u8; STATE_CHECKPOINT_V1_RESERVED_LEN],
 }
 
@@ -732,7 +1064,6 @@ impl StateCheckpointV1 {
             || self.hard_combined_root == [0; 32]
             || self.external_metadata_observation_root == [0; 32]
             || self.external_raw_balance_observation_root == [0; 32]
-            || self.forbidden_drift_count != 0
             || self.checkpoint_digest == [0; 32]
             || (self.admitted_positive_donation_count == 0)
                 != (self.admitted_positive_donation_root == [0; 32])
@@ -745,13 +1076,16 @@ impl StateCheckpointV1 {
             self.approval_bitset,
             self.approval_count,
         )?;
-        if self.accepted {
-            if self.approval_count < RELEASE1_APPROVAL_THRESHOLD || self.accepted_slot == 0 {
-                return Err(GovernanceError::InvalidRelease1Account);
-            }
-        } else if self.accepted_slot != 0 || self.approval_count >= RELEASE1_APPROVAL_THRESHOLD {
+        if self.approval_count != RELEASE1_APPROVAL_THRESHOLD
+            || self.finalized_slot == 0
+            || self.finalized_observation_slot > self.finalized_slot
+        {
             return Err(GovernanceError::InvalidRelease1Account);
         }
+        if self.accepted != (self.forbidden_drift_count == 0) {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        crate::release1_digest::validate_state_checkpoint_hard_combined_root_v1(self)?;
         Ok(())
     }
 }
@@ -805,11 +1139,8 @@ impl CouncilRotationProposalV1 {
             self.candidate_council,
         ])?;
         if self.current_council_version == 0
-            || self.candidate_council_version
-                != self
-                    .current_council_version
-                    .checked_add(1)
-                    .ok_or(GovernanceError::ArithmeticOverflow)?
+            || self.candidate_council_version <= self.current_council_version
+            || self.candidate_council_version == u64::MAX
             || self.current_council_hash == [0; 32]
             || self.candidate_council_hash == [0; 32]
             || self.target_nonce == 0
@@ -824,8 +1155,51 @@ impl CouncilRotationProposalV1 {
             self.cancellation_approval_bitset,
             self.cancellation_approval_count,
         )?;
+        if self.approval_count > RELEASE1_APPROVAL_THRESHOLD
+            || self.cancellation_approval_count > RELEASE1_APPROVAL_THRESHOLD
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        let cancellation_started = self.cancellation_approval_count != 0;
+        if cancellation_started != (self.cancellation_reason_code != 0) {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        if matches!(self.state, CouncilRotationStateV1::Cancelled) {
+            if self.cancellation_approval_count != RELEASE1_APPROVAL_THRESHOLD
+                || self.terminal_reason_code != self.cancellation_reason_code
+            {
+                return Err(GovernanceError::InvalidRelease1Account);
+            }
+        } else if self.cancellation_approval_count == RELEASE1_APPROVAL_THRESHOLD {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        let approval_shape = match self.state {
+            CouncilRotationStateV1::Draft => self.approval_count < RELEASE1_APPROVAL_THRESHOLD,
+            CouncilRotationStateV1::CouncilApproved
+            | CouncilRotationStateV1::Timelocked
+            | CouncilRotationStateV1::Activated => {
+                self.approval_count == RELEASE1_APPROVAL_THRESHOLD
+            }
+            CouncilRotationStateV1::Cancelled | CouncilRotationStateV1::Expired => true,
+        };
+        if !approval_shape {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
         let activated = matches!(self.state, CouncilRotationStateV1::Activated);
-        if activated != (self.activated_slot != 0) {
+        let expected_terminal_reason = match self.state {
+            CouncilRotationStateV1::Activated => COUNCIL_ROTATION_ACTIVATED_TERMINAL_REASON_V1,
+            CouncilRotationStateV1::Cancelled => self.cancellation_reason_code,
+            CouncilRotationStateV1::Expired => COUNCIL_ROTATION_EXPIRED_TERMINAL_REASON_V1,
+            CouncilRotationStateV1::Draft
+            | CouncilRotationStateV1::CouncilApproved
+            | CouncilRotationStateV1::Timelocked => 0,
+        };
+        if activated != (self.activated_slot != 0)
+            || activated
+                && (self.activated_slot < self.not_before_slot
+                    || self.activated_slot >= self.expiry_slot)
+            || self.terminal_reason_code != expected_terminal_reason
+        {
             return Err(GovernanceError::InvalidRelease1Account);
         }
         Ok(())
@@ -843,6 +1217,7 @@ pub struct EmergencyFreezeResolutionV1 {
     pub protocol_gate: Pubkey,
     pub target_program: Pubkey,
     pub target_programdata: Pubkey,
+    pub emergency_freeze_observation: Pubkey,
     pub frozen_epoch: u64,
     pub freeze_slot: u64,
     pub freeze_reason_code: u16,
@@ -851,11 +1226,20 @@ pub struct EmergencyFreezeResolutionV1 {
     pub not_before_slot: u64,
     pub expiry_slot: u64,
     pub target_nonce: u64,
+    pub observed_program_owner: Pubkey,
+    pub observed_program_executable: bool,
+    pub observed_program_data_length: u64,
+    pub observed_program_header_present: bool,
+    pub observed_linked_programdata: OptionalPubkeyV1,
+    pub observed_programdata_owner: Pubkey,
+    pub observed_programdata_executable: bool,
+    pub observed_programdata_data_length: u64,
+    pub observed_programdata_header_present: bool,
     pub observed_programdata_slot: u64,
-    pub observed_payload_hash: [u8; 32],
+    pub observed_raw_hash_complete: bool,
     pub observed_raw_programdata_hash: [u8; 32],
     pub observed_capacity: u64,
-    pub observed_authority: Pubkey,
+    pub observed_authority: OptionalPubkeyV1,
     pub emergency_checkpoint: Pubkey,
     pub approval_council_version: u64,
     pub approval_council_hash: [u8; 32],
@@ -869,7 +1253,7 @@ pub struct EmergencyFreezeResolutionV1 {
 }
 
 impl EmergencyFreezeResolutionV1 {
-    pub const LEN: usize = 512;
+    pub const LEN: usize = 640;
 
     pub fn validate_schema(&self) -> GovernanceResult<()> {
         validate_header(
@@ -885,32 +1269,393 @@ impl EmergencyFreezeResolutionV1 {
             self.protocol_gate,
             self.target_program,
             self.target_programdata,
-            self.observed_authority,
+            self.emergency_freeze_observation,
             self.emergency_checkpoint,
         ])?;
+        self.observed_linked_programdata.validate()?;
+        self.observed_authority.validate()?;
         if self.frozen_epoch == 0
             || self.freeze_slot == 0
             || self.freeze_reason_code == 0
             || self.freeze_reason_code == BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1
-            || self.creation_slot >= self.not_before_slot
+            || self.creation_slot < self.freeze_slot
+            || self.creation_slot >= self.expiry_slot
+            || self.freeze_slot >= self.not_before_slot
             || self.not_before_slot >= self.expiry_slot
             || self.target_nonce == 0
-            || self.observed_programdata_slot == 0
-            || self.observed_payload_hash == [0; 32]
-            || self.observed_raw_programdata_hash == [0; 32]
-            || self.observed_capacity == 0
             || self.resolution_digest == [0; 32]
         {
             return Err(GovernanceError::InvalidRelease1Account);
         }
+        validate_program_observation_shape(
+            self.observed_program_header_present,
+            self.observed_program_data_length,
+            &self.observed_linked_programdata,
+        )?;
+        validate_raw_programdata_hash_shape(
+            self.observed_raw_hash_complete,
+            &self.observed_raw_programdata_hash,
+            self.observed_programdata_data_length,
+        )?;
+        validate_programdata_observation_shape(
+            self.observed_programdata_header_present,
+            self.observed_programdata_data_length,
+            self.observed_programdata_slot,
+            self.observed_capacity,
+            &self.observed_authority,
+        )?;
         validate_versioned_approval(
             self.approval_council_version,
             &self.approval_council_hash,
             self.approval_bitset,
             self.approval_count,
         )?;
+        if self.approval_count > RELEASE1_APPROVAL_THRESHOLD
+            || matches!(self.state, EmergencyFreezeResolutionStateV1::Cancelled)
+            || self.cancellation_reason_code != 0
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        let approval_shape = match self.state {
+            EmergencyFreezeResolutionStateV1::Draft => {
+                self.approval_count < RELEASE1_APPROVAL_THRESHOLD
+            }
+            EmergencyFreezeResolutionStateV1::CouncilApproved
+            | EmergencyFreezeResolutionStateV1::Timelocked
+            | EmergencyFreezeResolutionStateV1::Executed => {
+                self.approval_count == RELEASE1_APPROVAL_THRESHOLD
+            }
+            EmergencyFreezeResolutionStateV1::Expired => true,
+            EmergencyFreezeResolutionStateV1::Cancelled => false,
+        };
+        if !approval_shape {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
         let executed = matches!(self.state, EmergencyFreezeResolutionStateV1::Executed);
-        if executed != (self.executed_slot != 0) {
+        let expected_terminal_reason = match self.state {
+            EmergencyFreezeResolutionStateV1::Executed => {
+                EMERGENCY_RESOLUTION_EXECUTED_TERMINAL_REASON_V1
+            }
+            EmergencyFreezeResolutionStateV1::Expired => {
+                EMERGENCY_RESOLUTION_EXPIRED_TERMINAL_REASON_V1
+            }
+            EmergencyFreezeResolutionStateV1::Draft
+            | EmergencyFreezeResolutionStateV1::CouncilApproved
+            | EmergencyFreezeResolutionStateV1::Timelocked
+            | EmergencyFreezeResolutionStateV1::Cancelled => 0,
+        };
+        if executed != (self.executed_slot != 0)
+            || executed
+                && (self.executed_slot < self.not_before_slot
+                    || self.executed_slot < self.creation_slot
+                    || self.executed_slot >= self.expiry_slot)
+            || executed
+                && (!self.observed_raw_hash_complete
+                    || self.observed_program_owner != UPGRADEABLE_LOADER_ID
+                    || !self.observed_program_executable
+                    || !self.observed_program_header_present
+                    || !self.observed_linked_programdata.present
+                    || self.observed_linked_programdata.value != self.target_programdata
+                    || self.observed_programdata_owner != UPGRADEABLE_LOADER_ID
+                    || self.observed_programdata_executable
+                    || !self.observed_programdata_header_present
+                    || self.observed_programdata_slot == 0
+                    || self.observed_capacity == 0
+                    || !self.observed_authority.present)
+            || self.terminal_reason_code != expected_terminal_reason
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        Ok(())
+    }
+}
+
+/// Immutable, atomically finalized ProgramData observation made by a guardian
+/// freeze.  The raw hash covers the exact Loader-v3 ProgramData account bytes;
+/// no second full-payload digest is necessary or accepted as a substitute.
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct EmergencyFreezeObservationV1 {
+    pub discriminator: [u8; 8],
+    pub account_version: u8,
+    pub bump: u8,
+    pub initialized: bool,
+    pub finalized: bool,
+    pub controller_program: Pubkey,
+    pub controller_config: Pubkey,
+    pub protocol_gate: Pubkey,
+    pub target_program: Pubkey,
+    pub target_programdata: Pubkey,
+    pub upgradeable_loader: Pubkey,
+    pub controller_authority: Pubkey,
+    pub frozen_epoch: u64,
+    pub freeze_slot: u64,
+    pub freeze_reason_code: u16,
+    pub actual_program_owner: Pubkey,
+    pub actual_program_executable: bool,
+    pub actual_program_data_length: u64,
+    pub program_header_present: bool,
+    pub actual_linked_programdata: OptionalPubkeyV1,
+    pub actual_programdata_owner: Pubkey,
+    pub actual_programdata_executable: bool,
+    pub actual_programdata_data_length: u64,
+    pub programdata_header_present: bool,
+    pub deployed_programdata_slot: u64,
+    pub raw_hash_complete: bool,
+    pub raw_programdata_sha256: [u8; 32],
+    pub capacity: u64,
+    pub observed_authority: OptionalPubkeyV1,
+    pub observation_digest: [u8; 32],
+    pub finalized_slot: u64,
+    pub reserved: [u8; EMERGENCY_FREEZE_OBSERVATION_V1_RESERVED_LEN],
+}
+
+impl EmergencyFreezeObservationV1 {
+    pub const LEN: usize = 512;
+
+    pub fn validate_schema(&self) -> GovernanceResult<()> {
+        validate_header(
+            &self.discriminator,
+            &EMERGENCY_FREEZE_OBSERVATION_V1_DISCRIMINATOR,
+            self.account_version,
+            RELEASE1_ACCOUNT_VERSION_V1,
+            self.initialized,
+            &self.reserved,
+        )?;
+        require_nondefault_keys(&[
+            self.controller_program,
+            self.controller_config,
+            self.protocol_gate,
+            self.target_program,
+            self.target_programdata,
+            self.upgradeable_loader,
+            self.controller_authority,
+        ])?;
+        self.actual_linked_programdata.validate()?;
+        self.observed_authority.validate()?;
+        if !self.finalized
+            || self.frozen_epoch == 0
+            || self.freeze_slot == 0
+            || self.freeze_reason_code == 0
+            || self.freeze_reason_code == BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1
+            || self.observation_digest == [0; 32]
+            || self.finalized_slot != self.freeze_slot
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        validate_program_observation_shape(
+            self.program_header_present,
+            self.actual_program_data_length,
+            &self.actual_linked_programdata,
+        )?;
+        validate_raw_programdata_hash_shape(
+            self.raw_hash_complete,
+            &self.raw_programdata_sha256,
+            self.actual_programdata_data_length,
+        )?;
+        validate_programdata_observation_shape(
+            self.programdata_header_present,
+            self.actual_programdata_data_length,
+            self.deployed_programdata_slot,
+            self.capacity,
+            &self.observed_authority,
+        )?;
+        Ok(())
+    }
+}
+
+/// Immutable failure evidence for one frozen primary proposal.  The optional
+/// actual authority and `programdata_header_present` flag encode exact absence
+/// without inventing a sentinel public key.
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct ProgramDataFailureObservationV1 {
+    pub discriminator: [u8; 8],
+    pub account_version: u8,
+    pub bump: u8,
+    pub initialized: bool,
+    pub finalized: bool,
+    pub controller_config: Pubkey,
+    pub protocol_gate: Pubkey,
+    pub primary_proposal: Pubkey,
+    pub target_program: Pubkey,
+    pub target_programdata: Pubkey,
+    pub frozen_epoch: u64,
+    pub actual_program_owner: Pubkey,
+    pub actual_program_executable: bool,
+    pub actual_program_data_length: u64,
+    pub program_header_present: bool,
+    pub actual_linked_programdata: OptionalPubkeyV1,
+    pub raw_hash_complete: bool,
+    pub actual_raw_programdata_sha256: [u8; 32],
+    pub actual_owner: Pubkey,
+    pub actual_executable: bool,
+    pub actual_data_length: u64,
+    pub programdata_header_present: bool,
+    pub actual_programdata_slot: u64,
+    pub actual_capacity: u64,
+    pub actual_authority: OptionalPubkeyV1,
+    pub mismatch_class: ProgramDataMismatchClassV1,
+    pub failing_chunk_index: u32,
+    pub expected_leaf_hash: [u8; 32],
+    pub actual_leaf_hash: [u8; 32],
+    pub finalized_slot: u64,
+    pub observation_digest: [u8; 32],
+    pub reserved: [u8; PROGRAMDATA_FAILURE_OBSERVATION_V1_RESERVED_LEN],
+}
+
+impl ProgramDataFailureObservationV1 {
+    pub const LEN: usize = 512;
+
+    pub fn validate_schema(&self) -> GovernanceResult<()> {
+        validate_header(
+            &self.discriminator,
+            &PROGRAMDATA_FAILURE_OBSERVATION_V1_DISCRIMINATOR,
+            self.account_version,
+            RELEASE1_ACCOUNT_VERSION_V1,
+            self.initialized,
+            &self.reserved,
+        )?;
+        require_nondefault_keys(&[
+            self.controller_config,
+            self.protocol_gate,
+            self.primary_proposal,
+            self.target_program,
+            self.target_programdata,
+        ])?;
+        self.actual_linked_programdata.validate()?;
+        self.actual_authority.validate()?;
+        if !self.finalized
+            || self.frozen_epoch == 0
+            || self.finalized_slot == 0
+            || self.observation_digest == [0; 32]
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+
+        validate_program_observation_shape(
+            self.program_header_present,
+            self.actual_program_data_length,
+            &self.actual_linked_programdata,
+        )?;
+        validate_raw_programdata_hash_shape(
+            self.raw_hash_complete,
+            &self.actual_raw_programdata_sha256,
+            self.actual_data_length,
+        )?;
+
+        validate_programdata_observation_shape(
+            self.programdata_header_present,
+            self.actual_data_length,
+            self.actual_programdata_slot,
+            self.actual_capacity,
+            &self.actual_authority,
+        )?;
+
+        if !self.programdata_header_present
+            && self.mismatch_class != ProgramDataMismatchClassV1::Header
+        {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+
+        let leaf_failure = matches!(
+            self.mismatch_class,
+            ProgramDataMismatchClassV1::PayloadLeaf | ProgramDataMismatchClassV1::ZeroTail
+        );
+        if leaf_failure && !self.raw_hash_complete {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+        let leaf_shape = if leaf_failure {
+            self.failing_chunk_index != NO_FAILING_CHUNK_INDEX_V1
+                && self.expected_leaf_hash != [0; 32]
+                && self.actual_leaf_hash != [0; 32]
+                && self.expected_leaf_hash != self.actual_leaf_hash
+        } else {
+            self.failing_chunk_index == NO_FAILING_CHUNK_INDEX_V1
+                && self.expected_leaf_hash == [0; 32]
+                && self.actual_leaf_hash == [0; 32]
+        };
+        if !leaf_shape {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+
+        if self.programdata_header_present {
+            let header_shape = match self.mismatch_class {
+                ProgramDataMismatchClassV1::Header => true,
+                ProgramDataMismatchClassV1::Authority => {
+                    self.actual_programdata_slot != 0 && self.actual_capacity != 0
+                }
+                ProgramDataMismatchClassV1::Capacity => {
+                    self.actual_programdata_slot != 0 && self.actual_authority.present
+                }
+                ProgramDataMismatchClassV1::PayloadLeaf | ProgramDataMismatchClassV1::ZeroTail => {
+                    self.actual_programdata_slot != 0
+                        && self.actual_capacity != 0
+                        && self.actual_authority.present
+                }
+            };
+            if !header_shape {
+                return Err(GovernanceError::InvalidRelease1Account);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// One seat's independently replaceable attestation for a not-yet-created
+/// canonical checkpoint.  The checkpoint account is populated only after a
+/// finalizer observes three matching canonical seat attestations.
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct CheckpointAttestationV1 {
+    pub discriminator: [u8; 8],
+    pub account_version: u8,
+    pub bump: u8,
+    pub initialized: bool,
+    pub controller_program: Pubkey,
+    pub controller_config: Pubkey,
+    pub checkpoint: Pubkey,
+    pub subject: Pubkey,
+    pub subject_digest: [u8; 32],
+    pub phase: StateCheckpointPhaseV1,
+    pub checkpoint_digest: [u8; 32],
+    pub council: Pubkey,
+    pub council_version: u64,
+    pub council_hash: [u8; 32],
+    pub gate_epoch: u64,
+    pub seat_index: u8,
+    pub seat_authority: Pubkey,
+    pub attested_slot: u64,
+    pub attestation_digest: [u8; 32],
+    pub reserved: [u8; CHECKPOINT_ATTESTATION_V1_RESERVED_LEN],
+}
+
+impl CheckpointAttestationV1 {
+    pub const LEN: usize = 384;
+
+    pub fn validate_schema(&self) -> GovernanceResult<()> {
+        validate_header(
+            &self.discriminator,
+            &CHECKPOINT_ATTESTATION_V1_DISCRIMINATOR,
+            self.account_version,
+            RELEASE1_ACCOUNT_VERSION_V1,
+            self.initialized,
+            &self.reserved,
+        )?;
+        require_nondefault_keys(&[
+            self.controller_program,
+            self.controller_config,
+            self.checkpoint,
+            self.subject,
+            self.council,
+            self.seat_authority,
+        ])?;
+        if self.subject_digest == [0; 32]
+            || self.checkpoint_digest == [0; 32]
+            || self.council_version == 0
+            || self.council_hash == [0; 32]
+            || self.gate_epoch == 0
+            || self.seat_index >= 5
+            || self.attested_slot == 0
+            || self.attestation_digest == [0; 32]
+        {
             return Err(GovernanceError::InvalidRelease1Account);
         }
         Ok(())
@@ -960,6 +1705,7 @@ pub mod state_checkpoint_v1_offset {
     pub const FORBIDDEN_DRIFT_COUNT: usize = 580;
     pub const CHECKPOINT_DIGEST: usize = 624;
     pub const ACCEPTED: usize = 658;
+    pub const FINALIZED_SLOT: usize = 659;
     pub const RESERVED: usize = 667;
 }
 
@@ -974,10 +1720,78 @@ pub mod council_rotation_v1_offset {
 pub mod emergency_resolution_v1_offset {
     pub const STATE: usize = 11;
     pub const CONTROLLER_CONFIG: usize = 12;
-    pub const FROZEN_EPOCH: usize = 140;
-    pub const RESOLUTION_KIND: usize = 158;
-    pub const RESOLUTION_DIGEST: usize = 377;
-    pub const RESERVED: usize = 421;
+    pub const FROZEN_EPOCH: usize = 172;
+    pub const RESOLUTION_KIND: usize = 190;
+    pub const PROGRAM_OWNER: usize = 223;
+    pub const PROGRAM_EXECUTABLE: usize = 255;
+    pub const PROGRAM_DATA_LENGTH: usize = 256;
+    pub const PROGRAM_HEADER_PRESENT: usize = 264;
+    pub const LINKED_PROGRAMDATA: usize = 265;
+    pub const PROGRAMDATA_OWNER: usize = 298;
+    pub const PROGRAMDATA_EXECUTABLE: usize = 330;
+    pub const PROGRAMDATA_DATA_LENGTH: usize = 331;
+    pub const PROGRAMDATA_HEADER_PRESENT: usize = 339;
+    pub const PROGRAMDATA_SLOT: usize = 340;
+    pub const RAW_HASH_COMPLETE: usize = 348;
+    pub const RAW_HASH: usize = 349;
+    pub const RESOLUTION_DIGEST: usize = 496;
+    pub const RESERVED: usize = 540;
+}
+
+pub mod emergency_freeze_observation_v1_offset {
+    pub const FINALIZED: usize = 11;
+    pub const CONTROLLER_PROGRAM: usize = 12;
+    pub const FROZEN_EPOCH: usize = 236;
+    pub const PROGRAM_OWNER: usize = 254;
+    pub const PROGRAM_EXECUTABLE: usize = 286;
+    pub const PROGRAM_DATA_LENGTH: usize = 287;
+    pub const PROGRAM_HEADER_PRESENT: usize = 295;
+    pub const LINKED_PROGRAMDATA: usize = 296;
+    pub const PROGRAMDATA_OWNER: usize = 329;
+    pub const PROGRAMDATA_EXECUTABLE: usize = 361;
+    pub const PROGRAMDATA_DATA_LENGTH: usize = 362;
+    pub const PROGRAMDATA_HEADER_PRESENT: usize = 370;
+    pub const PROGRAMDATA_SLOT: usize = 371;
+    pub const RAW_HASH_COMPLETE: usize = 379;
+    pub const RAW_HASH: usize = 380;
+    pub const OBSERVATION_DIGEST: usize = 453;
+    pub const RESERVED: usize = 493;
+}
+
+pub mod programdata_failure_observation_v1_offset {
+    pub const FINALIZED: usize = 11;
+    pub const CONTROLLER_CONFIG: usize = 12;
+    pub const FROZEN_EPOCH: usize = 172;
+    pub const PROGRAM_OWNER: usize = 180;
+    pub const PROGRAM_EXECUTABLE: usize = 212;
+    pub const PROGRAM_DATA_LENGTH: usize = 213;
+    pub const PROGRAM_HEADER_PRESENT: usize = 221;
+    pub const LINKED_PROGRAMDATA: usize = 222;
+    pub const RAW_HASH_COMPLETE: usize = 255;
+    pub const RAW_HASH: usize = 256;
+    pub const PROGRAMDATA_OWNER: usize = 288;
+    pub const PROGRAMDATA_EXECUTABLE: usize = 320;
+    pub const PROGRAMDATA_DATA_LENGTH: usize = 321;
+    pub const PROGRAMDATA_HEADER_PRESENT: usize = 329;
+    pub const PROGRAMDATA_SLOT: usize = 330;
+    pub const MISMATCH_CLASS: usize = 379;
+    pub const FAILING_CHUNK_INDEX: usize = 380;
+    pub const OBSERVATION_DIGEST: usize = 456;
+    pub const RESERVED: usize = 488;
+}
+
+pub mod checkpoint_attestation_v1_offset {
+    pub const CONTROLLER_PROGRAM: usize = 11;
+    pub const CONTROLLER_CONFIG: usize = 43;
+    pub const CHECKPOINT: usize = 75;
+    pub const SUBJECT: usize = 107;
+    pub const SUBJECT_DIGEST: usize = 139;
+    pub const PHASE: usize = 171;
+    pub const CHECKPOINT_DIGEST: usize = 172;
+    pub const COUNCIL_VERSION: usize = 236;
+    pub const SEAT_INDEX: usize = 284;
+    pub const ATTESTATION_DIGEST: usize = 325;
+    pub const RESERVED: usize = 357;
 }
 
 fn validate_header<const N: usize>(
@@ -1009,6 +1823,17 @@ fn require_nondefault_keys(keys: &[Pubkey]) -> GovernanceResult<()> {
     } else {
         Ok(())
     }
+}
+
+fn validate_non_decreasing_nonzero_slots(slots: &[u64]) -> GovernanceResult<()> {
+    let mut previous = 0;
+    for slot in slots.iter().copied().filter(|slot| *slot != 0) {
+        if slot < previous {
+            return Err(GovernanceError::InvalidProposalTiming);
+        }
+        previous = slot;
+    }
+    Ok(())
 }
 
 fn validate_approval_pair(bitset: u8, count: u8) -> GovernanceResult<()> {
@@ -1057,6 +1882,58 @@ fn validate_artifact_commitment(
     } else {
         Ok(())
     }
+}
+
+fn validate_programdata_observation_shape(
+    header_present: bool,
+    data_length: u64,
+    deployed_slot: u64,
+    capacity: u64,
+    authority: &OptionalPubkeyV1,
+) -> GovernanceResult<()> {
+    authority.validate()?;
+    if header_present {
+        let expected_data_length = capacity
+            .checked_add(LOADER_V3_PROGRAMDATA_METADATA_LEN_V1)
+            .ok_or(GovernanceError::ArithmeticOverflow)?;
+        if data_length != expected_data_length {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+    } else if deployed_slot != 0 || capacity != 0 || authority.present {
+        return Err(GovernanceError::InvalidRelease1Account);
+    }
+    Ok(())
+}
+
+fn validate_program_observation_shape(
+    header_present: bool,
+    data_length: u64,
+    linked_programdata: &OptionalPubkeyV1,
+) -> GovernanceResult<()> {
+    linked_programdata.validate()?;
+    if header_present {
+        if data_length != LOADER_V3_PROGRAM_ACCOUNT_LEN_V1 || !linked_programdata.present {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
+    } else if linked_programdata.present {
+        return Err(GovernanceError::InvalidRelease1Account);
+    }
+    Ok(())
+}
+
+fn validate_raw_programdata_hash_shape(
+    hash_complete: bool,
+    raw_hash: &[u8; 32],
+    data_length: u64,
+) -> GovernanceResult<()> {
+    let within_atomic_ceiling = data_length <= MAX_ATOMIC_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1;
+    if hash_complete != within_atomic_ceiling
+        || (hash_complete && *raw_hash == [0; 32])
+        || (!hash_complete && *raw_hash != [0; 32])
+    {
+        return Err(GovernanceError::InvalidRelease1Account);
+    }
+    Ok(())
 }
 
 fn artifact_chunk_count_allow_empty(length: u64, chunk_size: u32) -> GovernanceResult<u32> {
