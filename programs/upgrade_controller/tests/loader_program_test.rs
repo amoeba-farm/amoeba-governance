@@ -68,6 +68,7 @@ use upgrade_controller::{
         ModelProgramDataObservation, ModelProposalRequest, ModelSeatTerm, Release1Model,
         Release1ModelAction, Release1ModelOutcome,
     },
+    release1_processor_proposal::GOVERNED_UPGRADE_FREEZE_REASON_V1,
     release1_state::{
         BufferVerificationStatusV1, BufferVerificationV1, ProgramDataFailureObservationV1,
         ProgramDataMismatchClassV1, ProgramDataVerificationStatusV1, ProgramDataVerificationV1,
@@ -1135,6 +1136,19 @@ fn rollback_proposal(
     primary: &UpgradeProposalV2,
 ) -> UpgradeProposalV2 {
     let key = primary.rollback_proposal.value;
+    // A prepared rollback must remain executable beyond the primary expiry
+    // plus the configured rollback delay. Mirror the production lifecycle by
+    // creating it one slot after that minimum offset instead of cloning the
+    // primary proposal's timing verbatim.
+    let creation_slot = primary
+        .creation_slot
+        .checked_add(config.rollback_delay_slots)
+        .and_then(|slot| slot.checked_add(1))
+        .expect("rollback creation slot");
+    let review_start_slot = creation_slot.checked_add(1).expect("rollback review start");
+    let review_end_slot = review_start_slot
+        .checked_add(config.vote_review_slots)
+        .expect("rollback review end");
     let mut rollback = primary.clone();
     rollback.bump = derive_proposal_pda(&harness.controller, &harness.target, 2).1;
     rollback.proposal_class = ProposalClassV1::EmergencyRollback;
@@ -1171,11 +1185,19 @@ fn rollback_proposal(
     rollback.rollback_buffer = OptionalPubkeyV1::none();
     rollback.rollback_artifact_sha256 = [0; 32];
     rollback.rollback_artifact_chunk_root = [0; 32];
-    rollback.not_before_slot = rollback.review_end_slot + config.rollback_delay_slots;
-    rollback.first_approval_slot = rollback.review_start_slot;
-    rollback.council_approved_slot = rollback.review_start_slot;
-    rollback.governance_satisfied_slot = rollback.review_start_slot;
-    rollback.queued_slot = rollback.review_start_slot;
+    rollback.creation_slot = creation_slot;
+    rollback.review_start_slot = review_start_slot;
+    rollback.review_end_slot = review_end_slot;
+    rollback.not_before_slot = review_end_slot
+        .checked_add(config.rollback_delay_slots)
+        .expect("rollback not-before slot");
+    rollback.expiry_slot = creation_slot
+        .checked_add(config.proposal_expiry_slots)
+        .expect("rollback expiry slot");
+    rollback.first_approval_slot = review_start_slot;
+    rollback.council_approved_slot = review_start_slot;
+    rollback.governance_satisfied_slot = review_start_slot;
+    rollback.queued_slot = review_start_slot;
     rollback.frozen_slot = 0;
     rollback.extension_executed_slot = 0;
     rollback.upgrade_executed_slot = 0;
@@ -1515,7 +1537,7 @@ async fn seed_frozen_loader_state(
     gate.epoch += 1;
     gate.active_proposal = harness.proposal;
     gate.freeze_slot = primary.not_before_slot;
-    gate.freeze_reason_code = 1;
+    gate.freeze_reason_code = GOVERNED_UPGRADE_FREEZE_REASON_V1;
     primary.state = ProposalStateV2::Frozen;
     primary.freeze_gate_epoch = gate.epoch;
     primary.first_approval_slot = primary.review_start_slot;
@@ -4759,6 +4781,36 @@ fn active_loader_model(
     model
 }
 
+fn prepare_model_proposal_for_freeze(model: &mut Release1Model, proposal: &UpgradeProposalV2) {
+    let proposal_id = proposal.proposal_id;
+    differential_model_apply(model, Release1ModelAction::AdoptBuffer { proposal_id });
+    differential_model_apply(model, Release1ModelAction::VerifyBuffer { proposal_id });
+    for seat in 0..3 {
+        differential_model_apply(
+            model,
+            Release1ModelAction::ApproveProposal {
+                proposal_id,
+                seat,
+                slot: proposal.review_start_slot,
+            },
+        );
+    }
+    differential_model_apply(
+        model,
+        Release1ModelAction::SatisfyGovernance {
+            proposal_id,
+            slot: proposal.review_start_slot,
+        },
+    );
+    differential_model_apply(
+        model,
+        Release1ModelAction::QueueProposal {
+            proposal_id,
+            slot: proposal.review_start_slot,
+        },
+    );
+}
+
 fn prepare_loader_model_at_accepted_prestate(
     harness: &BufferHarness,
     config: &ControllerConfigV1,
@@ -4784,6 +4836,7 @@ fn prepare_loader_model_at_accepted_prestate(
         Release1ModelOutcome::ProposalCreated(id) => id,
         outcome => panic!("unexpected primary model outcome: {outcome:?}"),
     };
+    prepare_model_proposal_for_freeze(&mut model, primary);
     let rollback_id = match model
         .apply(Release1ModelAction::CreateProposal(ModelProposalRequest {
             class: rollback.proposal_class,
@@ -4801,38 +4854,7 @@ fn prepare_loader_model_at_accepted_prestate(
         outcome => panic!("unexpected rollback model outcome: {outcome:?}"),
     };
     assert_eq!((primary_id, rollback_id), (1, 2));
-    for proposal in [primary, rollback] {
-        let proposal_id = proposal.proposal_id;
-        differential_model_apply(&mut model, Release1ModelAction::AdoptBuffer { proposal_id });
-        differential_model_apply(
-            &mut model,
-            Release1ModelAction::VerifyBuffer { proposal_id },
-        );
-        for seat in 0..3 {
-            differential_model_apply(
-                &mut model,
-                Release1ModelAction::ApproveProposal {
-                    proposal_id,
-                    seat,
-                    slot: proposal.review_start_slot,
-                },
-            );
-        }
-        differential_model_apply(
-            &mut model,
-            Release1ModelAction::SatisfyGovernance {
-                proposal_id,
-                slot: proposal.review_start_slot,
-            },
-        );
-        differential_model_apply(
-            &mut model,
-            Release1ModelAction::QueueProposal {
-                proposal_id,
-                slot: proposal.review_start_slot,
-            },
-        );
-    }
+    prepare_model_proposal_for_freeze(&mut model, rollback);
     differential_model_apply(
         &mut model,
         Release1ModelAction::FreezeProposal {
@@ -4885,6 +4907,25 @@ fn assert_optional_model_proposal(
     }
 }
 
+fn assert_council_hash_projection(
+    actual: [u8; 32],
+    expected: [u8; 32],
+    council: &GovernanceCouncilSetV1,
+    model: &Release1Model,
+) {
+    match (actual == [0; 32], expected == [0; 32]) {
+        (true, true) => {}
+        (false, false) => {
+            // The processor and pure model deliberately use distinct council
+            // hash domains. Compare each hash to its canonical council while
+            // the projection below compares every underlying consensus field.
+            assert_eq!(actual, council.set_hash);
+            assert_eq!(expected, model.council.hash);
+        }
+        _ => panic!("concrete/model council-hash presence must match"),
+    }
+}
+
 async fn assert_loader_model_projection(
     context: &mut ProgramTestContext,
     harness: &BufferHarness,
@@ -4903,11 +4944,20 @@ async fn assert_loader_model_projection(
     );
     assert_eq!(config.guardian, model.graph.guardian);
     assert_eq!(council.version, model.council.version);
-    assert_eq!(council.set_hash, model.council.hash);
+    assert_eq!(council.set_hash, compute_council_set_hash(&council));
+    assert_eq!(council.activation_slot, model.council.activation_slot);
     assert_eq!(
         council.seats.map(|seat| seat.seat_authority),
         model.council.seats
     );
+    assert_eq!(
+        council.seats.map(|seat| ModelSeatTerm {
+            start_slot: seat.term_start_slot,
+            end_slot: seat.term_end_slot,
+        }),
+        model.council.seat_terms
+    );
+    assert!(council.seats.iter().all(|seat| seat.active));
     assert_eq!(gate.status, model.gate.status);
     assert_eq!(gate.epoch, model.gate.epoch);
     assert_eq!(gate.freeze_slot, model.gate.freeze_slot);
@@ -4962,7 +5012,12 @@ async fn assert_loader_model_projection(
             actual.creation_council_version,
             expected.creation_council_version
         );
-        assert_eq!(actual.creation_council_hash, expected.creation_council_hash);
+        assert_council_hash_projection(
+            actual.creation_council_hash,
+            expected.creation_council_hash,
+            &council,
+            model,
+        );
         assert_eq!(actual.creation_slot, expected.timing.creation_slot);
         assert_eq!(actual.review_start_slot, expected.timing.review_start_slot);
         assert_eq!(actual.review_end_slot, expected.timing.review_end_slot);
@@ -4980,9 +5035,11 @@ async fn assert_loader_model_projection(
             actual.cancellation_council_version,
             expected.cancellation_approvals.council_version
         );
-        assert_eq!(
+        assert_council_hash_projection(
             actual.cancellation_council_hash,
-            expected.cancellation_approvals.council_hash
+            expected.cancellation_approvals.council_hash,
+            &council,
+            model,
         );
         assert_eq!(
             actual.cancellation_approval_bitset,
@@ -4996,9 +5053,11 @@ async fn assert_loader_model_projection(
             actual.unfreeze_council_version,
             expected.unfreeze_approvals.council_version
         );
-        assert_eq!(
+        assert_council_hash_projection(
             actual.unfreeze_council_hash,
-            expected.unfreeze_approvals.council_hash
+            expected.unfreeze_approvals.council_hash,
+            &council,
+            model,
         );
         assert_eq!(
             actual.unfreeze_approval_bitset,
@@ -5078,9 +5137,11 @@ async fn assert_loader_model_projection(
                 checkpoint.approval_council_version,
                 expected_checkpoint.approvals.council_version
             );
-            assert_eq!(
+            assert_council_hash_projection(
                 checkpoint.approval_council_hash,
-                expected_checkpoint.approvals.council_hash
+                expected_checkpoint.approvals.council_hash,
+                &council,
+                model,
             );
             assert_eq!(
                 checkpoint.approval_bitset,

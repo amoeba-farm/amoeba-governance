@@ -472,6 +472,12 @@ async fn actual_controller_sbf_max_artifact_buffer_chunk_compute() {
     }
 
     let mut context = test.start_with_context().await;
+    // Genesis-loaded upgradeable programs become executable after the first
+    // bank boundary. Match the full actual-SBF lifecycle harness before the
+    // first controller instruction instead of only rewriting the Clock sysvar.
+    context
+        .warp_to_slot(2)
+        .expect("activate genesis controller SBF");
     let controller_account = context
         .banks_client
         .get_account(controller)
@@ -613,7 +619,10 @@ async fn actual_controller_sbf_max_artifact_buffer_chunk_compute() {
         .expect("commit identical final-chunk transaction");
     let completed: BufferVerificationV1 = state(&mut context, verification_key).await;
     assert_eq!(completed.verified_chunk_count, expected_chunk_count);
-    assert_eq!(completed.status, BufferVerificationStatusV1::Verifying);
+    assert_eq!(
+        completed.status,
+        BufferVerificationStatusV1::ReadyToFinalize
+    );
     assert_eq!(
         completed.verified_chunk_bitmap[(last_chunk_index / 8) as usize]
             & (1 << (last_chunk_index % 8)),
