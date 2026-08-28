@@ -285,10 +285,16 @@ impl ControllerConfigV1 {
             self.initialized,
             &self.reserved,
         )?;
-        let minimum_expiry_slots = self
-            .vote_review_slots
-            .checked_add(self.major_delay_slots)
-            .and_then(|slots| slots.checked_add(1))
+        // The longest ordinary lifecycle begins one slot after creation,
+        // spends a complete council-review window before the major timelock,
+        // and must still retain another complete checkpoint-review window plus
+        // two distinct Loader slots for checked extension and upgrade. Equality
+        // is insufficient because execution at expiry is forbidden.
+        let minimum_expiry_slots = 1u64
+            .checked_add(self.vote_review_slots)
+            .and_then(|slots| slots.checked_add(self.major_delay_slots))
+            .and_then(|slots| slots.checked_add(self.vote_review_slots))
+            .and_then(|slots| slots.checked_add(2))
             .ok_or(GovernanceError::InvalidControllerConfig)?;
         if self.cluster_domain == [0; 32]
             || [

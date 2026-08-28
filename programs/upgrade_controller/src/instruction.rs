@@ -1996,8 +1996,9 @@ pub struct FinalizeCheckpointV1Accounts {
     pub target_program: Pubkey,
     pub target_programdata: Pubkey,
     pub phase_evidence: Pubkey,
-    /// Present only for Poststate and equal to the canonical accepted Prestate
-    /// checkpoint. Other phases have no baseline account in their contract.
+    /// Required for Poststate and for an EmergencyRollback Prestate. It is the
+    /// canonical accepted primary Prestate checkpoint in both cases. Ordinary
+    /// Prestate and Emergency checkpoints omit it.
     pub baseline_checkpoint: Option<Pubkey>,
     pub checkpoint: Pubkey,
     pub checkpoint_attestations: [Pubkey; 3],
@@ -2018,7 +2019,11 @@ pub fn finalize_checkpoint_v1_instruction(
     } else {
         account_meta!(accounts.subject, readonly)
     };
-    assert_eq!(accounts.baseline_checkpoint.is_some(), poststate);
+    let prestate = instruction.candidate.phase == StateCheckpointPhaseV1::Prestate;
+    let emergency = instruction.candidate.phase == StateCheckpointPhaseV1::Emergency;
+    assert!(!emergency || accounts.baseline_checkpoint.is_none());
+    assert!(!poststate || accounts.baseline_checkpoint.is_some());
+    assert!(poststate || prestate || accounts.baseline_checkpoint.is_none());
     let mut metas = vec![
         account_meta!(accounts.payer, signer_writable),
         account_meta!(accounts.controller_config, readonly),
@@ -2149,6 +2154,7 @@ fixed_builder!(
 fixed_builder!(
     ExpireEmergencyResolutionV1Accounts {
         controller_config: readonly,
+        policy: readonly,
         protocol_gate: readonly,
         emergency_resolution: writable,
     },
@@ -2234,7 +2240,7 @@ fixed_builder!(
         prestate_checkpoint: readonly,
         target_programdata: writable,
         target_program: writable,
-        authority_pda: readonly,
+        authority_pda: writable,
         upgradeable_loader: readonly,
         system_program: readonly,
         rent_sysvar: readonly,
@@ -4036,8 +4042,9 @@ mod tests {
             expire_emergency_resolution_v1_instruction,
             ExpireEmergencyResolutionV1Accounts {
                 controller_config: 1 => (false, false),
-                protocol_gate: 2 => (false, false),
-                emergency_resolution: 3 => (false, true),
+                policy: 2 => (false, false),
+                protocol_gate: 3 => (false, false),
+                emergency_resolution: 4 => (false, true),
             },
             ExpireEmergencyResolutionV1 {
                 expected: emergency_expectation(),
@@ -4148,6 +4155,53 @@ mod tests {
                 &expected_accounts,
             );
         }
+
+        // EmergencyRollback Prestate uses the same wire instruction but adds
+        // the primary proposal's accepted Prestate as an immutable baseline.
+        let rollback_prestate = FinalizeCheckpointV1 {
+            candidate: checkpoint_candidate(StateCheckpointPhaseV1::Prestate),
+            expected_council_version: 99,
+            expected_council_hash: bytes(100),
+        };
+        assert_account_contract(
+            finalize_checkpoint_v1_instruction(
+                key(250),
+                FinalizeCheckpointV1Accounts {
+                    payer: key(1),
+                    controller_config: key(2),
+                    policy: key(3),
+                    council: key(4),
+                    protocol_gate: key(5),
+                    subject: key(6),
+                    target_program: key(7),
+                    target_programdata: key(8),
+                    phase_evidence: key(9),
+                    baseline_checkpoint: Some(key(10)),
+                    checkpoint: key(11),
+                    checkpoint_attestations: [key(12), key(13), key(14)],
+                    system_program: key(15),
+                },
+                rollback_prestate.clone(),
+            ),
+            rollback_prestate.pack().to_vec(),
+            &[
+                (1, true, true),
+                (2, false, false),
+                (3, false, false),
+                (4, false, false),
+                (5, false, false),
+                (6, false, false),
+                (7, false, false),
+                (8, false, false),
+                (9, false, false),
+                (10, false, false),
+                (11, false, true),
+                (12, false, false),
+                (13, false, false),
+                (14, false, false),
+                (15, false, false),
+            ],
+        );
     }
 
     #[test]
@@ -4349,7 +4403,7 @@ mod tests {
                 prestate_checkpoint: 5 => (false, false),
                 target_programdata: 6 => (false, true),
                 target_program: 7 => (false, true),
-                authority_pda: 8 => (false, false),
+                authority_pda: 8 => (false, true),
                 upgradeable_loader: 9 => (false, false),
                 system_program: 10 => (false, false),
                 rent_sysvar: 11 => (false, false),

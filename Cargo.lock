@@ -7574,6 +7574,7 @@ dependencies = [
  "borsh 0.10.4",
  "serde",
  "serde_json",
+ "solana-loader-v3-interface",
  "solana-program",
  "solana-program-test",
  "solana-pubkey",

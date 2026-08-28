@@ -245,7 +245,7 @@ fixed_u8_enum_borsh!(ProgramDataMismatchClassV1 {
 });
 
 /// Release 1 code-upgrade proposal.  The field order is the wire order.
-#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+#[derive(Clone, Debug, Eq, PartialEq, BorshSerialize)]
 pub struct UpgradeProposalV2 {
     pub discriminator: [u8; 8],
     pub account_version: u8,
@@ -340,6 +340,218 @@ pub struct UpgradeProposalV2 {
     pub cancellation_reason_code: u16,
     pub terminal_reason_code: u16,
     pub reserved: [u8; UPGRADE_PROPOSAL_V2_RESERVED_LEN],
+}
+
+impl Default for UpgradeProposalV2 {
+    fn default() -> Self {
+        Self {
+            discriminator: [0; 8],
+            account_version: 0,
+            bump: 0,
+            initialized: false,
+            proposal_class: ProposalClassV1::default(),
+            state: ProposalStateV2::default(),
+            creation_gate_status: GateStatusV1::default(),
+            zero_tail_required: false,
+            proposal_flags: 0,
+            proposal_id: 0,
+            target_nonce: 0,
+            creation_slot: 0,
+            cluster_domain: [0; 32],
+            controller_program: Pubkey::default(),
+            controller_config: Pubkey::default(),
+            protocol_gate: Pubkey::default(),
+            policy_version: 0,
+            policy_hash: [0; 32],
+            creation_council_version: 0,
+            creation_council_hash: [0; 32],
+            creation_gate_epoch: 0,
+            freeze_gate_epoch: 0,
+            target_program: Pubkey::default(),
+            target_programdata: Pubkey::default(),
+            upgradeable_loader: Pubkey::default(),
+            authority_pda: Pubkey::default(),
+            canonical_spill_treasury: Pubkey::default(),
+            buffer_pubkey: Pubkey::default(),
+            buffer_loader_owner: Pubkey::default(),
+            buffer_uploader_authority: Pubkey::default(),
+            buffer_final_authority: Pubkey::default(),
+            buffer_verification: Pubkey::default(),
+            programdata_verification: Pubkey::default(),
+            artifact_length: 0,
+            artifact_sha256: [0; 32],
+            artifact_chunk_merkle_root: [0; 32],
+            chunk_hash_domain: [0; 32],
+            chunk_size: 0,
+            chunk_count: 0,
+            source_commit_hash: [0; 32],
+            source_tree_hash: [0; 32],
+            build_input_inventory_hash: [0; 32],
+            reproducible_build_receipt_hash: [0; 32],
+            package_receipt_hash: [0; 32],
+            release_intent_hash: [0; 32],
+            expected_execution_pre_payload_hash: [0; 32],
+            expected_execution_pre_chunk_root: [0; 32],
+            current_raw_programdata_hash: [0; 32],
+            deployed_slot: 0,
+            current_capacity: 0,
+            extension_delta: 0,
+            expected_post_capacity: 0,
+            prestate_checkpoint: Pubkey::default(),
+            required_poststate_checkpoint: Pubkey::default(),
+            checkpoint_schema_id: [0; 32],
+            checkpoint_policy_hash: [0; 32],
+            primary_proposal: OptionalPubkeyV1::default(),
+            rollback_proposal: OptionalPubkeyV1::default(),
+            rollback_buffer: OptionalPubkeyV1::default(),
+            rollback_artifact_sha256: [0; 32],
+            rollback_artifact_chunk_root: [0; 32],
+            vote_requirement: VoteRequirementV1::default(),
+            vote_program: Pubkey::default(),
+            vote_result_pda: Pubkey::default(),
+            review_start_slot: 0,
+            review_end_slot: 0,
+            not_before_slot: 0,
+            expiry_slot: 0,
+            first_approval_slot: 0,
+            council_approved_slot: 0,
+            governance_satisfied_slot: 0,
+            queued_slot: 0,
+            frozen_slot: 0,
+            extension_executed_slot: 0,
+            upgrade_executed_slot: 0,
+            programdata_verified_slot: 0,
+            poststate_accepted_slot: 0,
+            unfreeze_approved_slot: 0,
+            terminal_slot: 0,
+            council_approval_bitset: 0,
+            council_approval_count: 0,
+            cancellation_council_version: 0,
+            cancellation_council_hash: [0; 32],
+            cancellation_approval_bitset: 0,
+            cancellation_approval_count: 0,
+            unfreeze_council_version: 0,
+            unfreeze_council_hash: [0; 32],
+            unfreeze_approval_bitset: 0,
+            unfreeze_approval_count: 0,
+            proposal_digest: [0; 32],
+            cancellation_reason_code: 0,
+            terminal_reason_code: 0,
+            reserved: [0; UPGRADE_PROPOSAL_V2_RESERVED_LEN],
+        }
+    }
+}
+
+impl BorshDeserialize for UpgradeProposalV2 {
+    #[inline(never)]
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        // Borsh's derived struct literal keeps every decoded field temporary
+        // live until the 1,792-byte proposal is assembled. Under SBPF-v0 that
+        // produced a 4,160-byte frame. Populate one proposal allocation in
+        // wire order instead; this is byte-identical Borsh and retains strict
+        // enum/bool/truncation handling from each field decoder.
+        let mut value = Self::default();
+        macro_rules! read_field {
+            ($field:ident) => {
+                value.$field = BorshDeserialize::deserialize_reader(reader)?;
+            };
+        }
+
+        read_field!(discriminator);
+        read_field!(account_version);
+        read_field!(bump);
+        read_field!(initialized);
+        read_field!(proposal_class);
+        read_field!(state);
+        read_field!(creation_gate_status);
+        read_field!(zero_tail_required);
+        read_field!(proposal_flags);
+        read_field!(proposal_id);
+        read_field!(target_nonce);
+        read_field!(creation_slot);
+        read_field!(cluster_domain);
+        read_field!(controller_program);
+        read_field!(controller_config);
+        read_field!(protocol_gate);
+        read_field!(policy_version);
+        read_field!(policy_hash);
+        read_field!(creation_council_version);
+        read_field!(creation_council_hash);
+        read_field!(creation_gate_epoch);
+        read_field!(freeze_gate_epoch);
+        read_field!(target_program);
+        read_field!(target_programdata);
+        read_field!(upgradeable_loader);
+        read_field!(authority_pda);
+        read_field!(canonical_spill_treasury);
+        read_field!(buffer_pubkey);
+        read_field!(buffer_loader_owner);
+        read_field!(buffer_uploader_authority);
+        read_field!(buffer_final_authority);
+        read_field!(buffer_verification);
+        read_field!(programdata_verification);
+        read_field!(artifact_length);
+        read_field!(artifact_sha256);
+        read_field!(artifact_chunk_merkle_root);
+        read_field!(chunk_hash_domain);
+        read_field!(chunk_size);
+        read_field!(chunk_count);
+        read_field!(source_commit_hash);
+        read_field!(source_tree_hash);
+        read_field!(build_input_inventory_hash);
+        read_field!(reproducible_build_receipt_hash);
+        read_field!(package_receipt_hash);
+        read_field!(release_intent_hash);
+        read_field!(expected_execution_pre_payload_hash);
+        read_field!(expected_execution_pre_chunk_root);
+        read_field!(current_raw_programdata_hash);
+        read_field!(deployed_slot);
+        read_field!(current_capacity);
+        read_field!(extension_delta);
+        read_field!(expected_post_capacity);
+        read_field!(prestate_checkpoint);
+        read_field!(required_poststate_checkpoint);
+        read_field!(checkpoint_schema_id);
+        read_field!(checkpoint_policy_hash);
+        read_field!(primary_proposal);
+        read_field!(rollback_proposal);
+        read_field!(rollback_buffer);
+        read_field!(rollback_artifact_sha256);
+        read_field!(rollback_artifact_chunk_root);
+        read_field!(vote_requirement);
+        read_field!(vote_program);
+        read_field!(vote_result_pda);
+        read_field!(review_start_slot);
+        read_field!(review_end_slot);
+        read_field!(not_before_slot);
+        read_field!(expiry_slot);
+        read_field!(first_approval_slot);
+        read_field!(council_approved_slot);
+        read_field!(governance_satisfied_slot);
+        read_field!(queued_slot);
+        read_field!(frozen_slot);
+        read_field!(extension_executed_slot);
+        read_field!(upgrade_executed_slot);
+        read_field!(programdata_verified_slot);
+        read_field!(poststate_accepted_slot);
+        read_field!(unfreeze_approved_slot);
+        read_field!(terminal_slot);
+        read_field!(council_approval_bitset);
+        read_field!(council_approval_count);
+        read_field!(cancellation_council_version);
+        read_field!(cancellation_council_hash);
+        read_field!(cancellation_approval_bitset);
+        read_field!(cancellation_approval_count);
+        read_field!(unfreeze_council_version);
+        read_field!(unfreeze_council_hash);
+        read_field!(unfreeze_approval_bitset);
+        read_field!(unfreeze_approval_count);
+        read_field!(proposal_digest);
+        read_field!(cancellation_reason_code);
+        read_field!(terminal_reason_code);
+        read_field!(reserved);
+        Ok(value)
+    }
 }
 
 impl UpgradeProposalV2 {

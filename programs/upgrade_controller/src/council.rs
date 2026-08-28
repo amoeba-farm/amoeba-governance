@@ -106,6 +106,24 @@ pub fn validate_council_set(
     Ok(())
 }
 
+/// Preserves the Bootstrap V1 guardian capability boundary. The guardian is
+/// allowed to freeze, but it must never acquire a council vote through either
+/// initialization or a later council-set rotation.
+pub fn validate_council_guardian_separation(
+    council: &GovernanceCouncilSetV1,
+    guardian: &Pubkey,
+) -> GovernanceResult<()> {
+    if *guardian == Pubkey::default()
+        || council
+            .seats
+            .iter()
+            .any(|seat| seat.seat_authority == *guardian)
+    {
+        return Err(GovernanceError::InvalidCouncilComposition);
+    }
+    Ok(())
+}
+
 pub(crate) fn record_seat_approval(
     council: &GovernanceCouncilSetV1,
     current_bitset: u8,
