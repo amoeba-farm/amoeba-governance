@@ -77,8 +77,13 @@ python3 "$repo_root/scripts/analyze-sbpf-diagnostics.py" \
   --log "$run_root/build.log" \
   --symbols "$run_root/linked-elf-symbols.txt"
 
-objcopy --dump-section .text="$run_root/deploy-text.bin" "$artifact"
-objcopy --dump-section .text="$run_root/linked-text.bin" "$linked_artifact"
+llvm_objcopy="$HOME/.cache/solana/v1.53/platform-tools/llvm/bin/llvm-objcopy"
+if [[ ! -x "$llvm_objcopy" ]]; then
+  echo "missing pinned SBF llvm-objcopy: $llvm_objcopy" >&2
+  exit 1
+fi
+"$llvm_objcopy" --dump-section .text="$run_root/deploy-text.bin" "$artifact"
+"$llvm_objcopy" --dump-section .text="$run_root/linked-text.bin" "$linked_artifact"
 if ! cmp --silent "$run_root/deploy-text.bin" "$run_root/linked-text.bin"; then
   echo "deploy and unstripped linked .text sections differ" >&2
   exit 1
