@@ -12,8 +12,11 @@ seat key, wallet path, secret name, signature, or transaction authorization.
 - A plan, passing test, simulation, signed packet, or loader success is not
   authority to submit a live transaction.
 - Release 1 provides no private-key, keypair-file, seed-phrase, environment-key,
-  or raw-signature fallback. Wallet, multisig, smart-account, KMS, or hardware
-  execution is injected by the authorized local operator environment.
+  or raw-signature fallback. The direct packaged executor accepts only
+  explicitly injected wallet, KMS, or hardware signer providers. A multisig or
+  smart-account PDA seat must use its own audited CPI flow so `invoke_signed`
+  supplies the runtime signer; it is never represented as raw signature bytes
+  in this executable.
 - Never print the process environment or signer-provider configuration.
 - Use finalized observations and verify the exact cluster genesis before any
   plan is created.
@@ -103,6 +106,10 @@ verify-handoff
 ```
 
 The last three remain planning/verification-only in Release 1 engineering.
+`verify-handoff` runs the package's built-in receipt-v3 verifier and independently
+re-queries exact finalized history, the canonical account inventory, and the
+failed old-authority transaction through the injected read-only source. An
+adapter supplies observations; it cannot supply or override the verdict.
 
 Every plan ID binds the controller Program/config, target Program/ProgramData,
 authority PDA, live ProgramData deployed slot/capacity/authority,

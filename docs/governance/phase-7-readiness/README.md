@@ -1,5 +1,11 @@
 # Phase 7 readiness pack
 
+**Current decision:** NOT READY FOR CEREMONY. The current Release 1 controller
+does not contain the typed PDA-signed checked authority-acceptance path or the
+audited bootstrap activation transition required before it could safely become
+immutable. These files are review artifacts only and must not be treated as an
+executable handoff recipe.
+
 This directory contains planning and independent-verification artifacts only.
 It does not authorize or perform controller deployment, controller
 initialization, controller immutability, Spread bridge activation, ProgramData

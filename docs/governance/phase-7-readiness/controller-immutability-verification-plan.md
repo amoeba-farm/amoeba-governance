@@ -2,6 +2,14 @@
 
 **Status:** verification design only; no authority mutation is authorized
 
+**Current decision:** NOT READY. The current controller cannot perform the
+future checked target-authority handoff with its PDA signer and cannot move the
+initial bootstrap-frozen gate into an independently verified activation state.
+Making that artifact immutable would permanently preserve those missing
+capabilities. No immutability plan may be armed until a future explicitly
+authorized controller version closes both paths with typed, non-arbitrary
+instructions and passes independent review and sacrificial rehearsal.
+
 Controller immutability is a future ceremony boundary because the immutable
 controller becomes the target's upgrade trust root. This plan does not include
 a signing command, key source, transaction packet, or submit path.
@@ -20,6 +28,9 @@ a signing command, key source, transaction packet, or submit path.
 5. The target ProgramData authority has not yet been handed to the controller.
 6. The Spread gate remains frozen/read-only; no service or timer relies on this
    plan to remain available.
+7. The exact candidate contains audited typed paths for checked PDA authority
+   acceptance and one-time bootstrap activation, without arbitrary CPI or an
+   ungoverned unfreeze. The current Release 1 candidate fails this prerequisite.
 
 ## Pre-ceremony observation
 

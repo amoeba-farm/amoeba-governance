@@ -2,6 +2,23 @@
 
 **Status:** planning and verification only; no live handoff is authorized
 
+## Current Release 1 blocker
+
+This plan is not executable by the current Release 1 controller artifact.
+Loader-v3 `SetAuthorityChecked` requires both the current authority and the new
+authority to sign. The intended new authority is the controller authority PDA,
+which cannot be a signer on a top-level Loader instruction. It can sign only
+through a controller CPI using `invoke_signed`, but Release 1 intentionally
+exposes no typed target-authority-handoff instruction.
+
+Do not work around this with unchecked `SetAuthority`, an externally controlled
+replacement key, arbitrary CPI bytes, or a controller made immutable before the
+gap is resolved. A future explicit controller version must add one narrowly
+typed `AcceptTargetAuthorityV1`-style transition, mechanically bind the exact
+initialized config/gate/target/ProgramData/Loader graph and verified bridge,
+invoke only `SetAuthorityChecked`, and pass sacrificial old-authority negative
+tests before controller immutability. That future work is not authorized here.
+
 The future handoff moves exactly one capability: the Spread ProgramData upgrade
 authority, from the then-current external authority to the immutable
 controller's canonical authority PDA. It must not upgrade either program,
@@ -48,10 +65,11 @@ Any drift invalidates the plan before signing and again before submission.
 
 The handoff transaction may contain only bounded canonical ComputeBudget
 instructions, optionally one exact admitted durable-nonce advance, and one
-checked Loader-v3 authority transfer for the exact target ProgramData. It must
-contain no controller instruction, target instruction, loader upgrade/extend/
-close operation, token instruction, arbitrary program instruction, or trailing
-instruction.
+future typed controller handoff instruction. The controller must perform exactly
+one inner checked Loader-v3 authority transfer for the exact target ProgramData,
+with its authority PDA made a signer through `invoke_signed`. It must contain no
+sibling target or Loader instruction, loader upgrade/extend/close operation,
+token instruction, arbitrary program instruction, or trailing instruction.
 
 The new authority is exactly the derived controller authority PDA. `None`, a
 different PDA, a direct key, and any recovery authority are invalid.
