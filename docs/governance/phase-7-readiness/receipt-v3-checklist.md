@@ -8,7 +8,10 @@ checkpoint evidence. A self-reported operator assertion is not evidence.
 
 ## Receipt identity and encoding
 
-- [ ] Exact receipt-v3 schema/version and canonical field ordering.
+- [ ] Exact predeployment schema identity
+  `amoeba-governed-upgrade-receipt-v3-predeployment-r3`, receipt version 3,
+  and canonical field ordering. The earlier internal v3 draft was never frozen
+  or published and is not silently accepted as the same schema.
 - [ ] Strict rejection of unknown versions, fields where forbidden, malformed
   numbers, duplicate identities, noncanonical optional values, and trailing data.
 - [ ] Deterministic receipt ID and canonical JSON SHA-256 reproduce independently.
@@ -43,6 +46,18 @@ checkpoint evidence. A self-reported operator assertion is not evidence.
 - [ ] Token governance canonical defaults and no vote-result evidence.
 - [ ] Approval review start/end, class-selected immutable delay, not-before,
   strict expiry, and no delay shortening.
+- [ ] Proposal class plus committed routine/major/rollback/review/expiry delays
+  deterministically reproduce review start/end, not-before, and expiry.
+- [ ] Sealed-buffer verification precedes first approval; first approval and
+  threshold crossing are inside the review window; governance satisfaction and
+  queue are ordered before freeze.
+- [ ] Ordinary freeze proves `Active -> FrozenForUpgrade`; emergency conversion
+  proves `EmergencyFrozen -> FrozenForUpgrade` with no Active interval. Either
+  path increments the creation epoch exactly once, and separate unfreeze
+  increments the frozen epoch exactly once.
+- [ ] Freeze leaves one complete checkpoint-review window and one execution
+  slot, plus one additional slot when checked extension is required, strictly
+  before expiry.
 - [ ] Proposal ID and target nonce were current at creation; the freeze consumed
   exactly one target nonce and made competitors stale.
 - [ ] Frozen epoch, active proposal, and every lifecycle transition are exact.
