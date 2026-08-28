@@ -22,11 +22,21 @@ Release 1 Phase 4-6 implementation and Phase 7 readiness work on the isolated
 boundary while preserving every Phase 2/3 wire invariant and the safety rules
 below.
 
-The clean local Phase 3 commits are the accepted development baselines, but
-their packet and constructor-proof blockers remain open and must be closed or
-reported. Work in `ameba_spread` is allowed only in its separate isolated
-Release 1 worktree and only for bridge/client/evidence integration; protocol
-economics remain out of scope.
+The clean local Phase 3 commits are the accepted development baselines. The
+isolated Spread Release 1 branch closes the former packet and constructor-proof
+blockers at `8417c53b3af99979ac0ab6f9e1a911eeaf415734` and records the closure at
+`02ebec33eac216245fc49fcaa0383001e3afea75`. Those local commits are prerequisite
+evidence only; they were not pushed or deployed. Work in `ameba_spread` is
+allowed only in its separate isolated Release 1 worktree and only for
+bridge/client/evidence integration; protocol economics remain out of scope.
+
+Release 1 completion remains gated by the current controller source and its
+fresh evidence. In particular, a native processor delegate driving the real
+Loader-v3 is Gate E evidence, not proof that the controller ELF executed. Gate
+F requires the production dispatcher, all typed custody tags, and the complete
+initialize-through-separate-unfreeze lifecycle to execute as actual controller
+SBF under both SBPF v0 and SBPF v2. Do not call ignored, delegated, partial, or
+host-only tests actual-SBF completion.
 
 ## Safety boundary
 
@@ -68,9 +78,9 @@ without a separate authorization.
   the test is running.
 - Bootstrap V1 has five equal, unclassified seat authorities. Any three pass
   ordinary governance; any four pass terminal governance.
-- Amoeba Farm operationally controls three authorities, but company,
-  appointment, affiliation, and signer-kind metadata must not exist in
-  consensus state or quorum logic.
+- No production seat allocation is selected here. Company, appointment,
+  affiliation, and signer-kind metadata must not exist in consensus state or
+  quorum logic.
 - A seat authority may be a direct signer or a PDA signer furnished by another
   program through CPI and `invoke_signed`; no private key or signature bytes
   are accepted by governance.
@@ -89,4 +99,14 @@ cd clients/ts
 npm ci --ignore-scripts --no-audit --no-fund
 npm run typecheck
 npm test
+npm run check:package
+cd ../..
+scripts/build-sbpf-checked.sh v0 /tmp/ameba-gov-sbpf
+scripts/build-sbpf-checked.sh v2 /tmp/ameba-gov-sbpf
 ```
+
+Use a fresh output root for every SBPF run. Keep host Cargo output separate from
+both architecture outputs. Real Loader-v3 tests that consume a locally built
+ELF must identify that artifact explicitly and must report whether the
+controller ran natively or as SBF. An ignored test is an unresolved gate unless
+an evidence command deliberately selects and passes it.
