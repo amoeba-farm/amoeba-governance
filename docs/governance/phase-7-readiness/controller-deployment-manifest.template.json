@@ -1,0 +1,52 @@
+{
+  "schema": "amoeba-controller-deployment-manifest-v1",
+  "template": true,
+  "dryRunOnly": true,
+  "authorizedForSubmission": false,
+  "operationId": "<DERIVE_FROM_CANONICAL_MANIFEST_WITHOUT_THIS_FIELD>",
+  "cluster": {
+    "genesisHash": "<REQUIRED_FINALIZED_GENESIS_HASH>",
+    "clusterDomainSha256": "<REQUIRED_32_BYTE_HEX>",
+    "credentialFreeRpcOriginSha256": "<REQUIRED_32_BYTE_HEX>",
+    "observationCommitment": "finalized"
+  },
+  "controller": {
+    "programId": "<UNASSIGNED_PRODUCTION_CONTROLLER_PROGRAM_ID>",
+    "canonicalProgramData": "<DERIVE_AND_VERIFY>",
+    "initialUpgradeAuthority": "<AUTHORIZED_DEPLOYMENT_CAPABILITY>",
+    "syntheticIdentityForbidden": true
+  },
+  "source": {
+    "repository": "SPACE999978/ameba_gov",
+    "commit": "<EXACT_40_HEX_COMMIT>",
+    "tree": "<EXACT_40_HEX_TREE>",
+    "workingTreeClean": true,
+    "normativeAmendmentSha256": "<REQUIRED_32_BYTE_HEX>",
+    "completionReportSha256": "<REQUIRED_32_BYTE_HEX>"
+  },
+  "build": {
+    "inventorySha256": "<REQUIRED_32_BYTE_HEX>",
+    "rustc": "<PINNED_EXACT_VERSION>",
+    "cargoBuildSbf": "<PINNED_EXACT_VERSION>",
+    "platformTools": "<PINNED_EXACT_VERSION>",
+    "sbpfArchitecture": "<V0_OR_V2_APPROVED_BY_RELEASE_POLICY>",
+    "artifactLength": "<POSITIVE_DECIMAL_STRING>",
+    "artifactSha256": "<REQUIRED_32_BYTE_HEX>",
+    "reproducibleBuildAReceiptSha256": "<REQUIRED_32_BYTE_HEX>",
+    "reproducibleBuildBReceiptSha256": "<REQUIRED_32_BYTE_HEX>"
+  },
+  "preflight": {
+    "release1AllGatesGreen": false,
+    "independentReviewComplete": false,
+    "packetFits": false,
+    "linkedElfStackAnalysisClean": false,
+    "syntheticIdentityRejected": false
+  },
+  "execution": {
+    "signerProvider": "<INJECTED_CAPABILITY_PROVIDER_ONLY>",
+    "explicitArmTokenSha256": "<REQUIRED_ONLY_IN_SEPARATELY_AUTHORIZED_RUN>",
+    "durableNonce": null,
+    "journalPath": "<EXCLUSIVE_LOCAL_JSONL_PATH>",
+    "submit": false
+  }
+}

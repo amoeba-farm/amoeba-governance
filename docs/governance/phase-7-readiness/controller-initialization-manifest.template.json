@@ -1,0 +1,78 @@
+{
+  "schema": "amoeba-controller-initialization-manifest-v1",
+  "template": true,
+  "dryRunOnly": true,
+  "authorizedForSubmission": false,
+  "operationId": "<DERIVE_FROM_CANONICAL_MANIFEST_WITHOUT_THIS_FIELD>",
+  "cluster": {
+    "genesisHash": "<REQUIRED_FINALIZED_GENESIS_HASH>",
+    "clusterDomainSha256": "<REQUIRED_32_BYTE_HEX>",
+    "observationCommitment": "finalized"
+  },
+  "identity": {
+    "controllerProgram": "<UNASSIGNED_PRODUCTION_CONTROLLER_PROGRAM_ID>",
+    "controllerProgramData": "<DERIVE_AND_VERIFY>",
+    "initializerAuthority": "<CURRENT_CONTROLLER_PROGRAMDATA_AUTHORITY>",
+    "targetProgram": "<EXACT_SPREAD_PROGRAM_ID>",
+    "targetProgramData": "<DERIVE_AND_VERIFY>",
+    "upgradeableLoader": "<CANONICAL_LOADER_V3_ID>",
+    "controllerConfig": "<DERIVE_AND_VERIFY>",
+    "controllerAuthorityPda": "<DERIVE_AND_VERIFY>",
+    "protocolGate": "<DERIVE_AND_VERIFY>",
+    "policy": "<DERIVE_VERSION_1_AND_VERIFY>",
+    "council": "<DERIVE_VERSION_1_AND_VERIFY>",
+    "guardian": "<NONDEFAULT_DISTINCT_CAPABILITY>",
+    "canonicalSpillTreasury": "<NONDEFAULT_DISTINCT_TREASURY>"
+  },
+  "council": {
+    "version": "1",
+    "routineThreshold": 3,
+    "terminalThreshold": 4,
+    "equalUnclassifiedSeats": true,
+    "seats": [
+      { "authority": "<SEAT_0_CAPABILITY>", "termStartSlot": "<U64>", "termEndSlot": "<U64>" },
+      { "authority": "<SEAT_1_CAPABILITY>", "termStartSlot": "<U64>", "termEndSlot": "<U64>" },
+      { "authority": "<SEAT_2_CAPABILITY>", "termStartSlot": "<U64>", "termEndSlot": "<U64>" },
+      { "authority": "<SEAT_3_CAPABILITY>", "termStartSlot": "<U64>", "termEndSlot": "<U64>" },
+      { "authority": "<SEAT_4_CAPABILITY>", "termStartSlot": "<U64>", "termEndSlot": "<U64>" }
+    ],
+    "expectedCouncilHash": "<REQUIRED_32_BYTE_HEX>"
+  },
+  "policy": {
+    "version": "1",
+    "activationSlot": "<NONZERO_U64_NOT_AFTER_EXECUTION_SLOT>",
+    "expectedPolicyHash": "<REQUIRED_32_BYTE_HEX>",
+    "routineDelaySlots": "<REVIEWED_NONZERO_U64>",
+    "majorDelaySlots": "<REVIEWED_NONZERO_U64>",
+    "rollbackDelaySlots": "<REVIEWED_NONZERO_U64>",
+    "terminalDelaySlots": "<REVIEWED_NONZERO_U64>",
+    "councilReviewSlots": "<REVIEWED_NONZERO_U64>",
+    "proposalExpirySlots": "<REVIEWED_NONZERO_U64>",
+    "tokenGovernanceEnabled": false,
+    "voteProgram": null,
+    "voteProgramData": null,
+    "voteConfig": null,
+    "voteMint": null
+  },
+  "bootstrapState": {
+    "nextProposalId": "1",
+    "targetNonce": "1",
+    "gateEpoch": "1",
+    "gateStatus": "EmergencyFrozen",
+    "freezeReason": "BootstrapInitializationV1",
+    "activeProposal": null
+  },
+  "observedBeforePlanning": {
+    "controllerArtifactSha256": "<REQUIRED_32_BYTE_HEX>",
+    "controllerRawProgramDataSha256": "<REQUIRED_32_BYTE_HEX>",
+    "controllerCurrentAuthority": "<EXACT_INITIALIZER_AUTHORITY>",
+    "targetRawProgramDataSha256": "<REQUIRED_32_BYTE_HEX>",
+    "targetCurrentAuthority": "<MUST_NOT_ALREADY_EQUAL_CONTROLLER_AUTHORITY_PDA>"
+  },
+  "execution": {
+    "signerProvider": "<INJECTED_CAPABILITY_PROVIDER_ONLY>",
+    "journalPath": "<EXCLUSIVE_LOCAL_JSONL_PATH>",
+    "explicitArmTokenSha256": "<REQUIRED_ONLY_IN_SEPARATELY_AUTHORIZED_RUN>",
+    "submit": false
+  }
+}
