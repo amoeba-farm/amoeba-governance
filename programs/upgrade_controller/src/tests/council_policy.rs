@@ -1,10 +1,11 @@
-use solana_program::hash::hashv;
+use solana_program::{hash::hashv, pubkey::Pubkey};
 
 use crate::{
     council::{
         canonical_council_hash_material, compute_council_set_hash, evaluate_proposal_quorum,
-        evaluate_quorum, record_proposal_approval, record_seat_approval, validate_council_set,
-        ApprovalRequirementV1, COUNCIL_SET_HASH_MATERIAL_LEN, VALID_APPROVAL_MASK,
+        evaluate_quorum, record_proposal_approval, record_seat_approval,
+        validate_council_guardian_separation, validate_council_set, ApprovalRequirementV1,
+        COUNCIL_SET_HASH_MATERIAL_LEN, VALID_APPROVAL_MASK,
     },
     policy::{
         canonical_policy_hash_material, compute_policy_hash, validate_policy,
@@ -78,6 +79,28 @@ fn canonical_bootstrap_policy_config_and_council_are_valid() {
         COUNCIL_SET_HASH_MATERIAL_LEN
     );
     assert_eq!(COUNCIL_SET_HASH_MATERIAL_LEN, 336);
+}
+
+#[test]
+fn guardian_is_never_a_council_seat_capability() {
+    let council = council();
+    let guardian = controller_config().guardian;
+    assert_eq!(
+        validate_council_guardian_separation(&council, &guardian),
+        Ok(())
+    );
+
+    assert_eq!(
+        validate_council_guardian_separation(&council, &Pubkey::default()),
+        Err(GovernanceError::InvalidCouncilComposition)
+    );
+
+    for seat in &council.seats {
+        assert_eq!(
+            validate_council_guardian_separation(&council, &seat.seat_authority),
+            Err(GovernanceError::InvalidCouncilComposition)
+        );
+    }
 }
 
 #[test]

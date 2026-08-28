@@ -55,10 +55,11 @@ fn config_and_gate_static_invariants_fail_closed() {
     }
 
     let mut exact_boundary = controller_config();
-    exact_boundary.proposal_expiry_slots = exact_boundary
-        .vote_review_slots
-        .checked_add(exact_boundary.major_delay_slots)
-        .and_then(|slots| slots.checked_add(1))
+    exact_boundary.proposal_expiry_slots = 1u64
+        .checked_add(exact_boundary.vote_review_slots)
+        .and_then(|slots| slots.checked_add(exact_boundary.major_delay_slots))
+        .and_then(|slots| slots.checked_add(exact_boundary.vote_review_slots))
+        .and_then(|slots| slots.checked_add(2))
         .unwrap();
     assert!(exact_boundary.validate_static().is_err());
     exact_boundary.proposal_expiry_slots += 1;

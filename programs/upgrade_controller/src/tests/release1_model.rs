@@ -3962,3 +3962,681 @@ fn rotation_can_be_evaluated_at_every_proposal_lifecycle_state() {
         );
     }
 }
+
+fn replay_checked_apply(
+    model: &mut Release1Model,
+    action: Release1ModelAction,
+) -> Result<Release1ModelOutcome, Release1ModelError> {
+    let before = model.clone();
+    let before_bytes = to_vec(&before).expect("serialize generated trace prestate");
+    let mut replay = before.clone();
+    let result = model.apply(action.clone());
+    let replay_result = replay.apply(action);
+    assert_eq!(result, replay_result, "reference-model replay diverged");
+    assert_eq!(
+        to_vec(&*model).expect("serialize generated trace result"),
+        to_vec(&replay).expect("serialize generated trace replay"),
+        "reference-model replay produced different consensus bytes"
+    );
+    if result.is_err() {
+        assert_eq!(
+            *model, before,
+            "failed generated action mutated model state"
+        );
+        assert_eq!(
+            to_vec(&*model).expect("serialize generated failure result"),
+            before_bytes,
+            "failed generated action changed serialized model bytes"
+        );
+    }
+    result
+}
+
+fn replay_checked_ok(model: &mut Release1Model, action: Release1ModelAction) {
+    assert_eq!(
+        replay_checked_apply(model, action).expect("generated action must succeed"),
+        Release1ModelOutcome::Applied
+    );
+}
+
+fn generated_quorum(mut seed: u64) -> [u8; 3] {
+    // A tiny deterministic generator is preferable to a new test dependency.
+    // Rejection sampling covers different three-of-five masks and orderings.
+    let mut seats = [u8::MAX; 3];
+    let mut filled = 0;
+    while filled < seats.len() {
+        seed = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let candidate = ((seed >> 32) % 5) as u8;
+        if !seats[..filled].contains(&candidate) {
+            seats[filled] = candidate;
+            filled += 1;
+        }
+    }
+    seats
+}
+
+fn replay_checked_create(model: &mut Release1Model, request: ModelProposalRequest) -> u64 {
+    match replay_checked_apply(model, Release1ModelAction::CreateProposal(request))
+        .expect("generated proposal creation")
+    {
+        Release1ModelOutcome::ProposalCreated(id) => id,
+        outcome => panic!("unexpected generated proposal outcome: {outcome:?}"),
+    }
+}
+
+fn replay_checked_pair(model: &mut Release1Model, seed: u64) -> (u64, u64) {
+    let primary_id = model.next_proposal_id;
+    let rollback_id = primary_id.checked_add(1).expect("generated rollback id");
+    let extension_required = seed & 1 != 0;
+    assert_eq!(
+        replay_checked_create(
+            model,
+            create_request(
+                ProposalClassV1::RoutineUpgrade,
+                extension_required,
+                None,
+                Some(rollback_id),
+                PROPOSAL_SLOT,
+            ),
+        ),
+        primary_id
+    );
+    let rollback_slot = PROPOSAL_SLOT + model.delays.rollback_slots + 1;
+    assert_eq!(
+        replay_checked_create(
+            model,
+            create_request(
+                ProposalClassV1::EmergencyRollback,
+                false,
+                Some(primary_id),
+                None,
+                rollback_slot,
+            ),
+        ),
+        rollback_id
+    );
+    (primary_id, rollback_id)
+}
+
+fn replay_checked_prepare(model: &mut Release1Model, proposal_id: u64, seed: u64) {
+    replay_checked_ok(model, Release1ModelAction::AdoptBuffer { proposal_id });
+    assert_eq!(
+        replay_checked_apply(model, Release1ModelAction::AdoptBuffer { proposal_id }),
+        Err(Release1ModelError::InvalidStateTransition)
+    );
+    replay_checked_ok(model, Release1ModelAction::VerifyBuffer { proposal_id });
+    let timing = model.proposals[&proposal_id].timing;
+    let quorum = generated_quorum(seed);
+    for seat in quorum {
+        replay_checked_ok(
+            model,
+            Release1ModelAction::ApproveProposal {
+                proposal_id,
+                seat,
+                slot: timing.review_start_slot,
+            },
+        );
+    }
+    assert_eq!(
+        replay_checked_apply(
+            model,
+            Release1ModelAction::ApproveProposal {
+                proposal_id,
+                seat: quorum[0],
+                slot: timing.review_start_slot,
+            },
+        ),
+        Err(Release1ModelError::TimingViolation)
+    );
+    replay_checked_ok(
+        model,
+        Release1ModelAction::SatisfyGovernance {
+            proposal_id,
+            slot: timing.review_end_slot,
+        },
+    );
+    replay_checked_ok(
+        model,
+        Release1ModelAction::QueueProposal {
+            proposal_id,
+            slot: timing.review_end_slot,
+        },
+    );
+}
+
+fn replay_checked_checkpoint(
+    model: &mut Release1Model,
+    proposal_id: u64,
+    phase: StateCheckpointPhaseV1,
+    slot: u64,
+    seed: u64,
+) {
+    let quorum = generated_quorum(seed);
+    for seat in quorum {
+        replay_checked_ok(
+            model,
+            Release1ModelAction::AttestCheckpoint {
+                proposal_id,
+                phase,
+                seat,
+                hard_state: hard_state(1),
+                forbidden_drift_count: 0,
+                slot,
+            },
+        );
+    }
+    replay_checked_ok(
+        model,
+        Release1ModelAction::FinalizeCheckpoint {
+            proposal_id,
+            phase,
+            attesting_seats: quorum,
+            slot: slot + 1,
+        },
+    );
+    assert_eq!(
+        replay_checked_apply(
+            model,
+            Release1ModelAction::FinalizeCheckpoint {
+                proposal_id,
+                phase,
+                attesting_seats: quorum,
+                slot: slot + 1,
+            },
+        ),
+        Err(Release1ModelError::InvalidStateTransition)
+    );
+}
+
+fn replay_checked_complete_frozen_proposal(model: &mut Release1Model, proposal_id: u64, seed: u64) {
+    let frozen_slot = model.proposals[&proposal_id].frozen_slot;
+    replay_checked_checkpoint(
+        model,
+        proposal_id,
+        StateCheckpointPhaseV1::Prestate,
+        frozen_slot + 1,
+        seed,
+    );
+    let mut execution_slot = frozen_slot + 3;
+    if model.proposals[&proposal_id].extension_required {
+        assert_eq!(
+            replay_checked_apply(
+                model,
+                Release1ModelAction::ExecuteUpgrade {
+                    proposal_id,
+                    slot: execution_slot,
+                },
+            ),
+            Err(Release1ModelError::InvalidStateTransition)
+        );
+        replay_checked_ok(
+            model,
+            Release1ModelAction::ExtendTarget {
+                proposal_id,
+                slot: execution_slot,
+            },
+        );
+        assert_eq!(
+            replay_checked_apply(
+                model,
+                Release1ModelAction::ExecuteUpgrade {
+                    proposal_id,
+                    slot: execution_slot,
+                },
+            ),
+            Err(Release1ModelError::TimingViolation)
+        );
+        execution_slot += 1;
+    }
+    replay_checked_ok(
+        model,
+        Release1ModelAction::ExecuteUpgrade {
+            proposal_id,
+            slot: execution_slot,
+        },
+    );
+    assert_eq!(
+        replay_checked_apply(
+            model,
+            Release1ModelAction::ExecuteUpgrade {
+                proposal_id,
+                slot: execution_slot,
+            },
+        ),
+        Err(Release1ModelError::InvalidStateTransition)
+    );
+    replay_checked_ok(
+        model,
+        Release1ModelAction::VerifyProgramData {
+            proposal_id,
+            slot: execution_slot,
+        },
+    );
+    replay_checked_checkpoint(
+        model,
+        proposal_id,
+        StateCheckpointPhaseV1::Poststate,
+        execution_slot + 1,
+        seed.rotate_left(17),
+    );
+    let quorum = generated_quorum(seed.rotate_right(11));
+    for seat in quorum {
+        replay_checked_ok(
+            model,
+            Release1ModelAction::ApproveUnfreeze {
+                proposal_id,
+                seat,
+                slot: execution_slot + 3,
+            },
+        );
+    }
+    replay_checked_ok(
+        model,
+        Release1ModelAction::ExecuteUnfreeze {
+            proposal_id,
+            slot: execution_slot + 4,
+        },
+    );
+    assert_eq!(
+        replay_checked_apply(
+            model,
+            Release1ModelAction::ExecuteUnfreeze {
+                proposal_id,
+                slot: execution_slot + 4,
+            },
+        ),
+        Err(Release1ModelError::InvalidGate)
+    );
+}
+
+fn generated_ordinary_trace(seed: u64) {
+    let mut model = active_model();
+    let (primary, rollback) = replay_checked_pair(&mut model, seed);
+    replay_checked_prepare(&mut model, primary, seed);
+    replay_checked_prepare(&mut model, rollback, seed.rotate_left(7));
+    let freeze_slot = model.proposals[&primary].timing.not_before_slot;
+    assert_eq!(
+        replay_checked_apply(
+            &mut model,
+            Release1ModelAction::FreezeProposal {
+                proposal_id: primary,
+                slot: freeze_slot - 1,
+            },
+        ),
+        Err(Release1ModelError::TimingViolation)
+    );
+    replay_checked_ok(
+        &mut model,
+        Release1ModelAction::FreezeProposal {
+            proposal_id: primary,
+            slot: freeze_slot,
+        },
+    );
+    replay_checked_complete_frozen_proposal(&mut model, primary, seed);
+    assert_eq!(model.proposals[&primary].state, ProposalStateV2::Completed);
+    assert_eq!(model.proposals[&rollback].state, ProposalStateV2::Retired);
+    assert_eq!(model.gate.status, GateStatusV1::Active);
+}
+
+fn generated_rollback_trace(seed: u64) {
+    let mut model = active_model();
+    let (primary, rollback) = replay_checked_pair(&mut model, seed & !1);
+    replay_checked_prepare(&mut model, primary, seed);
+    replay_checked_prepare(&mut model, rollback, seed.rotate_left(7));
+    let freeze_slot = model.proposals[&primary].timing.not_before_slot;
+    replay_checked_ok(
+        &mut model,
+        Release1ModelAction::FreezeProposal {
+            proposal_id: primary,
+            slot: freeze_slot,
+        },
+    );
+    replay_checked_checkpoint(
+        &mut model,
+        primary,
+        StateCheckpointPhaseV1::Prestate,
+        freeze_slot + 1,
+        seed,
+    );
+    let execute_slot = freeze_slot + 3;
+    replay_checked_ok(
+        &mut model,
+        Release1ModelAction::ExecuteUpgrade {
+            proposal_id: primary,
+            slot: execute_slot,
+        },
+    );
+    let rollback_delay_slots = model.delays.rollback_slots;
+    assert_eq!(
+        replay_checked_apply(
+            &mut model,
+            Release1ModelAction::ActivateRollback {
+                primary_proposal_id: primary,
+                rollback_proposal_id: rollback,
+                slot: execute_slot + rollback_delay_slots,
+            },
+        ),
+        Err(Release1ModelError::ProgramDataFailureEvidenceRequired)
+    );
+    replay_checked_ok(
+        &mut model,
+        Release1ModelAction::RecordProgramDataFailure {
+            proposal_id: primary,
+            kind: ModelProgramDataFailureKind::PayloadChunk,
+            slot: execute_slot,
+        },
+    );
+    let rollback_slot = execute_slot + rollback_delay_slots;
+    replay_checked_ok(
+        &mut model,
+        Release1ModelAction::ActivateRollback {
+            primary_proposal_id: primary,
+            rollback_proposal_id: rollback,
+            slot: rollback_slot,
+        },
+    );
+    assert_eq!(model.gate.status, GateStatusV1::FrozenForUpgrade);
+    assert_eq!(model.gate.active_proposal, Some(rollback));
+    replay_checked_complete_frozen_proposal(&mut model, rollback, seed.rotate_left(13));
+    assert_eq!(model.proposals[&rollback].state, ProposalStateV2::Completed);
+    assert_eq!(
+        model.proposals[&primary].state,
+        ProposalStateV2::SupersededByRollback
+    );
+}
+
+fn generated_guardian_resume_trace(seed: u64) {
+    let mut model = active_model();
+    let freeze_slot = 30 + (seed % 3);
+    replay_checked_ok(
+        &mut model,
+        Release1ModelAction::GuardianFreeze {
+            guardian: graph().guardian,
+            slot: freeze_slot,
+            reason: 70 + (seed % 100) as u16,
+        },
+    );
+    assert_eq!(
+        replay_checked_apply(
+            &mut model,
+            Release1ModelAction::GuardianFreeze {
+                guardian: graph().guardian,
+                slot: freeze_slot,
+                reason: 70,
+            },
+        ),
+        Err(Release1ModelError::InvalidGate)
+    );
+    let resolution_id = match replay_checked_apply(
+        &mut model,
+        Release1ModelAction::CreateEmergencyResolution {
+            slot: freeze_slot + 1,
+        },
+    )
+    .expect("generated emergency resolution")
+    {
+        Release1ModelOutcome::EmergencyResolutionCreated(id) => id,
+        outcome => panic!("unexpected generated emergency outcome: {outcome:?}"),
+    };
+    let approval_slot = model.emergency_resolutions[&resolution_id].not_before_slot;
+    assert!(replay_checked_apply(
+        &mut model,
+        Release1ModelAction::ApproveEmergencyResolution {
+            resolution_id,
+            seat: 0,
+            slot: approval_slot - 1,
+        },
+    )
+    .is_err());
+    let quorum = generated_quorum(seed);
+    for seat in quorum {
+        replay_checked_ok(
+            &mut model,
+            Release1ModelAction::ApproveEmergencyResolution {
+                resolution_id,
+                seat,
+                slot: approval_slot,
+            },
+        );
+    }
+    replay_checked_ok(
+        &mut model,
+        Release1ModelAction::QueueEmergencyResolution {
+            resolution_id,
+            slot: approval_slot,
+        },
+    );
+    for seat in generated_quorum(seed.rotate_left(9)) {
+        replay_checked_ok(
+            &mut model,
+            Release1ModelAction::AttestEmergencyCheckpoint {
+                resolution_id,
+                seat,
+                hard_state: hard_state(1),
+                forbidden_drift_count: 0,
+                slot: approval_slot + 1,
+            },
+        );
+    }
+    replay_checked_ok(
+        &mut model,
+        Release1ModelAction::FinalizeEmergencyCheckpoint {
+            resolution_id,
+            attesting_seats: generated_quorum(seed.rotate_left(9)),
+            slot: approval_slot + 2,
+        },
+    );
+    replay_checked_ok(
+        &mut model,
+        Release1ModelAction::ExecuteEmergencyResume {
+            resolution_id,
+            slot: approval_slot + 3,
+        },
+    );
+    assert_eq!(model.gate.status, GateStatusV1::Active);
+    assert_eq!(
+        model.emergency_resolutions[&resolution_id].state,
+        EmergencyFreezeResolutionStateV1::Executed
+    );
+}
+
+fn generated_rotation_and_terminal_trace(seed: u64) {
+    let mut model = active_model();
+    let primary_id = model.next_proposal_id;
+    let rollback_id = primary_id + 1;
+    let primary = replay_checked_create(
+        &mut model,
+        create_request(
+            ProposalClassV1::RoutineUpgrade,
+            false,
+            None,
+            Some(rollback_id),
+            PROPOSAL_SLOT,
+        ),
+    );
+    let cancellation_slot = model.proposals[&primary].timing.review_start_slot;
+    let cancellation_quorum = generated_quorum(seed);
+    for seat in cancellation_quorum {
+        replay_checked_ok(
+            &mut model,
+            Release1ModelAction::ApproveCancellation {
+                proposal_id: primary,
+                seat,
+                slot: cancellation_slot,
+                reason: 81,
+            },
+        );
+    }
+    assert_eq!(model.proposals[&primary].state, ProposalStateV2::Cancelled);
+    assert_eq!(
+        replay_checked_apply(
+            &mut model,
+            Release1ModelAction::ApproveCancellation {
+                proposal_id: primary,
+                seat: cancellation_quorum[0],
+                slot: cancellation_slot,
+                reason: 81,
+            },
+        ),
+        Err(Release1ModelError::InvalidStateTransition)
+    );
+
+    let creation_slot = PROPOSAL_SLOT + 1;
+    let expiring = replay_checked_create(
+        &mut model,
+        create_request(
+            ProposalClassV1::RoutineUpgrade,
+            false,
+            None,
+            Some(rollback_id + 1),
+            creation_slot,
+        ),
+    );
+    let expiry = model.proposals[&expiring].timing.expiry_slot;
+    assert_eq!(
+        replay_checked_apply(
+            &mut model,
+            Release1ModelAction::ExpireProposal {
+                proposal_id: expiring,
+                slot: expiry - 1,
+            },
+        ),
+        Err(Release1ModelError::InvalidStateTransition)
+    );
+    replay_checked_ok(
+        &mut model,
+        Release1ModelAction::ExpireProposal {
+            proposal_id: expiring,
+            slot: expiry,
+        },
+    );
+
+    let rotation_slot = expiry + 1;
+    let candidate_version = model.next_candidate_council_version;
+    let activation_slot = rotation_slot + model.delays.major_slots;
+    assert_eq!(
+        replay_checked_apply(
+            &mut model,
+            Release1ModelAction::CreateCandidateCouncilSet {
+                candidate_version,
+                candidate_seats: seats(80),
+                candidate_seat_terms: seat_terms(1, 10_000),
+                activation_slot,
+                slot: rotation_slot,
+            },
+        )
+        .expect("generated candidate council"),
+        Release1ModelOutcome::CandidateCouncilCreated(candidate_version)
+    );
+    let rotation_id = match replay_checked_apply(
+        &mut model,
+        Release1ModelAction::CreateCouncilRotation {
+            candidate_version,
+            slot: rotation_slot,
+        },
+    )
+    .expect("generated rotation")
+    {
+        Release1ModelOutcome::CouncilRotationCreated(id) => id,
+        outcome => panic!("unexpected generated rotation outcome: {outcome:?}"),
+    };
+    let rotation_quorum = generated_quorum(seed.rotate_right(5));
+    for seat in rotation_quorum {
+        replay_checked_ok(
+            &mut model,
+            Release1ModelAction::ApproveCouncilRotation {
+                rotation_id,
+                seat,
+                slot: rotation_slot,
+            },
+        );
+    }
+    replay_checked_ok(
+        &mut model,
+        Release1ModelAction::QueueCouncilRotation {
+            rotation_id,
+            slot: rotation_slot,
+        },
+    );
+    assert!(replay_checked_apply(
+        &mut model,
+        Release1ModelAction::ActivateCouncilRotation {
+            rotation_id,
+            slot: activation_slot - 1,
+        },
+    )
+    .is_err());
+    replay_checked_ok(
+        &mut model,
+        Release1ModelAction::ActivateCouncilRotation {
+            rotation_id,
+            slot: activation_slot,
+        },
+    );
+    assert_eq!(model.council.version, candidate_version);
+}
+
+#[test]
+fn generated_release1_transition_traces_are_deterministic_atomic_and_complete() {
+    // These generated traces vary quorum masks/order, extension choice, slots,
+    // and terminal path while replaying every action against an independent
+    // clone.  They supplement the exhaustive edge and mask tables above with
+    // long stateful sequences that mix accepted and rejected actions.
+    for seed in 0..48 {
+        match seed % 4 {
+            0 => generated_ordinary_trace(seed),
+            1 => generated_rollback_trace(seed),
+            2 => generated_guardian_resume_trace(seed),
+            _ => generated_rotation_and_terminal_trace(seed),
+        }
+    }
+
+    let mut proposal_overflow = active_model();
+    proposal_overflow.next_proposal_id = u64::MAX;
+    assert_eq!(
+        replay_checked_apply(
+            &mut proposal_overflow,
+            Release1ModelAction::CreateProposal(create_request(
+                ProposalClassV1::RoutineUpgrade,
+                false,
+                None,
+                Some(1),
+                PROPOSAL_SLOT,
+            )),
+        ),
+        Err(Release1ModelError::ArithmeticOverflow)
+    );
+
+    let mut epoch_overflow = active_model();
+    epoch_overflow.gate.epoch = u64::MAX;
+    assert_eq!(
+        replay_checked_apply(
+            &mut epoch_overflow,
+            Release1ModelAction::GuardianFreeze {
+                guardian: graph().guardian,
+                slot: 30,
+                reason: 91,
+            },
+        ),
+        Err(Release1ModelError::ArithmeticOverflow)
+    );
+
+    let mut nonce_overflow = active_model();
+    nonce_overflow.target_nonce = u64::MAX;
+    let (primary, rollback) = replay_checked_pair(&mut nonce_overflow, 0);
+    replay_checked_prepare(&mut nonce_overflow, primary, 1);
+    replay_checked_prepare(&mut nonce_overflow, rollback, 2);
+    let freeze_slot = nonce_overflow.proposals[&primary].timing.not_before_slot;
+    assert_eq!(
+        replay_checked_apply(
+            &mut nonce_overflow,
+            Release1ModelAction::FreezeProposal {
+                proposal_id: primary,
+                slot: freeze_slot,
+            },
+        ),
+        Err(Release1ModelError::ArithmeticOverflow)
+    );
+}

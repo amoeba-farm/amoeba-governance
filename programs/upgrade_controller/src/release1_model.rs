@@ -160,6 +160,10 @@ impl ModelDelays {
         let required = 1u64
             .checked_add(self.review_slots)
             .and_then(|value| value.checked_add(self.major_slots))
+            .and_then(|value| value.checked_add(self.review_slots))
+            // Worst-case frozen execution reserves the protected-checkpoint
+            // window, checked extension, and a strictly later upgrade slot.
+            .and_then(|value| value.checked_add(2))
             .ok_or(Release1ModelError::ArithmeticOverflow)?;
         if self.proposal_expiry_slots <= required {
             return Err(Release1ModelError::InvalidTiming);
@@ -1656,6 +1660,7 @@ impl Release1Model {
         {
             return Err(Release1ModelError::TimingViolation);
         }
+        self.require_freeze_execution_runway(&proposal, slot)?;
         if !self.pinned_initial_quorum_complete(&proposal)? {
             return Err(Release1ModelError::QuorumNotSatisfied);
         }
@@ -1685,6 +1690,7 @@ impl Release1Model {
         {
             return Err(Release1ModelError::TimingViolation);
         }
+        self.require_freeze_execution_runway(&proposal, slot)?;
         if !self.pinned_initial_quorum_complete(&proposal)? {
             return Err(Release1ModelError::QuorumNotSatisfied);
         }
@@ -2044,6 +2050,7 @@ impl Release1Model {
         {
             return Err(Release1ModelError::InvalidRollbackLink);
         }
+        self.require_freeze_execution_runway(&rollback, slot)?;
         let rollback_ready_slot = primary
             .upgraded_slot
             .checked_add(self.delays.rollback_slots)
@@ -2102,6 +2109,22 @@ impl Release1Model {
         rollback.state = ProposalStateV2::Frozen;
         rollback.freeze_gate_epoch = epoch;
         rollback.frozen_slot = slot;
+        Ok(())
+    }
+
+    fn require_freeze_execution_runway(
+        &self,
+        proposal: &ModelProposal,
+        slot: u64,
+    ) -> Release1ModelResult<()> {
+        let execution_slots = if proposal.extension_required { 2 } else { 1 };
+        let horizon = slot
+            .checked_add(self.delays.review_slots)
+            .and_then(|value| value.checked_add(execution_slots))
+            .ok_or(Release1ModelError::ArithmeticOverflow)?;
+        if horizon >= proposal.timing.expiry_slot {
+            return Err(Release1ModelError::TimingViolation);
+        }
         Ok(())
     }
 
