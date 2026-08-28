@@ -10,7 +10,7 @@ permissions:
 jobs:
   native-and-parity:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - name: Check out exact source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -40,13 +40,13 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Rust Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
       - name: Rust unit and ProgramTest
-        run: cargo test --workspace --all-targets
+        run: cargo test --locked --workspace --all-targets
 
       - name: Rust release build
-        run: cargo build --workspace --release
+        run: cargo build --locked --workspace --release
 
       - name: TypeScript install
         working-directory: clients/ts
@@ -56,7 +56,14 @@ jobs:
         working-directory: clients/ts
         run: npm run typecheck
 
-      - name: TypeScript tests and fixture drift
+      - name: Frozen schema and bridge fixture drift
+        working-directory: clients/ts
+        run: |
+          npm run check:vectors
+          npm run check:bridge
+          npm run check:release1-vectors
+
+      - name: TypeScript tests
         working-directory: clients/ts
         run: npm test
 
@@ -64,9 +71,28 @@ jobs:
         working-directory: clients/ts
         run: npm run check:package
 
+      - name: Verify Release 1 evidence is final and safety-bounded
+        shell: bash
+        run: |
+          for report in \
+            docs/governance/release-1-completion-report.md \
+            docs/governance/phase-7-readiness-report.md; do
+            test -f "$report"
+            if grep --fixed-strings --quiet 'PENDING_FINAL' "$report"; then
+              echo "$report still contains pending evidence" >&2
+              exit 1
+            fi
+          done
+          grep --fixed-strings --quiet \
+            'No final production controller ID or real seat key is populated.' \
+            docs/governance/release-1-completion-report.md
+          grep --fixed-strings --quiet \
+            'This report neither authorizes nor records a push, `main` update' \
+            docs/governance/phase-7-readiness-report.md
+
   sbpf-diagnostics:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 180
     steps:
       - name: Check out exact source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -106,3 +132,103 @@ jobs:
       - name: Build and analyze SBPF v2
         shell: bash
         run: scripts/build-sbpf-checked.sh v2 "$RUNNER_TEMP/ameba-gov-sbpf"
+
+      - name: Rebuild SBPF v0 and v2 from clean output roots
+        shell: bash
+        run: |
+          scripts/build-sbpf-checked.sh v0 "$RUNNER_TEMP/ameba-gov-sbpf-repro"
+          scripts/build-sbpf-checked.sh v2 "$RUNNER_TEMP/ameba-gov-sbpf-repro"
+
+      - name: Verify reproducible SBPF artifacts
+        shell: bash
+        run: |
+          for arch in v0 v2; do
+            first="$RUNNER_TEMP/ameba-gov-sbpf/$arch/deploy/upgrade_controller.so"
+            second="$RUNNER_TEMP/ameba-gov-sbpf-repro/$arch/deploy/upgrade_controller.so"
+            cmp --silent "$first" "$second"
+            test "$(stat --format=%s "$first")" = "$(stat --format=%s "$second")"
+            test "$(sha256sum "$first" | cut -d ' ' -f 1)" = \
+              "$(sha256sum "$second" | cut -d ' ' -f 1)"
+          done
+
+      # Gate E deliberately uses the native controller processor delegate while
+      # invoking the real Loader-v3 against the exact freshly built candidate.
+      - name: Gate E real Loader-v3 rehearsal (native controller delegate)
+        shell: bash
+        run: |
+          artifact="$RUNNER_TEMP/ameba-gov-sbpf/v0/deploy/upgrade_controller.so"
+          export BPF_OUT_DIR="$RUNNER_TEMP/ameba-gov-sbpf/v0/deploy"
+          export AMOEBA_LOADER_TEST_ARTIFACT="$artifact"
+          export AMOEBA_LOADER_TEST_ARTIFACT_SHA256="$(sha256sum "$artifact" | cut -d ' ' -f 1)"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-loader-gate-e"
+          cargo test --locked -p upgrade_controller --test loader_program_test \
+            real_loader_ -- --ignored --test-threads=1
+
+      # Gate F executes the production dispatcher as actual controller SBF,
+      # including the complete happy path, former-authority rejection, and the
+      # continuously frozen recoverable rollback path under both SBPF targets.
+      - name: Gate F complete actual-controller-SBF lifecycle (v0)
+        shell: bash
+        run: |
+          artifact="$RUNNER_TEMP/ameba-gov-sbpf/v0/deploy/upgrade_controller.so"
+          export BPF_OUT_DIR="$RUNNER_TEMP/ameba-gov-sbpf/v0/deploy"
+          export AMOEBA_LOADER_TEST_ARTIFACT="$artifact"
+          export AMOEBA_LOADER_TEST_ARTIFACT_SHA256="$(sha256sum "$artifact" | cut -d ' ' -f 1)"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-loader-gate-f-v0"
+          cargo test --locked -p upgrade_controller --test loader_program_test \
+            actual_controller_sbf_ -- --ignored --test-threads=1
+
+      - name: Gate F model/processor differential through real Loader-v3 (v0)
+        shell: bash
+        run: |
+          artifact="$RUNNER_TEMP/ameba-gov-sbpf/v0/deploy/upgrade_controller.so"
+          export BPF_OUT_DIR="$RUNNER_TEMP/ameba-gov-sbpf/v0/deploy"
+          export AMOEBA_LOADER_TEST_ARTIFACT="$artifact"
+          export AMOEBA_LOADER_TEST_ARTIFACT_SHA256="$(sha256sum "$artifact" | cut -d ' ' -f 1)"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-loader-differential-v0"
+          cargo test --locked -p upgrade_controller --test loader_program_test \
+            release1_model_differential_through_real_loader_and_separate_unfreeze \
+            -- --ignored --exact --test-threads=1
+
+      - name: Maximum artifact chunk actual-controller-SBF benchmark (v0)
+        shell: bash
+        run: |
+          export BPF_OUT_DIR="$RUNNER_TEMP/ameba-gov-sbpf/v0/deploy"
+          export AMOEBA_SBPF_TARGET=v0
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-max-artifact-v0"
+          cargo test --locked -p upgrade_controller --test max_artifact_chunk_sbf \
+            actual_controller_sbf_max_artifact_buffer_chunk_compute \
+            -- --ignored --exact --test-threads=1
+
+      - name: Gate F complete actual-controller-SBF lifecycle (v2)
+        shell: bash
+        run: |
+          artifact="$RUNNER_TEMP/ameba-gov-sbpf/v2/deploy/upgrade_controller.so"
+          export BPF_OUT_DIR="$RUNNER_TEMP/ameba-gov-sbpf/v2/deploy"
+          export AMOEBA_LOADER_TEST_ARTIFACT="$artifact"
+          export AMOEBA_LOADER_TEST_ARTIFACT_SHA256="$(sha256sum "$artifact" | cut -d ' ' -f 1)"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-loader-gate-f-v2"
+          cargo test --locked -p upgrade_controller --test loader_program_test \
+            actual_controller_sbf_ -- --ignored --test-threads=1
+
+      - name: Gate F model/processor differential through real Loader-v3 (v2)
+        shell: bash
+        run: |
+          artifact="$RUNNER_TEMP/ameba-gov-sbpf/v2/deploy/upgrade_controller.so"
+          export BPF_OUT_DIR="$RUNNER_TEMP/ameba-gov-sbpf/v2/deploy"
+          export AMOEBA_LOADER_TEST_ARTIFACT="$artifact"
+          export AMOEBA_LOADER_TEST_ARTIFACT_SHA256="$(sha256sum "$artifact" | cut -d ' ' -f 1)"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-loader-differential-v2"
+          cargo test --locked -p upgrade_controller --test loader_program_test \
+            release1_model_differential_through_real_loader_and_separate_unfreeze \
+            -- --ignored --exact --test-threads=1
+
+      - name: Maximum artifact chunk actual-controller-SBF benchmark (v2)
+        shell: bash
+        run: |
+          export BPF_OUT_DIR="$RUNNER_TEMP/ameba-gov-sbpf/v2/deploy"
+          export AMOEBA_SBPF_TARGET=v2
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-max-artifact-v2"
+          cargo test --locked -p upgrade_controller --test max_artifact_chunk_sbf \
+            actual_controller_sbf_max_artifact_buffer_chunk_compute \
+            -- --ignored --exact --test-threads=1
