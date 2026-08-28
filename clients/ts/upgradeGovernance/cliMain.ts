@@ -14,6 +14,11 @@ export const UPGRADE_GOVERNANCE_EXECUTABLE_USAGE_V1 = `Usage:
 The executable contains no wallet, keypair, RPC, or submission fallback. The
 explicit local adapter module must inject finalized reads, planning, signing,
 journaling, locking, and submission capabilities.
+
+verify-handoff requires payload.clusterDomainHex plus payload.receipt. The
+built-in verifier computes the verdict after independently re-querying the
+finalized source supplied by the adapter; adapter-provided verdicts are not
+accepted.
 `;
 
 export interface UpgradeGovernanceExecutableAdapterModuleV1 {

@@ -1,4 +1,5 @@
 import {
+  ComputeBudgetProgram,
   PublicKey,
   TransactionInstruction,
   type AccountMeta,
@@ -1618,6 +1619,39 @@ export function buildCreateEmergencyResolutionV1Instruction(programId: PublicKey
 
 export interface ExecuteEmergencyResolutionV1Accounts { controllerConfig: PublicKey; policy: PublicKey; council: PublicKey; protocolGate: PublicKey; emergencyResolution: PublicKey; emergencyFreezeObservation: PublicKey; emergencyCheckpoint: PublicKey; targetProgram: PublicKey; targetProgramdata: PublicKey; upgradeableLoader: PublicKey; authorityPda: PublicKey; instructionsSysvar: PublicKey }
 export function buildExecuteEmergencyResolutionV1Instruction(programId: PublicKey, a: ExecuteEmergencyResolutionV1Accounts, v: ExecuteEmergencyResolutionV1): TransactionInstruction { return ix(programId, [ro(a.controllerConfig), ro(a.policy), ro(a.council), rw(a.protocolGate), rw(a.emergencyResolution), ro(a.emergencyFreezeObservation), ro(a.emergencyCheckpoint), ro(a.targetProgram), ro(a.targetProgramdata), ro(a.upgradeableLoader), ro(a.authorityPda), ro(a.instructionsSysvar)], encodeExecuteEmergencyResolutionV1(v)); }
+
+/**
+ * Builds the only top-level envelope admitted by emergency resume: one
+ * canonical compute-unit limit, one canonical compute-unit price, then the
+ * exact typed controller instruction. Signing and submission remain injected
+ * operator responsibilities.
+ */
+export function buildExecuteEmergencyResolutionEnvelopeV1(
+  controllerInstruction: TransactionInstruction,
+  computeUnitLimit: number,
+  computeUnitPriceMicroLamports: bigint,
+): readonly TransactionInstruction[] {
+  integer(computeUnitLimit, MAX_ENVELOPE_COMPUTE_UNIT_LIMIT_V1, "computeUnitLimit");
+  if (computeUnitLimit === 0) throw new RangeError("computeUnitLimit must be nonzero");
+  if (
+    computeUnitPriceMicroLamports < 0n
+    || computeUnitPriceMicroLamports > MAX_ENVELOPE_COMPUTE_UNIT_PRICE_MICRO_LAMPORTS_V1
+  ) {
+    throw new RangeError("computeUnitPriceMicroLamports is outside the Release 1 bound");
+  }
+  if (
+    controllerInstruction.data.length !== EXECUTE_EMERGENCY_RESOLUTION_V1_LEN
+    || controllerInstruction.data[0] !== EXECUTE_EMERGENCY_RESOLUTION_V1_TAG
+    || controllerInstruction.keys.length !== 12
+  ) {
+    throw new Error("emergency resolution envelope requires the exact typed controller instruction");
+  }
+  return [
+    ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnitLimit }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: computeUnitPriceMicroLamports }),
+    controllerInstruction,
+  ];
+}
 
 export interface AdoptBufferV1Accounts { payer: PublicKey; controllerConfig: PublicKey; protocolGate: PublicKey; proposal: PublicKey; buffer: PublicKey; uploaderAuthority: PublicKey; authorityPda: PublicKey; bufferVerification: PublicKey; upgradeableLoader: PublicKey; systemProgram: PublicKey }
 export function buildAdoptBufferV1Instruction(programId: PublicKey, a: AdoptBufferV1Accounts, v: AdoptBufferV1): TransactionInstruction { return ix(programId, [ws(a.payer), ro(a.controllerConfig), ro(a.protocolGate), rw(a.proposal), rw(a.buffer), rs(a.uploaderAuthority), ro(a.authorityPda), rw(a.bufferVerification), ro(a.upgradeableLoader), ro(a.systemProgram)], encodeAdoptBufferV1(v)); }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { PublicKey, type TransactionInstruction } from "@solana/web3.js";
+import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { VERIFICATION_BITMAP_BYTES_V1 } from "./artifactMerkleV1.js";
 import {
   ACTIVATE_ROLLBACK_V1_LEN,
@@ -48,6 +48,7 @@ import {
   buildApproveUnfreezeV1Instruction,
   buildCloseAbandonedBufferV1Instruction,
   buildCreateEmergencyResolutionV1Instruction,
+  buildExecuteEmergencyResolutionEnvelopeV1,
   buildExecuteEmergencyResolutionV1Instruction,
   buildExecuteUnfreezeV1Instruction,
   buildExecuteUpgradeV1Instruction,
@@ -685,4 +686,42 @@ test("typed builders freeze exact account order and privilege flags", () => {
   assertLayout(buildCloseAbandonedBufferV1Instruction(program, { controllerConfig: k[0]!, protocolGate: k[1]!, proposal: k[2]!, bufferVerification: k[3]!, buffer: k[4]!, canonicalSpillTreasury: k[5]!, authorityPda: k[6]!, upgradeableLoader: k[7]! }, closeBuffer), k.slice(0, 8), "00 00 00 01 01 01 00 00");
   assertLayout(buildActivateRollbackV1Instruction(program, { controllerConfig: k[0]!, policy: k[1]!, protocolGate: k[2]!, primaryProposal: k[3]!, rollbackProposal: k[4]!, rollbackBufferVerification: k[5]!, primaryProgramdataVerification: k[6]!, failureEvidence: k[7]!, targetProgram: k[8]!, targetProgramdata: k[9]!, authorityPda: k[10]!, upgradeableLoader: k[11]! }, activateRollback), k.slice(0, 12), "00 00 01 00 01 00 00 00 00 00 00 00");
   assertLayout(buildObserveProgramDataFailureV1Instruction(program, { payer: k[0]!, controllerConfig: k[1]!, protocolGate: k[2]!, primaryProposal: k[3]!, programdataVerification: k[4]!, targetProgram: k[5]!, targetProgramdata: k[6]!, authorityPda: k[7]!, upgradeableLoader: k[8]!, failureObservation: k[9]!, systemProgram: k[10]! }, observeFailure), k.slice(0, 11), "11 00 00 00 00 00 00 00 00 01 00");
+});
+
+test("emergency resume builder emits only the bounded canonical compute envelope", () => {
+  const program = key(200);
+  const k = Array.from({ length: 12 }, (_, index) => key(index + 50));
+  const controller = buildExecuteEmergencyResolutionV1Instruction(program, {
+    controllerConfig: k[0]!, policy: k[1]!, council: k[2]!, protocolGate: k[3]!,
+    emergencyResolution: k[4]!, emergencyFreezeObservation: k[5]!, emergencyCheckpoint: k[6]!,
+    targetProgram: k[7]!, targetProgramdata: k[8]!, upgradeableLoader: k[9]!,
+    authorityPda: k[10]!, instructionsSysvar: k[11]!,
+  }, executeEmergencyResolution);
+  const envelope = buildExecuteEmergencyResolutionEnvelopeV1(
+    controller,
+    MAX_ENVELOPE_COMPUTE_UNIT_LIMIT_V1,
+    MAX_ENVELOPE_COMPUTE_UNIT_PRICE_MICRO_LAMPORTS_V1,
+  );
+  assert.equal(envelope.length, 3);
+  assert.equal(envelope[0]!.data[0], 2);
+  assert.equal(envelope[0]!.data.readUInt32LE(1), MAX_ENVELOPE_COMPUTE_UNIT_LIMIT_V1);
+  assert.equal(envelope[1]!.data[0], 3);
+  assert.equal(envelope[1]!.data.readBigUInt64LE(1), MAX_ENVELOPE_COMPUTE_UNIT_PRICE_MICRO_LAMPORTS_V1);
+  assert.equal(envelope[2], controller);
+  assert.throws(() => buildExecuteEmergencyResolutionEnvelopeV1(controller, 0, 0n));
+  assert.throws(() => buildExecuteEmergencyResolutionEnvelopeV1(
+    controller,
+    MAX_ENVELOPE_COMPUTE_UNIT_LIMIT_V1 + 1,
+    0n,
+  ));
+  assert.throws(() => buildExecuteEmergencyResolutionEnvelopeV1(
+    controller,
+    MAX_ENVELOPE_COMPUTE_UNIT_LIMIT_V1,
+    MAX_ENVELOPE_COMPUTE_UNIT_PRICE_MICRO_LAMPORTS_V1 + 1n,
+  ));
+  assert.throws(() => buildExecuteEmergencyResolutionEnvelopeV1(
+    new TransactionInstruction({ programId: program, keys: [], data: Buffer.from([13]) }),
+    MAX_ENVELOPE_COMPUTE_UNIT_LIMIT_V1,
+    0n,
+  ));
 });

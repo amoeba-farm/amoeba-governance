@@ -596,7 +596,11 @@ export function buildRecastCheckpointAttestationV1Instruction(programId: PublicK
 export interface FinalizeCheckpointV1Accounts { payer: PublicKey; controllerConfig: PublicKey; policy: PublicKey; council: PublicKey; protocolGate: PublicKey; subject: PublicKey; targetProgram: PublicKey; targetProgramdata: PublicKey; phaseEvidence: PublicKey; baselineCheckpoint?: PublicKey; checkpoint: PublicKey; checkpointAttestations: readonly PublicKey[]; systemProgram: PublicKey }
 export function buildFinalizeCheckpointV1Instruction(programId: PublicKey, a: FinalizeCheckpointV1Accounts, v: FinalizeCheckpointV1): TransactionInstruction {
   const poststate = v.candidate.phase === StateCheckpointPhaseV1.Poststate;
-  if ((a.baselineCheckpoint !== undefined) !== poststate) throw new Error("baselineCheckpoint is required only for Poststate");
+  const prestate = v.candidate.phase === StateCheckpointPhaseV1.Prestate;
+  const emergency = v.candidate.phase === StateCheckpointPhaseV1.Emergency;
+  if (poststate && a.baselineCheckpoint === undefined) throw new Error("baselineCheckpoint is required for Poststate");
+  if (emergency && a.baselineCheckpoint !== undefined) throw new Error("Emergency checkpoint cannot accept a baselineCheckpoint");
+  if (!poststate && !prestate && a.baselineCheckpoint !== undefined) throw new Error("baselineCheckpoint is not admitted for this phase");
   if (a.checkpointAttestations.length !== 3) throw new RangeError("checkpointAttestations must contain exactly three entries");
   const keys: AccountMeta[] = [ws(a.payer), ro(a.controllerConfig), ro(a.policy), ro(a.council), ro(a.protocolGate), poststate ? rw(a.subject) : ro(a.subject), ro(a.targetProgram), ro(a.targetProgramdata), ro(a.phaseEvidence)];
   if (a.baselineCheckpoint !== undefined) keys.push(ro(a.baselineCheckpoint));
