@@ -60,6 +60,10 @@ jobs:
         working-directory: clients/ts
         run: npm test
 
+      - name: TypeScript build and installed-package consumer
+        working-directory: clients/ts
+        run: npm run check:package
+
   sbpf-diagnostics:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
