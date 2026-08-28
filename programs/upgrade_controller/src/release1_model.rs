@@ -1979,6 +1979,7 @@ impl Release1Model {
         }
         if snapshot.class != ProposalClassV1::EmergencyRollback {
             self.validate_prepared_rollback(&snapshot, slot)?;
+            self.require_primary_execution_rollback_runway(&snapshot, slot)?;
         }
         let proposal = self.proposal_mut(proposal_id)?;
         proposal.state = ProposalStateV2::UpgradeExecuted;
@@ -2782,6 +2783,28 @@ impl Release1Model {
         }
         if !self.pinned_initial_quorum_complete(rollback)? {
             return Err(Release1ModelError::InvalidRollbackLink);
+        }
+        Ok(())
+    }
+
+    fn require_primary_execution_rollback_runway(
+        &self,
+        primary: &ModelProposal,
+        current_slot: u64,
+    ) -> Release1ModelResult<()> {
+        let rollback_id = primary
+            .rollback_proposal
+            .ok_or(Release1ModelError::InvalidRollbackLink)?;
+        let rollback = self.proposal(rollback_id)?;
+        let recovery_horizon = current_slot
+            .checked_add(self.delays.rollback_slots)
+            .and_then(|value| value.checked_add(self.delays.review_slots))
+            .and_then(|value| value.checked_add(1))
+            .ok_or(Release1ModelError::ArithmeticOverflow)?;
+        if current_slot < rollback.timing.not_before_slot
+            || recovery_horizon >= rollback.timing.expiry_slot
+        {
+            return Err(Release1ModelError::TimingViolation);
         }
         Ok(())
     }

@@ -320,6 +320,13 @@ fn freeze_prepared_primary(model: &mut Release1Model, primary_id: u64) -> u64 {
     slot
 }
 
+fn primary_execution_slot(model: &Release1Model, primary_id: u64, minimum_slot: u64) -> u64 {
+    let rollback_id = model.proposals[&primary_id]
+        .rollback_proposal
+        .expect("primary rollback proposal");
+    minimum_slot.max(model.proposals[&rollback_id].timing.not_before_slot)
+}
+
 fn approve_and_finalize_checkpoint(
     model: &mut Release1Model,
     proposal_id: u64,
@@ -1509,7 +1516,7 @@ fn checkpoints_finalize_separately_and_extension_unfreeze_is_complete() {
         Release1ModelError::InvalidStateTransition,
     );
     assert_eq!(model.gate.status, GateStatusV1::FrozenForUpgrade);
-    let extension_slot = frozen_slot + 3;
+    let extension_slot = primary_execution_slot(&model, primary, frozen_slot + 3);
     apply_ok(
         &mut model,
         Release1ModelAction::ExtendTarget {
@@ -1799,11 +1806,12 @@ fn rollback_is_prepared_reciprocally_linked_and_never_auto_unfreezes() {
         StateCheckpointPhaseV1::Prestate,
         frozen_slot + 1,
     );
+    let primary_upgrade_slot = primary_execution_slot(&model, primary, frozen_slot + 3);
     apply_ok(
         &mut model,
         Release1ModelAction::ExecuteUpgrade {
             proposal_id: primary,
-            slot: frozen_slot + 3,
+            slot: primary_upgrade_slot,
         },
     );
     assert_eq!(
@@ -1967,7 +1975,18 @@ fn primary_execution_requires_an_unexpired_actionable_rollback_window() {
         StateCheckpointPhaseV1::Prestate,
         frozen_slot + 1,
     );
-    let execute_slot = frozen_slot + 3;
+    let rollback_timing = ready.proposals[&rollback].timing;
+    let pre_not_before_slot = rollback_timing.not_before_slot - 1;
+    assert_atomic_error(
+        &mut ready,
+        Release1ModelAction::ExecuteUpgrade {
+            proposal_id: primary,
+            slot: pre_not_before_slot,
+        },
+        Release1ModelError::TimingViolation,
+    );
+
+    let execute_slot = rollback_timing.not_before_slot;
     let first_rollback_slot = execute_slot + ready.delays.rollback_slots;
     let primary_expiry_with_delay =
         ready.proposals[&primary].timing.expiry_slot + ready.delays.rollback_slots;
@@ -2042,17 +2061,22 @@ fn primary_execution_requires_an_unexpired_actionable_rollback_window() {
         Release1ModelError::ArithmeticOverflow,
     );
 
-    ready
-        .proposals
-        .get_mut(&rollback)
-        .unwrap()
-        .timing
-        .expiry_slot = primary_expiry_with_delay + 1;
+    let recovery_slots = ready.delays.rollback_slots + ready.delays.review_slots + 1;
+    let council_review_runway_boundary = rollback_timing.expiry_slot - recovery_slots;
+    assert!(council_review_runway_boundary >= rollback_timing.not_before_slot);
+    assert_atomic_error(
+        &mut ready,
+        Release1ModelAction::ExecuteUpgrade {
+            proposal_id: primary,
+            slot: council_review_runway_boundary,
+        },
+        Release1ModelError::TimingViolation,
+    );
     apply_ok(
         &mut ready,
         Release1ModelAction::ExecuteUpgrade {
             proposal_id: primary,
-            slot: execute_slot,
+            slot: council_review_runway_boundary - 1,
         },
     );
 }
@@ -2075,7 +2099,7 @@ fn approved_hard_poststate_mismatches_authorize_delayed_rollback_but_never_accep
         StateCheckpointPhaseV1::Prestate,
         frozen_slot + 1,
     );
-    let upgraded_slot = frozen_slot + 3;
+    let upgraded_slot = primary_execution_slot(&verified, primary, frozen_slot + 3);
     apply_ok(
         &mut verified,
         Release1ModelAction::ExecuteUpgrade {
@@ -3213,18 +3237,19 @@ fn poststate_and_unfreeze_use_current_council_across_rotation() {
         StateCheckpointPhaseV1::Prestate,
         frozen_slot + 1,
     );
+    let primary_upgrade_slot = primary_execution_slot(&model, primary, frozen_slot + 3);
     apply_ok(
         &mut model,
         Release1ModelAction::ExecuteUpgrade {
             proposal_id: primary,
-            slot: frozen_slot + 3,
+            slot: primary_upgrade_slot,
         },
     );
     apply_ok(
         &mut model,
         Release1ModelAction::VerifyProgramData {
             proposal_id: primary,
-            slot: frozen_slot + 3,
+            slot: primary_upgrade_slot,
         },
     );
     let accepted_prestate = model.proposals[&primary].prestate.clone().unwrap();
@@ -4159,7 +4184,12 @@ fn replay_checked_complete_frozen_proposal(model: &mut Release1Model, proposal_i
         frozen_slot + 1,
         seed,
     );
-    let mut execution_slot = frozen_slot + 3;
+    let mut execution_slot =
+        if model.proposals[&proposal_id].class == ProposalClassV1::EmergencyRollback {
+            frozen_slot + 3
+        } else {
+            primary_execution_slot(model, proposal_id, frozen_slot + 3)
+        };
     if model.proposals[&proposal_id].extension_required {
         assert_eq!(
             replay_checked_apply(
@@ -4300,7 +4330,7 @@ fn generated_rollback_trace(seed: u64) {
         freeze_slot + 1,
         seed,
     );
-    let execute_slot = freeze_slot + 3;
+    let execute_slot = primary_execution_slot(&model, primary, freeze_slot + 3);
     replay_checked_ok(
         &mut model,
         Release1ModelAction::ExecuteUpgrade {
