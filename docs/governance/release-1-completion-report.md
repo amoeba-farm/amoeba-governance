@@ -4,13 +4,15 @@
 
 **Branch:** `codex/release1-completion`
 
-**Safety scope:** local source, local synthetic accounts, ProgramTest/local
-validator, and reproducible artifacts only
+**Safety scope:** local source, local synthetic accounts, native ProgramTest,
+actual-controller-SBF ProgramTest, and clean source-bound artifacts only. A
+standalone local validator was not run.
 
 This report records the completed local engineering candidate and the security
-boundaries that prevent an exit-complete or ceremony-ready claim. Evidence that
-has not run against a clean exact controller artifact is identified as awaiting
-that run; it is never treated as success.
+boundaries that prevent an exit-complete or ceremony-ready claim. The final SBF
+and Loader evidence is bound to one clean exact source commit; passing downstream
+rehearsals are not presented as proof of the two missing production ceremony
+paths.
 
 ## 1. Source identity and tree state
 
@@ -20,31 +22,141 @@ that run; it is never treated as success.
 | Spread Phase 3 starting commit | `bc3af0e7922e1db5f103d10b64ae2d5866959439` |
 | Spread Phase 3 closure implementation | `8417c53b3af99979ac0ab6f9e1a911eeaf415734` |
 | Spread Phase 3 closure report | `02ebec33eac216245fc49fcaa0383001e3afea75` |
-| Governance implementation/evidence commit before this report | `6151e2c50356d2031331feefeb5e7d01f1916463` |
-| Spread implementation/evidence commit before its report | `120546171f37cc77fc4f138f62c05815bb027b2f` |
+| Governance artifact/test source commit | `a0e74f5a3d9311e78c15890754ff9bdda666ed11` |
+| Governance artifact/test source tree | `f17a78885afa6ea5a8f4df3d9cd7d099c04b0414` |
+| Governance `Cargo.lock` SHA-256 | `f058716b2f5541511734a2e1d76df36cd44bf87a411fd858f9253d7d1f9cde64` |
+| Spread ending commit | `88c067ae6f2901131698be1e12fdff6f259b361b` |
 | Governance branch | `codex/release1-completion` |
 | Spread branch | `codex/release1-completion` |
-| Governance worktree/index | clean after committing this report; rechecked before the artifact run |
-| Spread worktree/index | clean after committing its report; rechecked independently |
+| Governance artifact-source worktree/index | clean before both SBF builds and exact-source test runs |
+| Spread worktree/index | clean at `88c067ae6f2901131698be1e12fdff6f259b361b` |
 | Governance `origin/main` | `da12ead467426afb7fe06c3048e0687094ab5da5` (read-only observation) |
 | Spread `origin/main` | `1b2230d96e51f6582155d8284900fbfc11ff1f18` (read-only observation) |
 | Remote mutation | none; neither branch was pushed |
 
-The report commit follows the implementation commit above. Git commits cannot
-self-reference their own object ID; the final local report commit is captured
-externally with `git rev-parse HEAD` and in the operator handoff.
+The report-only commit follows the artifact/test source commit above. A Git
+commit cannot contain its own object ID; the final local report commit and
+post-commit clean-worktree check are therefore captured by `git rev-parse HEAD`
+and `git status` in the operator handoff.
 
 ### Final changed-file inventory
 
-The exact tracked inventory is generated with
-`git diff --name-only c38867c2fe9b760f0c0c3a539d21f44a52e996bf..HEAD`.
-It contains only governance source/tests/package/CI/documentation. The Spread
-inventory from `02ebec33eac216245fc49fcaa0383001e3afea75` contains only its CI
-workflow and integration report; no Spread runtime or client source changed.
+Governance paths from
+`c38867c2fe9b760f0c0c3a539d21f44a52e996bf..a0e74f5a3d9311e78c15890754ff9bdda666ed11`:
 
-Generate this from both starting commits, review every path, and include only
-the final tracked diff. No target economics, live release intent, key material,
-or service configuration may appear.
+```text
+.github/workflows/governance-trust-root.yml
+AGENTS.md
+Cargo.lock
+Cargo.toml
+README.md
+benchmarks/artifact_chunk_sbf/.gitignore
+benchmarks/artifact_chunk_sbf/Cargo.lock
+benchmarks/artifact_chunk_sbf/Cargo.toml
+benchmarks/artifact_chunk_sbf/run-benchmark.sh
+benchmarks/artifact_chunk_sbf/rust-toolchain.toml
+benchmarks/artifact_chunk_sbf/src/lib.rs
+benchmarks/artifact_chunk_sbf/summarize_benchmark.py
+benchmarks/artifact_chunk_sbf/tests/actual_sbf.rs
+benchmarks/guardian_raw_hash_sbf/.gitignore
+benchmarks/guardian_raw_hash_sbf/Cargo.lock
+benchmarks/guardian_raw_hash_sbf/Cargo.toml
+benchmarks/guardian_raw_hash_sbf/run-benchmark.sh
+benchmarks/guardian_raw_hash_sbf/rust-toolchain.toml
+benchmarks/guardian_raw_hash_sbf/src/lib.rs
+benchmarks/guardian_raw_hash_sbf/summarize_benchmark.py
+benchmarks/guardian_raw_hash_sbf/tests/actual_sbf.rs
+clients/ts/package-lock.json
+clients/ts/package.json
+clients/ts/tools/check-package-consumer.ts
+clients/ts/tools/generate-release1-vectors.ts
+clients/ts/tsconfig.build.json
+clients/ts/upgradeGovernance/artifactMerkleV1.ts
+clients/ts/upgradeGovernance/cli.test.ts
+clients/ts/upgradeGovernance/cli.ts
+clients/ts/upgradeGovernance/cliMain.ts
+clients/ts/upgradeGovernance/index.ts
+clients/ts/upgradeGovernance/operator.test.ts
+clients/ts/upgradeGovernance/operator.ts
+clients/ts/upgradeGovernance/receiptV3.test.ts
+clients/ts/upgradeGovernance/receiptV3.ts
+clients/ts/upgradeGovernance/release1.test.ts
+clients/ts/upgradeGovernance/release1.ts
+clients/ts/upgradeGovernance/release1LifecycleInstructions.test.ts
+clients/ts/upgradeGovernance/release1LifecycleInstructions.ts
+clients/ts/upgradeGovernance/release1LoaderInstructions.test.ts
+clients/ts/upgradeGovernance/release1LoaderInstructions.ts
+clients/ts/upgradeGovernance/release1NumericValidation.test.ts
+clients/ts/upgradeGovernance/release1PacketPlanning.test.ts
+clients/ts/upgradeGovernance/release1PacketPlanning.ts
+clients/ts/upgradeGovernance/release1PacketSurfaceMatrix.test.ts
+clients/ts/upgradeGovernance/release1Planning.test.ts
+clients/ts/upgradeGovernance/release1Planning.ts
+clients/ts/upgradeGovernance/release1SyntheticVector.ts
+clients/ts/upgradeGovernance/v1FixedAccounts.test.ts
+clients/ts/upgradeGovernance/v1FixedAccounts.ts
+docs/governance/amendments/release-1-completion-batch.md
+docs/governance/artifact-chunk-sbf-benchmark-v1.md
+docs/governance/evidence/artifact-chunk-sbf-benchmark-v1.json
+docs/governance/evidence/guardian-raw-programdata-sbf-benchmark-v1.json
+docs/governance/evidence/release-1-packet-surface-v1.json
+docs/governance/guardian-raw-programdata-sbf-benchmark-v1.md
+docs/governance/phase-7-readiness-report.md
+docs/governance/phase-7-readiness/README.md
+docs/governance/phase-7-readiness/controller-deployment-manifest.template.json
+docs/governance/phase-7-readiness/controller-immutability-verification-plan.md
+docs/governance/phase-7-readiness/controller-initialization-manifest.template.json
+docs/governance/phase-7-readiness/old-authority-negative-test-plan.md
+docs/governance/phase-7-readiness/operator-runbook.md
+docs/governance/phase-7-readiness/production-identity-checklist.md
+docs/governance/phase-7-readiness/programdata-authority-handoff-plan.md
+docs/governance/phase-7-readiness/receipt-v3-checklist.md
+docs/governance/phase-7-readiness/rollback-rehearsal-plan.md
+docs/governance/phase-7-readiness/spread-bridge-release-plan.md
+docs/governance/release-1-completion-report.md
+docs/governance/release-1-schema-audit.md
+fixtures/upgrade_governance_release1.json
+programs/upgrade_controller/Cargo.toml
+programs/upgrade_controller/src/artifact_merkle.rs
+programs/upgrade_controller/src/council.rs
+programs/upgrade_controller/src/error.rs
+programs/upgrade_controller/src/instruction.rs
+programs/upgrade_controller/src/lib.rs
+programs/upgrade_controller/src/pda.rs
+programs/upgrade_controller/src/processor.rs
+programs/upgrade_controller/src/release1_account_io.rs
+programs/upgrade_controller/src/release1_digest.rs
+programs/upgrade_controller/src/release1_loader_accounts.rs
+programs/upgrade_controller/src/release1_model.rs
+programs/upgrade_controller/src/release1_processor_buffer.rs
+programs/upgrade_controller/src/release1_processor_checkpoint.rs
+programs/upgrade_controller/src/release1_processor_initialize.rs
+programs/upgrade_controller/src/release1_processor_loader.rs
+programs/upgrade_controller/src/release1_processor_proposal.rs
+programs/upgrade_controller/src/release1_processor_terminal.rs
+programs/upgrade_controller/src/release1_state.rs
+programs/upgrade_controller/src/state.rs
+programs/upgrade_controller/src/tests/council_policy.rs
+programs/upgrade_controller/src/tests/layouts.rs
+programs/upgrade_controller/src/tests/mod.rs
+programs/upgrade_controller/src/tests/release1_model.rs
+programs/upgrade_controller/src/tests/release1_schema.rs
+programs/upgrade_controller/tests/loader_program_test.rs
+programs/upgrade_controller/tests/max_artifact_chunk_sbf.rs
+programs/upgrade_controller/tests/program_test.rs
+scripts/build-sbpf-checked.sh
+```
+
+Spread paths from
+`02ebec33eac216245fc49fcaa0383001e3afea75..88c067ae6f2901131698be1e12fdff6f259b361b`:
+
+```text
+.github/workflows/ci.yml
+docs/governance/release-1-integration-report.md
+```
+
+No Spread runtime or client source, target economics, live release intent, key
+material, or service configuration changed in this batch.
 
 ## 2. Normative inputs
 
@@ -186,6 +298,13 @@ retain generic early rejection.
 | Rollback | prepared `EmergencyRollback` stays timelocked until typed recoverable failure; activation changes the active frozen proposal and increments the gate epoch; verification/poststate/unfreeze remain separate |
 | Council rotation | immutable candidate `->` rotation `Draft -> CouncilApproved -> Timelocked -> Activated`, with `Cancelled` and `Expired` pre-activation terminals |
 
+The ordinary upgrade row begins from an already `Active` gate; the current
+controller has no production-reachable bootstrap activation path. Emergency
+resume and conversion apply only to a guardian-created emergency freeze, never
+to the initialization bootstrap reason. Council rotation is reachable while the
+bootstrap gate is frozen, but it changes only the selected council/rotation
+state and cannot change the gate status, reason, or epoch.
+
 An ordinary freeze requires `proposal.target_nonce == config.target_nonce`, then
 atomically increments `target_nonce` once, increments the gate epoch, binds the
 active proposal, and sets `Frozen`. All frozen-or-later paths require
@@ -290,8 +409,11 @@ verification bitmap. The controller has no buffer-write instruction. Execute
 must remain closed until all chunks are mechanically proven and finalized.
 
 Rust/TypeScript vectors and duplicate/missing/wrong-proof/no-write-after-adoption
-tests pass. The maximum-size integrated actual-SBF benchmark awaits the clean
-v0/v2 artifact run recorded in Section 13.
+tests pass. The maximum-size integrated actual-controller-SBF benchmark also
+passes with all 96 chunks, a depth-7 final proof, and a 200,000-CU ceiling. The
+final chunk consumed 132,817 CU under v0 and 134,326 CU under v2; both runs
+reported no runtime stack fault and exercised real Loader
+`SetAuthorityChecked` custody first.
 
 ## 10. Loader envelope, ProgramData, and rollback
 
@@ -314,16 +436,20 @@ only from typed recoverable evidence while the gate stays frozen. It never
 auto-unfreezes and must pass its own deployed-byte verification, poststate, and
 separate unfreeze.
 
-Gate E host runs pass checked buffer adoption against real Loader-v3. The full
-checked extend/upgrade/close and failure-atomic rehearsal awaits the exact clean
-controller artifact selected by the final v0/v2 build.
+Gate E artifact-consuming ProgramTest runs pass under both SBPF v0 and v2 from
+the exact clean source commit and architecture-specific controller artifacts.
+Five Loader-v3 tests pass per architecture, covering checked buffer adoption,
+checked extension, upgrade, close, invalid-ELF failure atomicity, recoverable
+rollback, ProgramData verification, and former-authority rejection.
 
-Gate F actual-controller-SBF tests are implemented for the happy lifecycle,
-recoverable rollback, and model/processor differential under v0 and v2. Their
-clean-artifact rerun awaits the attested builds. These tests deliberately use a
-test-only bank transition from bootstrap-frozen to Active and a legacy
-unchecked sacrificial target handoff; they do not prove either missing
-production ceremony path described in Section 15.
+Gate-F-targeted downstream actual-controller-SBF paths pass for the happy
+lifecycle and recoverable rollback under both v0 and v2. The model/processor
+differential also passes against the real Loader builtins. The
+actual-controller lifecycle tests deliberately use a test-only bank transition
+from bootstrap-frozen to Active and a legacy unchecked sacrificial target
+handoff; they do not prove either missing production ceremony path described in
+Section 15, so Gate F remains open. A standalone local-validator run was not
+performed; the evidence is actual SBF under ProgramTest.
 
 The two are not interchangeable. A test using `prefer_bpf(false)` proves real
 Loader behavior but not execution of the controller ELF.
@@ -358,12 +484,15 @@ verification status and payload/zero-tail progress, and checkpoint
 identity/digest/phase/acceptance.
 
 TypeScript typecheck passes; 95 tests pass with zero failures; vector and bridge
-fixtures match; build, installed-package consumer, and dry-run package checks
-pass. The dry-run tarball is 109,151 bytes with npm shasum
-`277f03125e56b7d364f3534d4959b5bd208d3c93`. `npm audit --audit-level=high`
-exits successfully while reporting four lower-severity transitive advisories
-(one low, three moderate) in `esbuild` and the pinned Solana web3 dependency
-chain.
+fixtures match; build, installed-package consumer, and package checks pass. A
+clean-source pack at `a0e74f5a3d9311e78c15890754ff9bdda666ed11`
+using Node `v24.14.0` and the declared Corepack npm `10.9.8` produced a
+109,151-byte tarball, SHA-256
+`ce02a49ad403db458a7750a7b256a333b6cd03c62c78161ebf13199de3e02380`,
+and npm SHA-1 `277f03125e56b7d364f3534d4959b5bd208d3c93`.
+`npm audit --audit-level=high` exits successfully while reporting four
+lower-severity transitive advisories (one low, three moderate) in `esbuild` and
+the pinned Solana web3 dependency chain.
 
 ## 12. Receipt v3
 
@@ -372,7 +501,9 @@ Loader CPI, governance identities/quorum/timing/nonce/epochs, sealed buffer
 bytes and bitmap, ProgramData payload/raw hash/zero tail, hard pre/post roots,
 explicit positive donation drift, frozen history, and controller trust root.
 Synthetic/default production identities fail closed. A simulated post-handoff
-receipt must reject an external-key direct upgrade.
+receipt rejects an external-key direct upgrade. The older direct-Loader receipt
+remains admissible only as evidence for a future bridge/handoff release; it is
+not a governed post-handoff upgrade receipt.
 
 The receipt uses the explicit predeployment schema identity
 `amoeba-governed-upgrade-receipt-v3-predeployment-r4` at receipt version 3; the
@@ -387,7 +518,10 @@ unfreeze increment.
 
 The receipt fixture, canonical-account and frozen-history re-queries, trust-root
 recomputation, altered-byte negatives, and former-authority negative proof pass
-inside the 95-test TypeScript suite. Production trust claims remain rejected.
+inside the 95-test TypeScript suite. That negative proof uses a sacrificial
+legacy unchecked authority handoff to establish Loader behavior; it is not the
+missing checked PDA-accepted production ceremony. Production trust claims
+remain rejected.
 
 ## 13. Verification matrix
 
@@ -397,18 +531,20 @@ inside the 95-test TypeScript suite. Production trust claims remain rejected.
 | Clippy `-D warnings` | pass across workspace/all targets |
 | Host/unit/property/model tests | 188 pass; 48 deterministic model traces included |
 | Account/privilege/failure-atomic matrix | tags 1–25 and 27–38 pass; rejected writes remain byte-identical |
-| Native ProgramTest | 1 complete Gate C matrix pass in 24.64 seconds |
-| Real Loader-v3 SetAuthorityChecked/Extend/Upgrade/Close/rollback | checked adoption passes; artifact-consuming rehearsals await clean ELF |
-| Complete controller actual-SBF lifecycle v0 | awaiting clean-artifact run; downstream only, not bootstrap/handoff proof |
-| Complete controller actual-SBF lifecycle v2 | awaiting clean-artifact run; downstream only, not bootstrap/handoff proof |
-| SBPF-v0 linked-ELF stack analysis | awaiting clean checked build |
-| SBPF-v2 linked-ELF stack analysis | awaiting clean checked build |
+| Native ProgramTest | 1 complete Gate C matrix pass |
+| Real Loader-v3 SetAuthorityChecked/Extend/Upgrade/Close/rollback | 5/5 artifact-consuming tests pass under v0 and 5/5 under v2 |
+| Gate-F-targeted downstream controller-SBF lifecycle v0 | pass from exact artifact; Gate F remains open because bootstrap Active is bank-patched and handoff is legacy unchecked |
+| Gate-F-targeted downstream controller-SBF lifecycle v2 | pass from exact artifact; Gate F remains open because bootstrap Active is bank-patched and handoff is legacy unchecked |
+| Maximum-artifact final-chunk SBF benchmark | pass: v0 132,817 CU; v2 134,326 CU; 200,000-CU conservative ceiling |
+| SBPF-v0 linked-ELF stack analysis | pass; 16 pinned dependency-only frame diagnostics, maximum estimated frame 8,384 bytes, every offending symbol absent from linked ELF |
+| SBPF-v2 linked-ELF stack analysis | pass; zero reported frame diagnostics |
+| Standalone local-validator lifecycle | not run; actual-controller-SBF ProgramTest is the local runtime evidence |
 | Rust/TypeScript fixture parity | pass |
 | TypeScript type/test/build/package | pass; 95/95 tests |
 | Receipt-v3 verifier | pass, predeployment schema r4 |
 | Packet/ALT 1,232-byte matrix | 40 shapes pass; all v0 fit; maximum 1,136 bytes |
 | Synthetic identity release rejection | pass |
-| CI workflow validation/run | workflow expanded and locally represented; no hosted run because no push is authorized |
+| CI workflow validation/run | constituent checks were run individually; no hosted workflow run because no push is authorized |
 
 No pure mock may substitute for the final Loader acceptance test. No host
 processor delegate may substitute for the full controller ELF. No cached
@@ -418,17 +554,24 @@ artifact from another checkout or architecture may be used.
 
 | Artifact | Bytes | SHA-256 | Source commit/toolchain |
 |---|---:|---|---|
-| Controller SBPF v0 | awaiting clean build | awaiting clean build | pinned Agave `cargo-build-sbf`, tools `v1.53`, locked Cargo graph |
-| Controller SBPF v2 | awaiting clean build | awaiting clean build | pinned Agave `cargo-build-sbf`, tools `v1.53`, locked Cargo graph |
-| TypeScript package dry run | 109,151 | npm shasum `277f03125e56b7d364f3534d4959b5bd208d3c93` | Node/npm versions captured by finalizer |
+| Controller SBPF v0 deployable | 694,584 | `36fce613345445cd4d9020227d10f97b988fc7d654748b3414f9319878bf1b97` | `a0e74f5a3d9311e78c15890754ff9bdda666ed11`; `cargo-build-sbf 4.0.0`; platform tools `v1.53`; Rust/Cargo `1.89.0` |
+| Controller SBPF v0 linked ELF | 848,272 | `f4d95affacecee3202277e06348fdefab10e5a9bb1a021e1c022f0a5732d018b` | same exact source and toolchain; `.text` equals deployable artifact |
+| Controller SBPF v2 deployable | 696,232 | `5f06abb1287a93c337d244da034b6e49ea3484c79c23612f6311b77f6c3b69b3` | `a0e74f5a3d9311e78c15890754ff9bdda666ed11`; `cargo-build-sbf 4.0.0`; platform tools `v1.53`; Rust/Cargo `1.89.0` |
+| Controller SBPF v2 linked ELF | 849,272 | `aea3ca5054ea4ccf8815dcb00203781c0ce7f5c4fc4a686eaa3bd38c767b96e0` | same exact source and toolchain; `.text` equals deployable artifact |
+| TypeScript package | 109,151 | `ce02a49ad403db458a7750a7b256a333b6cd03c62c78161ebf13199de3e02380` | npm shasum `277f03125e56b7d364f3534d4959b5bd208d3c93`; Node `v24.14.0`; Corepack npm `10.9.8` |
 
-Compiler diagnostics, exact linked symbols, maximum frames, caller-overlap
-analysis, and dependency-only symbol exclusion await the two clean checked
-build receipts.
+Both controller builds came from clean detached source at tree
+`f17a78885afa6ea5a8f4df3d9cd7d099c04b0414` with Cargo lock SHA-256
+`f058716b2f5541511734a2e1d76df36cd44bf87a411fd858f9253d7d1f9cde64`.
+The v0 diagnostic analyzer reported exactly 16 pinned dependency-only
+`hybrid_array` / `crypto_common` frame diagnostics with a maximum estimated frame
+of 8,384 bytes; every named offending symbol is absent from the linked
+controller ELF, and no controller symbol, caller-frame overlap, or reachable
+overflow is reported. The v2 analyzer reports zero frame diagnostics.
 
 ## 15. Warnings and unresolved blockers
 
-Unresolved blockers and warnings:
+Unresolved security blockers:
 
 1. The controller has no typed `AcceptTargetAuthorityV1`. Loader-v3
    `SetAuthorityChecked` requires both current and new authorities to sign, and
@@ -443,13 +586,13 @@ Unresolved blockers and warnings:
 3. Making this controller immutable would permanently preserve both omissions.
    Phase 7 is therefore not executable-ready, regardless of downstream Loader
    test success.
-4. Clean v0/v2 artifacts, linked-ELF stack analysis, Gate E artifact-consuming
-   rehearsals, and Gate F downstream actual-SBF runs still need capture after
-   the report commit.
-5. Four lower-severity npm advisories (one low, three moderate) originate in
+Residual release warnings:
+
+4. Four lower-severity npm advisories (one low, three moderate) originate in
    `esbuild` and pinned Solana web3 transitive dependencies. No breaking or
    unsafe dependency downgrade was used to hide them.
-6. No independent audit or hosted CI run exists on these unpushed branches.
+5. No independent audit or hosted CI run exists on these unpushed branches.
+   Branch protection is recommended but was not changed.
 
 No blocker may be converted into a warning merely to claim completion.
 
@@ -458,12 +601,17 @@ No blocker may be converted into a warning merely to claim completion.
 Phase 7 outputs are templates, plans, runbooks, and read-only verifiers only.
 No final production controller ID or real seat key is populated.
 
-For this local batch, no live deployment, Mainnet/Devnet upgrade, production
-key access, signing, transaction submission, live RPC write, controller or
-Spread initialization, ProgramData/buffer authority transfer, controller or
-target immutability, token governance, repository push, `main` update, service
-change, timer change, tunnel change, Edge change, or frontend mutation is
-authorized or recorded.
+For this local batch, no live or cluster-facing deployment, Mainnet/Devnet
+upgrade, production-key access or signing, transaction submission, RPC write,
+controller or Spread initialization, ProgramData/buffer authority transfer,
+controller or target immutability, token governance, repository push, `main`
+update, service change, timer change, tunnel change, Edge change, or frontend
+mutation is authorized or recorded.
+
+Synthetic and sacrificial local ProgramTest did create ephemeral test keypairs,
+sign local bank transactions, and exercise local Buffer/ProgramData authority
+transfers. Those actions never left the ephemeral test bank and are evidence,
+not a live signature, cluster submission, or production handoff.
 
 Operator attestation: the local command history, Git state, and branch boundary
 show no live or remote mutation. The Spread Devnet ProgramData was untouched.
@@ -472,8 +620,11 @@ show no live or remote mutation. The Spread Devnet ProgramData was untouched.
 
 **Current decision:** NOT EXIT-COMPLETE; NOT PHASE-7 READY.
 
-The downstream Release 1 kernel is implemented and host/package verification is
+The downstream Release 1 kernel is implemented, and exact-source host, package,
+artifact, Loader-v3, maximum-chunk, and actual-controller-SBF verification is
 green. Completion remains blocked by the missing checked PDA-accepted handoff
-and governed bootstrap activation capabilities, plus the clean-artifact SBF
-evidence still awaiting capture. Neither blocker may be downgraded to a warning
-or bypassed with legacy unchecked handoff or test-only bank mutation.
+and governed bootstrap activation capabilities. Because the only locally
+completed downstream SBF lifecycle uses a legacy unchecked sacrificial handoff
+and test-only bank mutation to Active, it is downstream evidence rather than
+proof of one fully production-reachable ceremony; Gate F remains open. Neither
+blocker may be downgraded to a warning.
