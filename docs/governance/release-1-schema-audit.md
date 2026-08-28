@@ -159,22 +159,26 @@ deployed slot/raw observation. It requires
 `config.target_nonce == primary.target_nonce + 1` and does not consume a second
 nonce or create a second Active-to-Frozen transition.
 
-`expected_execution_pre_payload_hash` and
-`expected_execution_pre_chunk_root` use one exact Release 1 byte region despite
-the historical `payload` field name: the complete Loader ProgramData capacity
-region `[45 .. 45 + expected_pre_capacity)`. The SHA-256 covers those exact
-bytes, including any committed zero tail. The Merkle root treats
-`expected_pre_capacity` as the artifact length, uses the proposal's fixed
-16-KiB chunk size and the canonical artifact leaf/node/padding domains, and
-derives the final partial-chunk length and chunk count from that capacity.
-Ordinary proposals set `expected_pre_capacity = current_capacity`. A rollback
-proposal derives its expected-pre bytes as the linked primary artifact followed
-by the exact zero tail through the primary's committed post-capacity; its
-expected-pre capacity is therefore the linked primary's post-capacity. Freeze,
-extension, upgrade, and rollback activation processors must recompute these
-commitments from the exact ProgramData account or linked mechanically verified
-primary evidence. No caller-supplied payload length, omitted tail, alternate
-padding rule, or receipt-only assertion is accepted.
+`expected_execution_pre_payload_hash` commits the complete Loader ProgramData
+capacity region `[45 .. 45 + current_capacity)`, including the exact zero tail.
+It is a governance-attested payload identity in the Prestate checkpoint, not a
+second maximum-size hash pass in a loader transaction. The controller instead
+mechanically hashes the complete raw ProgramData account exactly once before
+extension or upgrade and compares that hash to the proposal/accepted-Prestate
+commitment. Checked extension preserves that verified prefix, and the controller
+separately verifies every newly appended byte is zero.
+
+`expected_execution_pre_chunk_root` is a separate audit commitment. For a
+prepared rollback it must equal the linked primary artifact Merkle root; the
+linked primary's finalized `ProgramDataVerificationV1` proves every artifact
+chunk and the complete zero tail at the exact post-upgrade capacity. The
+rollback Prestate then binds that mechanical evidence, the full-capacity payload
+SHA-256, and the full raw ProgramData hash without performing two maximum-size
+SHA passes in one instruction. Ordinary proposals retain the field as a
+digest-bound audit commitment while their exact pre-upgrade bytes are enforced
+by the raw ProgramData hash. Independent receipt verification recomputes the
+convenience payload SHA-256 from captured bytes. No omitted tail, alternate
+padding rule, or caller-only raw-hash assertion is accepted.
 
 The rollback shares the primary target nonce. When governance activates it
 against a still-frozen failed primary, the gate remains frozen, changes its
@@ -367,7 +371,8 @@ generic evidence slot:
 
 | Candidate phase | Subject | Exact `phase_evidence` | Additional baseline |
 |---|---|---|---|
-| `Prestate` | exact frozen `UpgradeProposalV2` | its canonical, fully `Verified` `BufferVerificationV1` | none |
+| `Prestate` for a primary upgrade | exact frozen non-rollback `UpgradeProposalV2` | its canonical, fully `Verified` `BufferVerificationV1` | none |
+| `Prestate` for `EmergencyRollback` | exact frozen rollback `UpgradeProposalV2` | either the linked primary's canonical fully `Verified` `ProgramDataVerificationV1`, or its canonical finalized recoverable `ProgramDataFailureObservationV1` from the immediately prior frozen epoch | canonical immutable accepted `Prestate` checkpoint for the linked primary |
 | `Poststate` | exact `UpgradeProposalV2` in `ProgramDataVerified` | its canonical, fully `Verified` `ProgramDataVerificationV1` | canonical immutable accepted `Prestate` checkpoint for the same proposal/schema/epoch |
 | `Emergency` | exact `EmergencyFreezeResolutionV1` | canonical immutable `EmergencyFreezeObservationV1` for the resolution's target and frozen epoch | none |
 
@@ -375,8 +380,21 @@ The processor selects the discriminator, exact length, PDA, embedded config,
 target, subject, digest, gate epoch, and terminal status from `candidate.phase`.
 It never accepts a different Release 1 account with coincidentally matching
 bytes or digest. For Poststate, both the ProgramData evidence and accepted
-Prestate baseline are required and must be distinct. For Prestate and Emergency,
-supplying a baseline or dummy alias changes the account count and fails.
+Prestate baseline are required and must be distinct. A rollback Prestate also
+requires the linked primary's accepted Prestate as a distinct baseline; a
+primary Prestate and Emergency checkpoint accept no baseline, so supplying a
+dummy alias changes the exact account count and fails.
+
+A rollback Prestate intentionally separates expected candidate identity from
+actual failure evidence. Its `target_payload_commitment` is the expected
+candidate artifact payload commitment bound by the linked primary proposal.
+Its `target_raw_programdata_commitment` is the actual failed raw ProgramData
+observation. The two are not asserted equal: describing the expected artifact
+as if it were the observed failed payload would erase the very mismatch that
+authorizes recovery. The rollback checkpoint inherits the accepted primary
+Prestate's schema, protected roots, counts, semantic custody, hard root, and
+external-drift policy; it cannot normalize corrupted protected state into a new
+baseline.
 
 Slot ordering is part of the account contract. The phase evidence must satisfy
 `evidence.finalized_slot <= candidate.finalized_observation_slot`; a Poststate
@@ -500,6 +518,13 @@ future rotation. Activation requires the original
 current council's 3-of-5 approvals, the major delay, unexpired timing, unchanged
 target nonce, and unchanged current council. It updates only
 `config.current_council_version`; the old council remains immutable history.
+
+Candidate creation has one narrow account-alias exception: when the creator is
+also a seat in the candidate set, the creator-authority account may be the same
+signer/read-only account as that exact candidate-seat authority position. This
+supports unchanged five-seat term renewal without requiring a sixth key. The
+candidate still contains five unique seat authorities, the configured guardian
+cannot be a seat, and every other duplicate account alias remains rejected.
 
 Binding both current council version and target nonce makes stale and competing
 rotations fail without adding a rotation field to `ControllerConfigV1`.
@@ -706,6 +731,15 @@ the current controller ProgramData upgrade authority as initializer. It pins the
 exact target Program/ProgramData/loader graph and creates config, policy,
 council, and gate exactly once.
 
+The target ProgramData account must not exceed
+`MAX_ATOMIC_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1` (1,572,909 bytes) at
+initialization. A larger target could never satisfy Release 1 proposal,
+emergency-resume, or checkpoint mechanical hashing, so accepting it would
+create a permanently unusable trust root. This cap is target-policy-specific:
+the controller's own ProgramData remains subject to exact Program/ProgramData
+linkage and initializer-authority verification but is not constrained by the
+target artifact/checkpoint ceiling.
+
 Initialization deliberately does **not** require the target ProgramData
 authority already equal the controller authority PDA. The authorized future
 ceremony initializes and verifies the controller first, then makes the
@@ -730,6 +764,16 @@ token governance:     disabled canonical defaults
 The bootstrap reason is not a guardian incident and cannot use emergency
 resume. A future separately authorized bridge-activation ceremony must verify
 the target bridge and authority graph before first activation.
+
+Predeployment audit finding: the current Release 1 instruction set does not
+contain that bootstrap-activation transition, and it also does not contain a
+typed controller CPI that can make the authority PDA sign Loader-v3
+`SetAuthorityChecked` during target custody handoff. Because the intended
+ceremony makes the controller immutable before those steps, the current
+artifact is not Phase 7 ceremony-ready. This is not a schema-capacity problem
+and reserved bytes must not be repurposed to hide it. A future explicit version
+must add and independently audit both narrowly typed transitions before any
+controller immutability or target authority handoff.
 
 The frozen field name `vote_review_slots` is retained only for ABI compatibility;
 Release 1 interprets it as `council_review_slots` while token governance remains
@@ -793,7 +837,13 @@ The corrected fixed instruction vectors are:
 | 14 | `ConvertEmergencyFreezeV2` | 203 | 13 |
 | 15 | `CreateCheckpointAttestationV1` | 489 | 10 |
 | 16 | `RecastCheckpointAttestationV1` | 521 | 8 |
-| 17 | `FinalizeCheckpointV1` | 488 | 14 for Prestate/Emergency; 15 for Poststate |
+| 17 | `FinalizeCheckpointV1` | 488 | 14 for primary Prestate/Emergency; 15 for rollback Prestate/Poststate |
+| 23 | `ExpireEmergencyResolutionV1` | 157 | 4 |
+
+Tag 23 uses config `R`, the exact current policy `R`, gate `R`, and emergency
+resolution `W`, in that order. The policy account is consensus-required: the
+instruction's expected policy hash is revalidated against the canonical policy
+PDA and cannot be treated as an off-chain receipt-only guard.
 
 Tags 27-38 are the complete typed Loader-v3, deployed-byte-verification,
 rollback-activation, and unfreeze codec surface. Exact wire lengths include the
@@ -805,7 +855,7 @@ signer+writable, `S` signer+read-only, `W` writable, and `R` read-only.
 | 27 | `AdoptBufferV1` | 163 | 10 | payer `S+W`; config `R`; gate `R`; proposal `W`; buffer `W`; uploader authority `S`; controller authority PDA `R`; BufferVerification `W`; Upgradeable Loader `R`; System Program `R` |
 | 28 | `VerifyBufferChunkV1` | 461 | 7 | config `R`; gate `R`; proposal `R`; buffer `R`; BufferVerification `W`; authority PDA `R`; Loader `R` |
 | 29 | `FinalizeBufferVerificationV1` | 232 | 7 | config `R`; gate `R`; proposal `W`; buffer `R`; BufferVerification `W`; authority PDA `R`; Loader `R` |
-| 30 | `ExtendTargetV1` | 297 | 12 | payer `S+W`; config `R`; gate `R`; proposal `W`; accepted Prestate checkpoint `R`; target ProgramData `W`; target Program `W`; authority PDA `R`; Loader `R`; System Program `R`; Rent sysvar `R`; Instructions sysvar `R` |
+| 30 | `ExtendTargetV1` | 297 | 12 | payer `S+W`; config `R`; gate `R`; proposal `W`; accepted Prestate checkpoint `R`; target ProgramData `W`; target Program `W`; authority PDA `W`; Loader `R`; System Program `R`; Rent sysvar `R`; Instructions sysvar `R` |
 | 31 | `ExecuteUpgradeV1` | 391 | 20 | payer `S+W`; config `R`; policy `R`; gate `R`; proposal `W`; reciprocal counterpart proposal `R`; counterpart BufferVerification `R`; accepted Prestate checkpoint `R`; BufferVerification `W`; ProgramDataVerification `W`; target ProgramData `W`; target Program `W`; sealed buffer `W`; canonical spill treasury `W`; Rent `R`; Clock `R`; authority PDA `R`; Loader `R`; System Program `R`; Instructions sysvar `R` |
 | 32 | `VerifyProgramDataChunkV1` | 530 | 8 | config `R`; gate `R`; proposal `R`; target Program `R`; target ProgramData `R`; authority PDA `R`; Loader `R`; ProgramDataVerification `W` |
 | 33 | `FinalizeProgramDataVerificationV1` | 316 | 8 | config `R`; gate `R`; proposal `W`; target Program `R`; target ProgramData `R`; authority PDA `R`; Loader `R`; ProgramDataVerification `W` |
@@ -823,15 +873,20 @@ separately writable because this paired terminalization is atomic with the gate
 becoming Active.
 
 Tag 37's `failure_evidence` is generic only across two closed typed alternatives:
-the canonical finalized `ProgramDataFailureObservationV1` for the primary and
-frozen epoch, or a canonical finalized rejected Poststate `StateCheckpointV1`
-for that same primary, digest, schema, and epoch. The latter must have
+a canonical finalized *recoverable* `ProgramDataFailureObservationV1` for the
+primary and frozen epoch, or a canonical finalized rejected Poststate
+`StateCheckpointV1` for that same primary, digest, schema, and epoch. A
+ProgramData failure is recoverable here only when its class is `PayloadLeaf` or
+`ZeroTail` and the canonical Loader Program/ProgramData/authority/capacity graph
+still holds. `Header`, `Authority`, and `Capacity` observations remain immutable
+evidence but cannot activate typed rollback. The rejected checkpoint must have
 `accepted == false`, nonzero `forbidden_drift_count`, and an exact 3-of-5
-attestation finalization. The payload binds `expected_failure_evidence_digest`;
-the processor selects and recomputes the corresponding observation or checkpoint
-digest after validating the exact account discriminator, length, PDA, and
-embedded identities. No arbitrary account, raw digest, or caller-described
-failure can activate rollback.
+attestation finalization. The payload binds
+`expected_failure_evidence_digest`; the processor selects and recomputes the
+corresponding observation or checkpoint digest after validating the exact
+account discriminator, length, PDA, and embedded identities. No arbitrary
+account, raw digest, structural-loader failure, or caller-described failure can
+activate rollback.
 
 The processor contract for all 12 instructions requires rejection of a wrong
 account count/order, privilege shape, identity, owner, executable flag,
@@ -877,6 +932,16 @@ The design does not require a production controller ID, token governance,
 target immutability, hidden recovery authority, V1 reserved-byte reuse, dynamic
 state allocation, or live mutation.
 
-Gate B closes only after Rust and TypeScript encode/decode/digest/PDA vectors for
-every new account match checked-in fixtures and V1 regression fixtures remain
-unchanged. Lifecycle processors remain blocked until then.
+Gate B closed on the isolated local branch at
+`81c6b5fd4b0de8e9f827f2c0265721ba73f2eb67`, after the Rust and TypeScript
+encode/decode/digest/PDA implementations consumed the same checked-in Release 1
+fixture and the historical V1 fixtures remained unchanged. The canonical
+Release 1 fixture is `fixtures/upgrade_governance_release1.json`; its current
+checked-in SHA-256 is
+`277c6831615b84dd9ea144f6d1f84aa6dc6a350c1f6952e047f7ee2c9ff11c38`.
+
+Closing Gate B authorizes lifecycle implementation but does not close Gates C
+through F. The final candidate must rerun fixture-drift, unknown-version,
+reserved-byte, account-length, discriminator, and Rust/TypeScript parity tests
+after all processor changes. Any intentional schema change requires a new
+version/domain and a reviewed fixture change; it must not reinterpret V1 bytes.
