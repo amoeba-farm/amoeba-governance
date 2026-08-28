@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { PublicKey } from "@solana/web3.js";
 import {
   BUFFER_VERIFICATION_V1_LEN,
@@ -21,15 +22,24 @@ import {
   assertClusterDomainV1,
   assertProductionControllerIdentityV1,
   assertRelease1PlanFreshV1,
+  isGovernanceSecretFieldV1,
   type Release1ProposalPlanV1,
 } from "./release1Planning.js";
 import {
   OPERATOR_MUTATION_COMMANDS_V1,
+  OperatorBackoffExitV1,
   executeGovernanceMutationV1,
+  type ExclusiveOperatorLockV1,
   type ExecuteGovernanceMutationV1Input,
   type FinalizedGovernanceReadAdapterV1,
+  type GovernanceJournalV1,
   type OperatorMutationCommandV1,
 } from "./operator.js";
+import {
+  verifyGovernedUpgradeReceiptV3AgainstFinalizedSource,
+  type GovernedUpgradeReceiptV3Verification,
+  type ReceiptFinalizedSourceReaderV3,
+} from "./receiptV3.js";
 
 export const UPGRADE_GOVERNANCE_CLI_COMMANDS_V1 = Object.freeze([
   "schema",
@@ -43,6 +53,10 @@ export const UPGRADE_GOVERNANCE_CLI_COMMANDS_V1 = Object.freeze([
   "queue",
   "guardian-freeze",
   "plan-emergency-resolution",
+  "create-emergency-resolution",
+  "approve-emergency-resolution",
+  "queue-emergency-resolution",
+  "execute-emergency-resolution",
   "freeze",
   "bind-prestate",
   "approve-checkpoint",
@@ -56,6 +70,8 @@ export const UPGRADE_GOVERNANCE_CLI_COMMANDS_V1 = Object.freeze([
   "expire",
   "close-buffer",
   "plan-rollback",
+  "observe-programdata-failure",
+  "activate-rollback",
   "create-council-set",
   "rotate-council",
   "plan-controller-immutability",
@@ -152,9 +168,6 @@ export interface UpgradeGovernanceCliPlannerV1 {
     command: Release1PlanningOnlyCommandV1 | OperatorMutationCommandV1,
     payload: Readonly<Record<string, unknown>>,
   ): Promise<Release1ProposalPlanV1>;
-  verifyHandoff(
-    payload: Readonly<Record<string, unknown>>,
-  ): Promise<Readonly<Record<string, unknown>>>;
 }
 
 type MutationDependenciesV1 = Omit<
@@ -164,7 +177,15 @@ type MutationDependenciesV1 = Omit<
 
 export interface UpgradeGovernanceCliAdaptersV1 {
   readAdapter: FinalizedGovernanceReadAdapterV1;
+  /** Read-only finalized source used by the built-in independent receipt and
+   * handoff verifier. An adapter supplies observations, never a verdict. */
+  receiptFinalizedSourceReader: ReceiptFinalizedSourceReaderV3;
   planner: UpgradeGovernanceCliPlannerV1;
+  createPlanningSafety(
+    command: UpgradeGovernanceCliCommandV1,
+    payload: Readonly<Record<string, unknown>>,
+    planningOperationId: string,
+  ): { journal: GovernanceJournalV1; lock: ExclusiveOperatorLockV1 };
   createMutationDependencies(
     command: OperatorMutationCommandV1,
     plan: Release1ProposalPlanV1,
@@ -177,8 +198,6 @@ interface ParsedCliV1 {
   payload: Readonly<Record<string, unknown>>;
 }
 
-const SECRET_FIELD = /^(secret|secretKey|privateKey|keypair|seedPhrase|mnemonic|accessToken|refreshToken|authorization)$/iu;
-
 function rejectSecretMaterial(value: unknown, path = "payload"): void {
   if (Array.isArray(value)) {
     value.forEach((entry, index) => rejectSecretMaterial(entry, `${path}[${index}]`));
@@ -186,7 +205,7 @@ function rejectSecretMaterial(value: unknown, path = "payload"): void {
   }
   if (value === null || typeof value !== "object") return;
   for (const [field, entry] of Object.entries(value)) {
-    if (SECRET_FIELD.test(field)) throw new Error(`${path}.${field} is forbidden; signer material must be injected`);
+    if (isGovernanceSecretFieldV1(field)) throw new Error(`${path}.${field} is forbidden; signer material must be injected`);
     rejectSecretMaterial(entry, `${path}.${field}`);
   }
 }
@@ -241,6 +260,38 @@ function requireClusterDomainHex(payload: Readonly<Record<string, unknown>>): Bu
   return Buffer.from(payload.clusterDomainHex, "hex");
 }
 
+function canonicalPlanningJson(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value === "bigint") return JSON.stringify(value.toString());
+  if (typeof value !== "object") {
+    const encoded = JSON.stringify(value);
+    if (encoded === undefined) throw new TypeError("CLI planning payload is not JSON encodable");
+    return encoded;
+  }
+  if (Array.isArray(value)) return `[${value.map(canonicalPlanningJson).join(",")}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([field, entry]) => `${JSON.stringify(field)}:${canonicalPlanningJson(entry)}`)
+    .join(",")}}`;
+}
+
+export function upgradeGovernanceCliPlanningOperationIdV1(
+  command: UpgradeGovernanceCliCommandV1,
+  payload: Readonly<Record<string, unknown>>,
+): string {
+  return createHash("sha256")
+    .update("AMOEBA_GOVERNANCE_CLI_PLANNING_V1")
+    .update(command)
+    .update(canonicalPlanningJson(payload))
+    .digest("hex");
+}
+
+function cliRateLimit(error: unknown): { retryAfterMs: number } | undefined {
+  if (typeof error !== "object" || error === null || !("status" in error) || (error as { status?: unknown }).status !== 429) return undefined;
+  const retryAfter = "retryAfterMs" in error ? (error as { retryAfterMs?: unknown }).retryAfterMs : 0;
+  return { retryAfterMs: Number.isSafeInteger(retryAfter) && (retryAfter as number) >= 0 ? retryAfter as number : 0 };
+}
+
 async function assertPlannedAgainstConnectedCluster(
   plan: Release1ProposalPlanV1,
   adapter: FinalizedGovernanceReadAdapterV1,
@@ -255,7 +306,7 @@ export type UpgradeGovernanceCliResultV1 =
   | { status: "schema"; schema: typeof RELEASE1_PUBLIC_SCHEMA_V1 }
   | { status: "observed"; genesisHash: string; observations: unknown }
   | { status: "planned"; command: Release1PlanningOnlyCommandV1 | OperatorMutationCommandV1; plan: Release1ProposalPlanV1 }
-  | { status: "verified"; command: "verify-handoff"; result: Readonly<Record<string, unknown>> }
+  | { status: "verified"; command: "verify-handoff"; result: GovernedUpgradeReceiptV3Verification }
   | { status: "submitted"; command: OperatorMutationCommandV1; operationId: string; signature: string };
 
 /**
@@ -272,45 +323,83 @@ export async function runUpgradeGovernanceCliV1(
     if (parsed.armOperationId !== undefined || Object.keys(parsed.payload).length !== 0) throw new Error("schema accepts no options");
     return { status: "schema", schema: RELEASE1_PUBLIC_SCHEMA_V1 };
   }
-  if (parsed.command === "observe") {
-    if (parsed.armOperationId !== undefined) throw new Error("observe cannot be armed");
-    const clusterDomain = requireClusterDomainHex(parsed.payload);
-    const accountValues = parsed.payload.accounts;
-    if (!Array.isArray(accountValues) || accountValues.length === 0 || accountValues.some((entry) => typeof entry !== "string")) {
-      throw new Error("observe requires a nonempty payload.accounts base58 array");
+  const planningOperationId = upgradeGovernanceCliPlanningOperationIdV1(parsed.command, parsed.payload);
+  const safety = adapters.createPlanningSafety(parsed.command, parsed.payload, planningOperationId);
+  safety.lock.acquire(planningOperationId);
+  safety.journal.append(planningOperationId, "planning-started", { command: parsed.command, payload: parsed.payload });
+  try {
+    let result: UpgradeGovernanceCliResultV1;
+    if (parsed.command === "observe") {
+      if (parsed.armOperationId !== undefined) throw new Error("observe cannot be armed");
+      const clusterDomain = requireClusterDomainHex(parsed.payload);
+      const accountValues = parsed.payload.accounts;
+      if (!Array.isArray(accountValues) || accountValues.length === 0 || accountValues.some((entry) => typeof entry !== "string")) {
+        throw new Error("observe requires a nonempty payload.accounts base58 array");
+      }
+      const accounts = accountValues.map((entry) => new PublicKey(entry as string));
+      if (new Set(accounts.map((entry) => entry.toBase58())).size !== accounts.length) throw new Error("observe account list contains a duplicate");
+      const genesisHash = await adapters.readAdapter.getGenesisHash();
+      assertClusterDomainV1(clusterDomain, genesisHash);
+      const observations = await adapters.readAdapter.observeAccounts(accounts);
+      if (observations.length !== accounts.length || observations.some((entry, index) => entry.commitment !== "finalized" || !entry.pubkey.equals(accounts[index]!))) {
+        throw new Error("finalized observation adapter returned incomplete or reordered data");
+      }
+      result = { status: "observed", genesisHash, observations };
+    } else if (parsed.command === "verify-handoff") {
+      if (parsed.armOperationId !== undefined) throw new Error("verify-handoff is read-only and cannot be armed");
+      assertClusterDomainV1(requireClusterDomainHex(parsed.payload), await adapters.readAdapter.getGenesisHash());
+      const fields = Object.keys(parsed.payload).sort();
+      if (fields.length !== 2 || fields[0] !== "clusterDomainHex" || fields[1] !== "receipt") {
+        throw new Error("verify-handoff requires exactly payload.clusterDomainHex and payload.receipt");
+      }
+      result = {
+        status: "verified",
+        command: parsed.command,
+        result: await verifyGovernedUpgradeReceiptV3AgainstFinalizedSource(
+          parsed.payload.receipt,
+          adapters.receiptFinalizedSourceReader,
+        ),
+      };
+    } else {
+      if (!isPlanningOnly(parsed.command) && !isMutation(parsed.command)) throw new Error("unclassified CLI command");
+      if (isPlanningOnly(parsed.command) && parsed.armOperationId !== undefined) {
+        throw new Error(`${parsed.command} is planning-only and cannot be armed`);
+      }
+      const plan = await adapters.planner.plan(parsed.command, parsed.payload);
+      await assertPlannedAgainstConnectedCluster(plan, adapters.readAdapter, parsed.payload.production === true);
+      if (isPlanningOnly(parsed.command) || parsed.armOperationId === undefined) {
+        result = { status: "planned", command: parsed.command, plan };
+      } else {
+        const dependencies = await adapters.createMutationDependencies(parsed.command, plan);
+        const submitted = await executeGovernanceMutationV1({
+          ...dependencies,
+          command: parsed.command,
+          plan,
+          armOperationId: parsed.armOperationId,
+        });
+        result = { status: "submitted", command: parsed.command, operationId: plan.operationId, signature: submitted.signature };
+      }
     }
-    const accounts = accountValues.map((entry) => new PublicKey(entry as string));
-    if (new Set(accounts.map((entry) => entry.toBase58())).size !== accounts.length) throw new Error("observe account list contains a duplicate");
-    const genesisHash = await adapters.readAdapter.getGenesisHash();
-    assertClusterDomainV1(clusterDomain, genesisHash);
-    const observations = await adapters.readAdapter.observeAccounts(accounts);
-    if (observations.length !== accounts.length || observations.some((entry, index) => entry.commitment !== "finalized" || !entry.pubkey.equals(accounts[index]!))) {
-      throw new Error("finalized observation adapter returned incomplete or reordered data");
+    safety.journal.append(planningOperationId, "planning-completed", { command: parsed.command, status: result.status });
+    return result;
+  } catch (error) {
+    if (error instanceof OperatorBackoffExitV1) throw error;
+    const rateLimit = cliRateLimit(error);
+    if (rateLimit !== undefined) {
+      safety.journal.append(planningOperationId, "rate-limit-exit", {
+        status: 429,
+        retryAfterMs: rateLimit.retryAfterMs,
+        retryAt: new Date(Date.now() + rateLimit.retryAfterMs).toISOString(),
+      });
+      throw new OperatorBackoffExitV1(rateLimit.retryAfterMs);
     }
-    return { status: "observed", genesisHash, observations };
+    safety.journal.append(planningOperationId, "planning-failed", {
+      name: error instanceof Error ? error.name : "UnknownError",
+    });
+    throw error;
+  } finally {
+    safety.lock.release();
   }
-  if (parsed.command === "verify-handoff") {
-    if (parsed.armOperationId !== undefined) throw new Error("verify-handoff is read-only and cannot be armed");
-    assertClusterDomainV1(requireClusterDomainHex(parsed.payload), await adapters.readAdapter.getGenesisHash());
-    return { status: "verified", command: parsed.command, result: await adapters.planner.verifyHandoff(parsed.payload) };
-  }
-  if (!isPlanningOnly(parsed.command) && !isMutation(parsed.command)) throw new Error("unclassified CLI command");
-  if (isPlanningOnly(parsed.command) && parsed.armOperationId !== undefined) {
-    throw new Error(`${parsed.command} is planning-only and cannot be armed`);
-  }
-  const plan = await adapters.planner.plan(parsed.command, parsed.payload);
-  await assertPlannedAgainstConnectedCluster(plan, adapters.readAdapter, parsed.payload.production === true);
-  if (isPlanningOnly(parsed.command) || parsed.armOperationId === undefined) {
-    return { status: "planned", command: parsed.command, plan };
-  }
-  const dependencies = await adapters.createMutationDependencies(parsed.command, plan);
-  const result = await executeGovernanceMutationV1({
-    ...dependencies,
-    command: parsed.command,
-    plan,
-    armOperationId: parsed.armOperationId,
-  });
-  return { status: "submitted", command: parsed.command, operationId: plan.operationId, signature: result.signature };
 }
 
 function jsonValue(value: unknown): unknown {

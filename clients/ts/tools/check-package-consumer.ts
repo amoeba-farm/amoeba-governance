@@ -35,10 +35,21 @@ try {
   );
   const manifest = JSON.parse(
     readFileSync(join(workspace, "node_modules", "@amoeba", "upgrade-governance", "package.json"), "utf8"),
-  ) as { name?: string };
+  ) as { name?: string; bin?: Record<string, string> };
   if (manifest.name !== "@amoeba/upgrade-governance") {
     throw new Error("installed package identity drifted");
   }
+  if (manifest.bin?.["amoeba-upgrade-governance"] !== "./dist/upgradeGovernance/cliMain.js") {
+    throw new Error("installed executable entrypoint drifted");
+  }
+  execFileSync(
+    process.execPath,
+    [
+      join(workspace, "node_modules", "@amoeba", "upgrade-governance", "dist", "upgradeGovernance", "cliMain.js"),
+      "--help",
+    ],
+    { cwd: workspace, stdio: "ignore" },
+  );
   execFileSync(
     process.execPath,
     [
@@ -48,8 +59,10 @@ try {
        if (root.release1LifecycleInstructions.INITIALIZE_CONTROLLER_V1_TAG !== 1 ||
            root.release1LoaderInstructions.OBSERVE_PROGRAMDATA_FAILURE_V1_TAG !== 38 ||
            root.artifactMerkleV1.RELEASE1_ARTIFACT_CHUNK_SIZE_V1 !== 16 * 1024 ||
-           root.UPGRADE_GOVERNANCE_CLI_COMMANDS_V1.length !== 29 ||
+           root.UPGRADE_GOVERNANCE_CLI_COMMANDS_V1.length !== 35 ||
            !root.OPERATOR_MUTATION_COMMANDS_V1.includes("execute-upgrade") ||
+           !root.OPERATOR_MUTATION_COMMANDS_V1.includes("execute-emergency-resolution") ||
+           !root.OPERATOR_MUTATION_COMMANDS_V1.includes("activate-rollback") ||
            root.GOVERNED_UPGRADE_RECEIPT_V3_VERSION !== 3 ||
            typeof root.verifyGovernedUpgradeReceiptV3 !== "function") {
          throw new Error("installed package exports drifted");

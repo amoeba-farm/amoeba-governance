@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./dist/upgradeGovernance/index.js",
   "types": "./dist/upgradeGovernance/index.d.ts",
+  "bin": {
+    "amoeba-upgrade-governance": "./dist/upgradeGovernance/cliMain.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/upgradeGovernance/index.d.ts",

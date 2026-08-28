@@ -59,6 +59,13 @@ Observation rejects wrong owner, size, discriminator, version, bump, PDA,
 reserved bytes, embedded identities, duplicate aliases, malformed Loader-v3
 headers, non-finalized responses, and mixed genesis.
 
+For `plan-initialize`, reject a target ProgramData account larger than
+1,572,909 bytes, including its 45-byte Loader-v3 metadata. Such a target cannot
+complete Release 1's bounded raw-account hashing and must not be initialized
+into a permanently unusable trust root. Do not apply that target policy ceiling
+to the controller ProgramData; verify the controller's exact linkage and
+initializer authority independently.
+
 ## 4. Planning commands
 
 Every command below is plan-only until an injected execution provider is
@@ -98,11 +105,13 @@ verify-handoff
 The last three remain planning/verification-only in Release 1 engineering.
 
 Every plan ID binds the controller Program/config, target Program/ProgramData,
-authority PDA, gate/status/epoch, proposal digest/state/timing, current and
-pinned council identities, target nonce, buffer and authority, artifact
-commitments, checkpoint digest, cluster genesis, and exact decoded instruction
-envelope. Fields irrelevant to an action are canonical defaults, not omitted
-operator guesses.
+authority PDA, live ProgramData deployed slot/capacity/authority,
+gate/status/epoch, proposal digest/state/immutable timing, current and pinned
+council identities, target nonce, buffer authority/status/verified and total
+chunk counts, artifact commitments, ProgramData-verification status and
+payload/zero-tail verified counts, checkpoint identity/digest/phase/acceptance,
+cluster genesis, and exact decoded instruction envelope. Fields irrelevant to
+an action are canonical defaults, not omitted operator guesses.
 
 ## 5. Human review and arming
 

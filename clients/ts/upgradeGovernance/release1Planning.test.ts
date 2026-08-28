@@ -26,6 +26,27 @@ test("finalized observation parsing rejects weaker commitment and hashes exact b
   assert.throws(() => publicPackage.parseFinalizedAccountObservationV1(k(1), response, "confirmed"));
 });
 
+test("freeze planning mirrors the controller checkpoint and extension runway", () => {
+  assert.equal(publicPackage.requiredRelease1FreezeRunwaySlotsV1(4n, 0n), 5n);
+  assert.equal(publicPackage.requiredRelease1FreezeRunwaySlotsV1(4n, 1n), 6n);
+  publicPackage.assertRelease1FreezeRunwayV1({
+    currentSlot: 94n,
+    expirySlot: 100n,
+    councilReviewSlots: 4n,
+    extensionDelta: 0n,
+  });
+  assert.throws(() => publicPackage.assertRelease1FreezeRunwayV1({
+    currentSlot: 95n,
+    expirySlot: 100n,
+    councilReviewSlots: 4n,
+    extensionDelta: 0n,
+  }), /insufficient protected freeze runway/u);
+  assert.throws(() => publicPackage.requiredRelease1FreezeRunwaySlotsV1(
+    0xffff_ffff_ffff_ffffn,
+    1n,
+  ), /overflows u64/u);
+});
+
 test("production identity, token defaults, cluster domain, and deterministic plans fail closed", () => {
   assert.throws(() => publicPackage.assertProductionControllerIdentityV1(SYNTHETIC_CONTROLLER_PROGRAM_V1));
   assert.throws(() => publicPackage.assertProductionControllerIdentityV1(PublicKey.default));
@@ -38,9 +59,26 @@ test("production identity, token defaults, cluster domain, and deterministic pla
   assert.throws(() => publicPackage.assertClusterDomainV1(b(203), genesis));
 
   const bindings: publicPackage.Release1ProposalPlanBindingsV1 = {
-    kind: publicPackage.Release1PlanKindV1.Upgrade, clusterDomain: b(1), controllerProgram: k(2), controllerConfig: k(3), targetProgram: k(4), targetProgramdata: k(5),
-    authorityPda: k(6), programdataAuthority: k(6), protocolGate: k(7), gateEpoch: 8n, proposal: k(9), proposalDigest: b(10), councilVersion: 11n, councilHash: b(12), council: k(18),
-    targetNonce: 13n, buffer: k(14), bufferAuthority: k(19), artifactSha256: b(15), artifactChunkMerkleRoot: b(16), checkpoint: k(20), checkpointDigest: b(17),
+    kind: publicPackage.Release1PlanKindV1.Upgrade, clusterDomain: b(1), controllerProgram: k(2), controllerConfig: k(3),
+    controllerInstructionData: Buffer.from([31, 1, 2, 3]),
+    controllerInstructionAccounts: [
+      { pubkey: k(3), isSigner: false, isWritable: false },
+      { pubkey: k(9), isSigner: false, isWritable: true },
+      { pubkey: k(22), isSigner: true, isWritable: false },
+    ],
+    controllerLookupTable: null,
+    targetProgram: k(4), targetProgramdata: k(5),
+    authorityPda: k(6), programdataAuthority: k(6), protocolGate: k(7), gateStatus: publicPackage.release1Accounts.GateStatusV1.Active, gateEpoch: 8n,
+    proposal: k(9), proposalDigest: b(10), proposalState: publicPackage.release1Accounts.ProposalStateV2.BufferVerified,
+    reviewStartSlot: 20n, reviewEndSlot: 30n, notBeforeSlot: 40n, expirySlot: 50n,
+    councilVersion: 11n, councilHash: b(12), council: k(18), targetNonce: 13n,
+    programdataDeployedSlot: 21n, programdataCapacity: 1_000n,
+    buffer: k(14), bufferAuthority: k(19), bufferVerificationStatus: publicPackage.release1Accounts.BufferVerificationStatusV1.Verified,
+    bufferVerifiedChunkCount: 1, bufferChunkCount: 1,
+    artifactSha256: b(15), artifactChunkMerkleRoot: b(16),
+    programdataVerificationStatus: publicPackage.release1Accounts.ProgramDataVerificationStatusV1.Verifying,
+    programdataVerifiedPayloadChunkCount: 0, programdataVerifiedZeroTailChunkCount: 0,
+    checkpoint: k(20), checkpointDigest: b(17), checkpointPhase: publicPackage.release1Accounts.StateCheckpointPhaseV1.Prestate, checkpointAccepted: false,
   };
   const plan = publicPackage.planRelease1ProposalOperationV1(bindings);
   assert.equal(plan.armed, false);
@@ -53,9 +91,30 @@ test("production identity, token defaults, cluster domain, and deterministic pla
   for (const field of ["controllerProgram", "controllerConfig", "targetProgram", "targetProgramdata", "authorityPda", "programdataAuthority", "protocolGate", "proposal", "council", "buffer", "bufferAuthority", "checkpoint"] as const) {
     assert.notEqual(publicPackage.release1ProposalPlanOperationIdV1({ ...bindings, [field]: k(99) }), plan.operationId);
   }
-  for (const field of ["gateEpoch", "councilVersion", "targetNonce"] as const) {
+  for (const field of ["gateEpoch", "reviewStartSlot", "reviewEndSlot", "notBeforeSlot", "expirySlot", "councilVersion", "targetNonce", "programdataDeployedSlot", "programdataCapacity"] as const) {
     assert.notEqual(publicPackage.release1ProposalPlanOperationIdV1({ ...bindings, [field]: 99n }), plan.operationId);
   }
+  for (const field of ["bufferVerifiedChunkCount", "bufferChunkCount", "programdataVerifiedPayloadChunkCount", "programdataVerifiedZeroTailChunkCount"] as const) {
+    assert.notEqual(publicPackage.release1ProposalPlanOperationIdV1({ ...bindings, [field]: 99 }), plan.operationId);
+  }
+  assert.notEqual(publicPackage.release1ProposalPlanOperationIdV1({ ...bindings, gateStatus: publicPackage.release1Accounts.GateStatusV1.FrozenForUpgrade }), plan.operationId);
+  assert.notEqual(publicPackage.release1ProposalPlanOperationIdV1({ ...bindings, proposalState: publicPackage.release1Accounts.ProposalStateV2.Frozen }), plan.operationId);
+  assert.notEqual(publicPackage.release1ProposalPlanOperationIdV1({ ...bindings, bufferVerificationStatus: publicPackage.release1Accounts.BufferVerificationStatusV1.Verifying }), plan.operationId);
+  assert.notEqual(publicPackage.release1ProposalPlanOperationIdV1({ ...bindings, programdataVerificationStatus: publicPackage.release1Accounts.ProgramDataVerificationStatusV1.Verified }), plan.operationId);
+  assert.notEqual(publicPackage.release1ProposalPlanOperationIdV1({ ...bindings, checkpointPhase: publicPackage.release1Accounts.StateCheckpointPhaseV1.Poststate }), plan.operationId);
+  assert.notEqual(publicPackage.release1ProposalPlanOperationIdV1({ ...bindings, checkpointAccepted: true }), plan.operationId);
+  assert.notEqual(publicPackage.release1ProposalPlanOperationIdV1({ ...bindings, controllerInstructionData: Buffer.from([31, 1, 2, 4]) }), plan.operationId);
+  assert.notEqual(publicPackage.release1ProposalPlanOperationIdV1({ ...bindings, controllerInstructionAccounts: bindings.controllerInstructionAccounts.map((meta, index) => index === 1 ? { ...meta, pubkey: k(99) } : meta) }), plan.operationId);
+  assert.notEqual(publicPackage.release1ProposalPlanOperationIdV1({ ...bindings, controllerInstructionAccounts: bindings.controllerInstructionAccounts.map((meta, index) => index === 1 ? { ...meta, isWritable: false } : meta) }), plan.operationId);
+  const drifted = [
+    { ...bindings, gateStatus: publicPackage.release1Accounts.GateStatusV1.FrozenForUpgrade },
+    { ...bindings, proposalState: publicPackage.release1Accounts.ProposalStateV2.Frozen },
+    { ...bindings, programdataCapacity: 1_001n },
+    { ...bindings, bufferVerifiedChunkCount: 0 },
+    { ...bindings, programdataVerifiedPayloadChunkCount: 1 },
+    { ...bindings, checkpointAccepted: true },
+  ];
+  for (const current of drifted) assert.throws(() => publicPackage.assertRelease1PlanFreshV1(plan, current), /stale or mutated/u);
 });
 
 test("journal redaction removes secret material without hiding public identities", () => {

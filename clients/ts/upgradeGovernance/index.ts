@@ -7,6 +7,8 @@ export * as release1LifecycleInstructions from "./release1LifecycleInstructions.
 export * as release1LoaderInstructions from "./release1LoaderInstructions.js";
 export * as spreadGateBridgeV1 from "./spreadGateBridgeV1.js";
 export * from "./release1Planning.js";
+export * from "./release1PacketPlanning.js";
 export * from "./operator.js";
 export * from "./cli.js";
+export * from "./cliMain.js";
 export * from "./receiptV3.js";
