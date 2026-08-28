@@ -1,8 +1,23 @@
 {
-  "name": "@amoeba/upgrade-governance-vectors",
+  "name": "@amoeba/upgrade-governance",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "./dist/upgradeGovernance/index.js",
+  "types": "./dist/upgradeGovernance/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/upgradeGovernance/index.d.ts",
+      "import": "./dist/upgradeGovernance/index.js"
+    },
+    "./upgrade-governance": {
+      "types": "./dist/upgradeGovernance/index.d.ts",
+      "import": "./dist/upgradeGovernance/index.js"
+    }
+  },
+  "files": [
+    "dist/upgradeGovernance"
+  ],
   "packageManager": "npm@10.9.8",
   "engines": {
     "node": ">=22 <25"
@@ -15,6 +30,8 @@
     "check:release1-vectors": "node --import tsx tools/generate-release1-vectors.ts --check",
     "check:vectors": "node --import tsx tools/generate-vectors.ts --check",
     "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "check:package": "npm run build && node --import tsx tools/check-package-consumer.ts && npm pack --dry-run --json",
     "test": "npm run check:vectors && npm run check:bridge && npm run check:release1-vectors && node --import tsx --test upgradeGovernance/*.test.ts"
   },
   "dependencies": {

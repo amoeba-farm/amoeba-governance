@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "exclude": [
+    "upgradeGovernance/**/*.test.ts",
+    "upgradeGovernance/*SyntheticVector.ts",
+    "tools/**",
+    "dist/**"
+  ]
+}
