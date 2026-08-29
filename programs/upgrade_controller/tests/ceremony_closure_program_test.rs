@@ -161,6 +161,7 @@ const BUFFER_REVIEW_FIXED_RUNWAY_SLOTS: u64 = 64;
 // immutable class timelocks remain at their minimum accepted values.
 const EXPIRY_SLOTS: u64 = 20_000;
 const OBSERVATION_COMPUTE_LIMIT: u32 = 1_400_000;
+const MAX_SELECTED_OBSERVATION_CHUNK_CU_V1: u64 = 200_000;
 
 enum CeremonyBackend {
     ProgramTest(ProgramTestContext),
@@ -791,6 +792,44 @@ async fn submit(
             rpc_submit_v0(backend, &context.payer, instructions, signers).await
         }
     }
+}
+
+async fn submit_program_test_with_compute_evidence(
+    context: &mut CeremonyContext,
+    instructions: &[Instruction],
+) -> Result<u64, String> {
+    let CeremonyBackend::ProgramTest(program_test) = &mut context.backend else {
+        return Err("compute evidence requires ProgramTest".into());
+    };
+    program_test.last_blockhash = program_test
+        .get_new_latest_blockhash()
+        .await
+        .map_err(|error| error.to_string())?;
+    let transaction = Transaction::new_signed_with_payer(
+        instructions,
+        Some(&program_test.payer.pubkey()),
+        &[&program_test.payer],
+        program_test.last_blockhash,
+    );
+    let simulation = program_test
+        .banks_client
+        .simulate_transaction(transaction.clone())
+        .await
+        .map_err(|error| error.to_string())?;
+    simulation
+        .result
+        .ok_or_else(|| "ProgramTest simulation omitted its result".to_string())?
+        .map_err(|error| error.to_string())?;
+    let units_consumed = simulation
+        .simulation_details
+        .ok_or_else(|| "ProgramTest simulation omitted compute details".to_string())?
+        .units_consumed;
+    program_test
+        .banks_client
+        .process_transaction(transaction)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(units_consumed)
 }
 
 fn lower_hex(bytes: &[u8]) -> String {
@@ -1514,11 +1553,9 @@ async fn observe_programdata(
         .await
         .expect("begin bounded ProgramData observation");
 
-    let raw_chunk_count = programdata_observation_chunk_count(
-        raw.len() as u64,
-        PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB,
-    )
-    .expect("raw chunk count");
+    let raw_chunk_count =
+        programdata_observation_chunk_count(raw.len() as u64, capacity.observation_chunk_size)
+            .expect("raw chunk count");
     for chunk_index in 0..raw_chunk_count {
         let append = append_programdata_observation_chunk_instruction(
             harness.controller,
@@ -1538,9 +1575,34 @@ async fn observe_programdata(
         )
         .expect("append observation instruction");
         let [limit, price] = envelope_prefix();
-        submit(context, &[limit, price, append], &[])
-            .await
-            .expect("append exact ProgramData chunk");
+        if chunk_index == 0
+            && std::env::var_os("AMOEBA_OBSERVATION_COMPUTE_EVIDENCE").is_some()
+            && matches!(&context.backend, CeremonyBackend::ProgramTest(_))
+        {
+            let units_consumed =
+                submit_program_test_with_compute_evidence(context, &[limit, price, append])
+                    .await
+                    .expect("simulate and commit exact ProgramData chunk");
+            assert!(
+                units_consumed <= MAX_SELECTED_OBSERVATION_CHUNK_CU_V1,
+                "selected observation chunk consumed {units_consumed} CU, exceeding conservative {MAX_SELECTED_OBSERVATION_CHUNK_CU_V1} CU ceiling"
+            );
+            let sbpf_target =
+                std::env::var("AMOEBA_SBPF_TARGET").unwrap_or_else(|_| "unspecified".into());
+            println!(
+                "AMOEBA_PROGRAMDATA_OBSERVATION_CHUNK_SBF_EVIDENCE={{\"sbpf_target\":\"{}\",\"chunk_size\":{},\"raw_programdata_length\":{},\"raw_chunk_count\":{},\"units_consumed\":{},\"conservative_ceiling\":{},\"runtime_stack_fault\":false}}",
+                sbpf_target,
+                capacity.observation_chunk_size,
+                raw.len(),
+                raw_chunk_count,
+                units_consumed,
+                MAX_SELECTED_OBSERVATION_CHUNK_CU_V1,
+            );
+        } else {
+            submit(context, &[limit, price, append], &[])
+                .await
+                .expect("append exact ProgramData chunk");
+        }
     }
 
     let artifact_chunk_count =
