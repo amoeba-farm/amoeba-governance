@@ -7571,10 +7571,15 @@ checksum = "461d0c5956fcc728ecc03a3a961e4adc9a7975d86f6f8371389a289517c02ca9"
 name = "upgrade_controller"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "bincode",
  "borsh 0.10.4",
  "serde",
  "serde_json",
+ "solana-address-lookup-table-interface",
+ "solana-client",
  "solana-loader-v3-interface",
+ "solana-nonce",
  "solana-program",
  "solana-program-test",
  "solana-pubkey",

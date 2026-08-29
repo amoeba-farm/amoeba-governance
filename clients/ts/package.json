@@ -29,6 +29,7 @@
     "generate:bridge": "node --import tsx tools/generate-spread-gate-bridge.ts",
     "generate:release1-vectors": "node --import tsx tools/generate-release1-vectors.ts",
     "generate:vectors": "node --import tsx tools/generate-vectors.ts",
+    "finalize:local-ceremony-receipt": "node --import tsx tools/finalize-local-ceremony-receipt.ts",
     "check:bridge": "node --import tsx tools/generate-spread-gate-bridge.ts --check",
     "check:release1-vectors": "node --import tsx tools/generate-release1-vectors.ts --check",
     "check:vectors": "node --import tsx tools/generate-vectors.ts --check",

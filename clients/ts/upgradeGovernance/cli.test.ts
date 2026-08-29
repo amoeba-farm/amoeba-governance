@@ -188,12 +188,16 @@ function temporary(run: (directory: string) => Promise<void>): Promise<void> {
 
 test("CLI exposes the complete required command set and marks Phase 7 commands read-only", () => {
   assert.deepEqual(UPGRADE_GOVERNANCE_CLI_COMMANDS_V1, [
-    "schema", "observe", "plan-initialize", "plan-proposal", "adopt-buffer", "verify-buffer", "approve", "finalize-governance", "queue", "guardian-freeze",
+    "schema", "observe", "observe-programdata", "plan-initialize", "plan-proposal", "adopt-buffer", "verify-buffer", "approve", "finalize-governance", "queue", "guardian-freeze",
     "plan-emergency-resolution", "create-emergency-resolution", "approve-emergency-resolution", "queue-emergency-resolution", "execute-emergency-resolution",
     "freeze", "bind-prestate", "approve-checkpoint", "execute-extension", "execute-upgrade", "verify-programdata", "bind-poststate",
     "approve-unfreeze", "unfreeze", "cancel", "expire", "close-buffer", "plan-rollback", "observe-programdata-failure", "activate-rollback",
     "create-council-set", "rotate-council", "plan-controller-immutability",
-    "plan-authority-handoff", "verify-handoff",
+    "record-controller-immutability", "plan-authority-handoff", "create-handoff",
+    "approve-handoff", "queue-handoff", "accept-target-authority", "verify-handoff",
+    "create-bootstrap-activation", "approve-bootstrap-activation", "queue-bootstrap-activation",
+    "execute-bootstrap-activation", "verify-bootstrap-activation", "test-capacity-drift",
+    "plan-local-ceremony", "verify-local-ceremony",
   ]);
   assert.deepEqual(RELEASE1_PHASE7_READINESS_ONLY_COMMANDS_V1, ["plan-controller-immutability", "plan-authority-handoff", "verify-handoff"]);
   assert.equal(RELEASE1_PUBLIC_SCHEMA_V1.tokenGovernanceEnabled, false);

@@ -19,6 +19,10 @@ verify-handoff requires payload.clusterDomainHex plus payload.receipt. The
 built-in verifier computes the verdict after independently re-querying the
 finalized source supplied by the adapter; adapter-provided verdicts are not
 accepted.
+
+verify-local-ceremony requires the same explicit cluster-domain binding and a
+receipt-v4 value. The checked-in local adapter is read-only and accepts only an
+explicit loopback validator endpoint plus narrow journal and lock file paths.
 `;
 
 export interface UpgradeGovernanceExecutableAdapterModuleV1 {

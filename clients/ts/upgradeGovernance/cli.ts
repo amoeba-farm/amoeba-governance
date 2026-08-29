@@ -40,10 +40,15 @@ import {
   type GovernedUpgradeReceiptV3Verification,
   type ReceiptFinalizedSourceReaderV3,
 } from "./receiptV3.js";
+import {
+  verifyGovernedRelease1CeremonyReceiptV4,
+  type GovernedRelease1CeremonyReceiptV4Verification,
+} from "./receiptV4.js";
 
 export const UPGRADE_GOVERNANCE_CLI_COMMANDS_V1 = Object.freeze([
   "schema",
   "observe",
+  "observe-programdata",
   "plan-initialize",
   "plan-proposal",
   "adopt-buffer",
@@ -75,8 +80,21 @@ export const UPGRADE_GOVERNANCE_CLI_COMMANDS_V1 = Object.freeze([
   "create-council-set",
   "rotate-council",
   "plan-controller-immutability",
+  "record-controller-immutability",
   "plan-authority-handoff",
+  "create-handoff",
+  "approve-handoff",
+  "queue-handoff",
+  "accept-target-authority",
   "verify-handoff",
+  "create-bootstrap-activation",
+  "approve-bootstrap-activation",
+  "queue-bootstrap-activation",
+  "execute-bootstrap-activation",
+  "verify-bootstrap-activation",
+  "test-capacity-drift",
+  "plan-local-ceremony",
+  "verify-local-ceremony",
 ] as const);
 export type UpgradeGovernanceCliCommandV1 =
   (typeof UPGRADE_GOVERNANCE_CLI_COMMANDS_V1)[number];
@@ -88,6 +106,8 @@ export const RELEASE1_PLANNING_ONLY_COMMANDS_V1 = Object.freeze([
   "plan-rollback",
   "plan-controller-immutability",
   "plan-authority-handoff",
+  "test-capacity-drift",
+  "plan-local-ceremony",
 ] as const);
 export type Release1PlanningOnlyCommandV1 =
   (typeof RELEASE1_PLANNING_ONLY_COMMANDS_V1)[number];
@@ -330,6 +350,7 @@ export type UpgradeGovernanceCliResultV1 =
   | { status: "observed"; genesisHash: string; observations: unknown }
   | { status: "planned"; command: Release1PlanningOnlyCommandV1 | OperatorMutationCommandV1; plan: Release1ProposalPlanV1 }
   | { status: "verified"; command: "verify-handoff"; result: GovernedUpgradeReceiptV3Verification }
+  | { status: "verified"; command: "verify-bootstrap-activation" | "verify-local-ceremony"; result: GovernedRelease1CeremonyReceiptV4Verification }
   | { status: "submitted"; command: OperatorMutationCommandV1; operationId: string; signature: string };
 
 /**
@@ -382,6 +403,21 @@ export async function runUpgradeGovernanceCliV1(
           parsed.payload.receipt,
           adapters.receiptFinalizedSourceReader,
         ),
+      };
+    } else if (
+      parsed.command === "verify-bootstrap-activation"
+      || parsed.command === "verify-local-ceremony"
+    ) {
+      if (parsed.armOperationId !== undefined) throw new Error(`${parsed.command} is read-only and cannot be armed`);
+      assertClusterDomainV1(requireClusterDomainHex(parsed.payload), await adapters.readAdapter.getGenesisHash());
+      const fields = Object.keys(parsed.payload).sort();
+      if (fields.length !== 2 || fields[0] !== "clusterDomainHex" || fields[1] !== "receipt") {
+        throw new Error(`${parsed.command} requires exactly payload.clusterDomainHex and payload.receipt`);
+      }
+      result = {
+        status: "verified",
+        command: parsed.command,
+        result: verifyGovernedRelease1CeremonyReceiptV4(parsed.payload.receipt),
       };
     } else {
       if (!isPlanningOnly(parsed.command) && !isMutation(parsed.command)) throw new Error("unclassified CLI command");

@@ -42,6 +42,10 @@ export const GOVERNANCE_OPERATOR_JOURNAL_VERSION_V1 = 1;
 export const GOVERNANCE_OPERATOR_LOCK_VERSION_V1 = 1;
 
 export const OPERATOR_MUTATION_COMMANDS_V1 = Object.freeze([
+  "observe-programdata", "record-controller-immutability", "create-handoff",
+  "approve-handoff", "queue-handoff", "accept-target-authority",
+  "create-bootstrap-activation", "approve-bootstrap-activation",
+  "queue-bootstrap-activation", "execute-bootstrap-activation",
   "adopt-buffer", "verify-buffer", "approve", "finalize-governance", "queue",
   "guardian-freeze", "create-emergency-resolution", "approve-emergency-resolution",
   "queue-emergency-resolution", "execute-emergency-resolution", "freeze",
@@ -62,6 +66,16 @@ export const RECENT_BLOCKHASHES_SYSVAR_ID_V1 = new PublicKey(
 );
 
 export const OPERATOR_EXPECTED_TAGS_V1: Readonly<Record<OperatorMutationCommandV1, readonly number[]>> = Object.freeze({
+  "observe-programdata": [39, 40, 41, 42],
+  "record-controller-immutability": [43],
+  "create-handoff": [44],
+  "approve-handoff": [45],
+  "queue-handoff": [46],
+  "accept-target-authority": [47],
+  "create-bootstrap-activation": [49],
+  "approve-bootstrap-activation": [50],
+  "queue-bootstrap-activation": [51],
+  "execute-bootstrap-activation": [52],
   "adopt-buffer": [75],
   "verify-buffer": [76, 77],
   approve: [55],
