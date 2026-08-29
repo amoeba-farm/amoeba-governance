@@ -10,13 +10,18 @@ import {
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { VERIFICATION_BITMAP_BYTES_V1 } from "./artifactMerkleV1.js";
+import {
+  ARTIFACT_MERKLE_SCHEME_ID,
+  VERIFICATION_BITMAP_BYTES_V1,
+} from "./artifactMerkleV1.js";
 import {
   OPERATOR_EXPECTED_TAGS_V1,
   OPERATOR_MUTATION_COMMANDS_V1,
 } from "./operator.js";
 import * as lifecycle from "./release1LifecycleInstructions.js";
 import * as loader from "./release1LoaderInstructions.js";
+import * as ceremony from "./release1CeremonyInstructions.js";
+import * as authority from "./release1AuthorityInstructions.js";
 import * as v3 from "./release1V3Instructions.js";
 import * as v3Builders from "./release1V3Builders.js";
 import * as custody from "./release1V3CustodyInstructions.js";
@@ -32,6 +37,10 @@ import {
   ProposalStateV2,
   StateCheckpointPhaseV1,
 } from "./release1.js";
+import {
+  ProgramDataObservationPurposeV1,
+  ProgramDataObservationStatusV1,
+} from "./release1Ceremony.js";
 import {
   RELEASE1_TRANSACTION_PACKET_LIMIT_V1,
   buildCanonicalRelease1LoaderEnvelopeV1,
@@ -421,6 +430,120 @@ function enveloped(
   return { label, tag: instruction.data[0]!, instructions };
 }
 
+function ceremonySurfaceCases(): readonly SurfaceCase[] {
+  const observationGuard: ceremony.ProgramDataObservationGuardV1 = {
+    purpose: ProgramDataObservationPurposeV1.ProposalPrestate,
+    generation: 1n,
+    expectedSubjectDigest: bytes("ceremony-observation-subject"),
+    expectedGateStatus: GateStatusV1.Active,
+    expectedGateEpoch: 2n,
+    expectedFreezeReasonCode: 0,
+    expectedFreezeSlot: 0n,
+  };
+  const observationProof: ceremony.ObservedArtifactMerkleProofV1 = {
+    proofLen: ceremony.MAX_OBSERVED_ARTIFACT_PROOF_NODES_V1,
+    nodes: Array.from(
+      { length: ceremony.MAX_OBSERVED_ARTIFACT_PROOF_NODES_V1 },
+      (_, index) => bytes(`ceremony-observation-proof-${index}`),
+    ),
+  };
+  const approval = {
+    expectedProposalDigest: bytes("ceremony-proposal"),
+    expectedCouncilVersion: 1n,
+    expectedGateEpoch: 2n,
+    expectedTargetNonce: 3n,
+  };
+  const handoff = build(authority.buildAcceptTargetAuthorityCheckedV1Instruction, {
+    expectedProposalDigest: approval.expectedProposalDigest,
+    expectedBridgeObservationDigest: bytes("ceremony-bridge-observation"),
+    expectedGateEpoch: approval.expectedGateEpoch,
+    expectedTargetNonce: approval.expectedTargetNonce,
+    envelope: v3Envelope(),
+  });
+  const activation = build(authority.buildExecuteBootstrapActivationV1Instruction, {
+    expectedProposalDigest: bytes("ceremony-activation-proposal"),
+    expectedBridgeObservationDigest: bytes("ceremony-activation-observation"),
+    expectedGateEpoch: 2n,
+    expectedTargetNonce: 3n,
+    expectedDeploymentPlanDigest: bytes("ceremony-deployment-plan"),
+    expectedReceiptPlanDigest: bytes("ceremony-receipt-plan"),
+    envelope: v3Envelope(),
+  });
+
+  return [
+    one("begin-programdata-observation", build(ceremony.buildBeginProgramDataObservationV1Instruction, {
+      guard: observationGuard,
+      expectedCapacityPolicyDigest: bytes("ceremony-capacity-policy"),
+      expectedArtifactLength: 1_300_000n,
+      expectedArtifactSha256: bytes("ceremony-artifact-sha"),
+      expectedArtifactMerkleRoot: bytes("ceremony-artifact-root"),
+      expectedArtifactSchemeId: ARTIFACT_MERKLE_SCHEME_ID,
+      minimumRequiredCapacity: 1_300_000n,
+      expectedDeployedSlot: 10n,
+      expectedActualCapacity: 1_572_864n,
+      expectedUpgradeAuthority: { present: true, value: key("ceremony-authority") },
+    })),
+    one("append-programdata-observation", build(ceremony.buildAppendProgramDataObservationChunkV1Instruction, {
+      guard: observationGuard,
+      expectedStatus: ProgramDataObservationStatusV1.Accumulating,
+      chunkIndex: 639,
+    })),
+    one("verify-observed-artifact", build(ceremony.buildVerifyObservedArtifactChunkV1Instruction, {
+      guard: observationGuard,
+      expectedStatus: ProgramDataObservationStatusV1.Accumulating,
+      chunkIndex: 79,
+      expectedNextArtifactChunkIndex: 79,
+      expectedTailBytesVerified: 0n,
+      proof: observationProof,
+    })),
+    one("finalize-programdata-observation", build(ceremony.buildFinalizeProgramDataObservationV1Instruction, {
+      guard: observationGuard,
+      expectedStatus: ProgramDataObservationStatusV1.ReadyToFinalize,
+      expectedNextRawChunkIndex: 640,
+      expectedNextArtifactChunkIndex: 80,
+      expectedTailBytesVerified: 272_864n,
+    })),
+    one("record-controller-immutability", build(authority.buildRecordControllerImmutabilityV1Instruction, {
+      expectedCapacityPolicyDigest: bytes("ceremony-capacity-policy"),
+      expectedReleaseDigest: bytes("ceremony-release"),
+      expectedPreObservationDigest: bytes("ceremony-controller-pre"),
+      expectedPostObservationDigest: bytes("ceremony-controller-post"),
+      expectedReceiptDigest: bytes("ceremony-immutability-receipt"),
+    })),
+    one("create-target-authority-handoff", build(authority.buildCreateTargetAuthorityHandoffV1Instruction, {
+      expectedGateEpoch: 2n,
+      expectedTargetNonce: 3n,
+      expectedCouncilVersion: 1n,
+      bridgeSourceCommitment: bytes("ceremony-bridge-source"),
+      bridgeBuildInputsCommitment: bytes("ceremony-bridge-build"),
+      bridgePackageCommitment: bytes("ceremony-bridge-package"),
+      bridgeReleaseManifestCommitment: bytes("ceremony-bridge-release"),
+      planValidUntilSlot: 100n,
+    })),
+    one("approve-target-authority-handoff", build(authority.buildApproveTargetAuthorityHandoffV1Instruction, approval)),
+    one("queue-target-authority-handoff", build(authority.buildQueueTargetAuthorityHandoffV1Instruction, approval)),
+    enveloped("accept-target-authority", handoff, buildCanonicalRelease1LoaderEnvelopeV1(handoff)),
+    one("create-bootstrap-activation", build(authority.buildCreateBootstrapActivationV1Instruction, {
+      expectedControllerImmutabilityDigest: bytes("ceremony-immutability-receipt"),
+      expectedHandoffReceiptDigest: bytes("ceremony-handoff-receipt"),
+      expectedBridgeObservationDigest: bytes("ceremony-bridge-observation"),
+      expectedGateEpoch: 2n,
+      expectedTargetNonce: 3n,
+      expectedCouncilVersion: 1n,
+      planValidUntilSlot: 100n,
+    })),
+    one("approve-bootstrap-activation", build(authority.buildApproveBootstrapActivationV1Instruction, {
+      ...approval,
+      expectedProposalDigest: bytes("ceremony-activation-proposal"),
+    })),
+    one("queue-bootstrap-activation", build(authority.buildQueueBootstrapActivationV1Instruction, {
+      ...approval,
+      expectedProposalDigest: bytes("ceremony-activation-proposal"),
+    })),
+    enveloped("execute-bootstrap-activation", activation, buildCanonicalRelease1LoaderEnvelopeV1(activation)),
+  ];
+}
+
 function allSurfaceCases(): readonly SurfaceCase[] {
   const proposal = proposalExpectation();
   const checkpoint = checkpointCandidate(StateCheckpointPhaseV1.Poststate);
@@ -766,12 +889,18 @@ function actualWireBytes(input: Release1PacketPlanningInputV1): number {
 test("every current Release 1 operator mutation surface has a bounded packet plan", () => {
   const surfaces = [
     ...retainedCouncilSurfaceCases(),
+    ...ceremonySurfaceCases(),
     ...currentMutationSurfaceCases(),
   ];
-  assert.equal(surfaces.length, 34);
+  assert.equal(surfaces.length, 47);
   assert.deepEqual(
     [...new Set(surfaces.map((surface) => surface.tag))].sort((a, b) => a - b),
-    [18, 19, 20, 21, 22, 24, 25, ...Array.from({ length: 27 }, (_, index) => index + 55)],
+    [
+      18, 19, 20, 21, 22, 24, 25,
+      ...Array.from({ length: 9 }, (_, index) => index + 39),
+      ...Array.from({ length: 4 }, (_, index) => index + 49),
+      ...Array.from({ length: 27 }, (_, index) => index + 55),
+    ],
   );
 
   const coveredTags = new Set(surfaces.map((surface) => surface.tag));
@@ -808,7 +937,7 @@ test("every current Release 1 operator mutation surface has a bounded packet pla
   }
 
   assert.deepEqual(v0Blockers, [], `non-fitting required v0 surfaces: ${v0Blockers.join(", ")}`);
-  assert.equal(Object.keys(results).length, 34);
+  assert.equal(Object.keys(results).length, 47);
   const evidence = JSON.parse(
     readFileSync(
       new URL(
