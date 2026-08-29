@@ -3391,8 +3391,28 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         spread_artifact.as_slice()
     };
     let rollback_artifact = spread_artifact.as_slice();
-    let controller = Pubkey::from_str("8qbHbw2BbbTHBW1sbeqakYXVKRQM8Ne7pLK7m6CVfeR")
-        .expect("synthetic local ceremony controller id");
+    let phase3_manifest_controller =
+        Pubkey::from_str("4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi")
+            .expect("Phase 3 manifest controller id");
+    let configured_controller = std::env::var("AMOEBA_SYNTHETIC_CONTROLLER_PROGRAM_ID")
+        .unwrap_or_else(|_| "8qbHbw2BbbTHBW1sbeqakYXVKRQM8Ne7pLK7m6CVfeR".into());
+    let controller =
+        Pubkey::from_str(&configured_controller).expect("synthetic local ceremony controller id");
+    if target_is_spread {
+        assert!(
+            std::env::var_os("AMOEBA_SYNTHETIC_CONTROLLER_PROGRAM_ID").is_some(),
+            "exact Phase 3 Spread rehearsal must explicitly select its manifest controller"
+        );
+        assert_eq!(
+            controller, phase3_manifest_controller,
+            "exact Phase 3 Spread artifact is bound to its manifest controller"
+        );
+    } else {
+        assert_ne!(
+            controller, phase3_manifest_controller,
+            "generic sacrificial CI cannot present itself as the Phase 3 Spread bridge"
+        );
+    }
     let controller_programdata = derive_upgradeable_programdata_address(&controller).0;
     let target =
         Pubkey::from_str("9ipkBCjEfeJDMF6AFrezRmDDHmbnmeyv45cfXNqAnWsH").expect("Spread target id");
@@ -4494,14 +4514,22 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         assert_eq!(completed_rollback.state, ProposalStateV2::Completed);
         assert_eq!(final_gate.status, GateStatusV1::Active);
         assert_eq!(final_gate.epoch, rollback_gate.epoch + 1);
+        assert_eq!(final_gate.active_proposal, Pubkey::default());
         assert_eq!(final_gate.last_completed_proposal, rollback_key);
         assert_eq!(final_deployment.completed_proposal.value, rollback_key);
         assert_eq!(
             final_deployment.artifact_sha256,
             completed_rollback.artifact_sha256
         );
-        let retired_primary: UpgradeProposalV3 = state(&mut context, primary_key).await;
-        assert_eq!(retired_primary.state, ProposalStateV2::Retired);
+        let superseded_primary: UpgradeProposalV3 = state(&mut context, primary_key).await;
+        assert_eq!(
+            superseded_primary.state,
+            ProposalStateV2::SupersededByRollback
+        );
+        assert!(superseded_primary.rollback_proposal.present);
+        assert_eq!(superseded_primary.rollback_proposal.value, rollback_key);
+        assert!(completed_rollback.primary_proposal.present);
+        assert_eq!(completed_rollback.primary_proposal.value, primary_key);
 
         if target_is_spread {
             let permitted_mutation = spread_init_user_collateral_instruction(
@@ -4521,9 +4549,10 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
                 .is_some());
         }
         println!(
-            "AMOEBA_V3_ROLLBACK_EVIDENCE={{\"sbpf_target\":\"{}\",\"target_kind\":\"{}\",\"controller_elf_length\":{},\"controller_elf_sha256\":\"{}\",\"target_elf_length\":{},\"target_elf_sha256\":\"{}\",\"natural_zero_tail_failure\":false,\"fault_trigger\":\"programtest-one-byte-payload-corruption\",\"failure_witness_actual_controller_sbf\":true,\"rollback_activation_actual_controller_sbf\":true,\"rollback_loader_cpi_actual_controller_sbf\":true,\"rollback_programdata_verified\":true,\"rollback_poststate_accepted\":true,\"separate_unfreeze_quorum\":true,\"first_spread_mutation\":{},\"live_rpc_write\":false}}",
+            "AMOEBA_V3_ROLLBACK_EVIDENCE={{\"sbpf_target\":\"{}\",\"target_kind\":\"{}\",\"controller_program\":\"{}\",\"controller_elf_length\":{},\"controller_elf_sha256\":\"{}\",\"target_elf_length\":{},\"target_elf_sha256\":\"{}\",\"natural_zero_tail_failure\":false,\"fault_trigger\":\"programtest-one-byte-payload-corruption\",\"failure_witness_actual_controller_sbf\":true,\"rollback_activation_actual_controller_sbf\":true,\"rollback_loader_cpi_actual_controller_sbf\":true,\"rollback_programdata_verified\":true,\"rollback_poststate_accepted\":true,\"separate_unfreeze_quorum\":true,\"first_spread_mutation\":{},\"live_rpc_write\":false}}",
             std::env::var("AMOEBA_SBPF_TARGET").unwrap_or_else(|_| "unspecified".into()),
             if target_is_spread { "spread" } else { "generic-sacrificial" },
+            controller,
             controller_artifact.len(),
             lower_hex(hashv(&[&controller_artifact]).as_ref()),
             spread_artifact.len(),
