@@ -6,8 +6,10 @@ use solana_program::pubkey::Pubkey;
 use upgrade_controller::{
     pda::{derive_bootstrap_activation_pda, derive_target_handoff_pda},
     release1_ceremony_digest::{
+        compute_bootstrap_activation_deployment_plan_digest_v1,
         compute_bootstrap_activation_proposal_digest_v1,
-        compute_bootstrap_activation_receipt_digest_v1, compute_capacity_policy_digest_v1,
+        compute_bootstrap_activation_receipt_digest_v1,
+        compute_bootstrap_activation_receipt_plan_digest_v1, compute_capacity_policy_digest_v1,
         compute_controller_immutability_receipt_digest_v1, compute_controller_release_digest_v1,
         compute_current_deployment_digest_v1, compute_programdata_observation_digest_v1,
         compute_target_handoff_proposal_digest_v1, compute_target_handoff_receipt_digest_v1,
@@ -47,8 +49,15 @@ const FIXTURE: &str = include_str!(concat!(
 #[derive(Debug, Deserialize)]
 struct CeremonyFixture {
     fixture_version: u8,
+    activation_plan_digests: ActivationPlanDigests,
     proposal_pdas: ProposalPdas,
     entries: Vec<CeremonyEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ActivationPlanDigests {
+    deployment_plan_digest_hex: String,
+    receipt_plan_digest_hex: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -350,6 +359,11 @@ fn nine_ceremony_accounts_match_cross_language_golden_bytes_and_digests() {
                 let value = BootstrapActivationReceiptV1::from_bytes_strict(&bytes)
                     .expect("strict Rust decoding must succeed");
                 assert_eq!(value.proposal, activation_pda.0);
+                assert_eq!(
+                    hex(&compute_bootstrap_activation_receipt_plan_digest_v1(&value)
+                        .expect("activation receipt plan digest")),
+                    fixture.activation_plan_digests.receipt_plan_digest_hex
+                );
                 verify_account!(
                     entry,
                     &bytes,
@@ -362,4 +376,20 @@ fn nine_ceremony_accounts_match_cross_language_golden_bytes_and_digests() {
             unexpected => panic!("unexpected ceremony fixture account {unexpected}"),
         }
     }
+
+    let deployment_entry = fixture
+        .entries
+        .iter()
+        .find(|entry| entry.account_type == "CurrentDeploymentStateV1")
+        .expect("deployment fixture entry");
+    let deployment =
+        CurrentDeploymentStateV1::from_bytes_strict(&decode_base64(&deployment_entry.data_base64))
+            .expect("strict deployment decoding");
+    assert_eq!(
+        hex(
+            &compute_bootstrap_activation_deployment_plan_digest_v1(&deployment)
+                .expect("activation deployment plan digest")
+        ),
+        fixture.activation_plan_digests.deployment_plan_digest_hex
+    );
 }

@@ -4,8 +4,10 @@ import test from "node:test";
 import { PublicKey } from "@solana/web3.js";
 
 import {
+  bootstrapActivationDeploymentPlanDigestV1,
   bootstrapActivationProposalDigestV1,
   bootstrapActivationReceiptDigestV1,
+  bootstrapActivationReceiptPlanDigestV1,
   controllerImmutabilityReceiptDigestV1,
   controllerReleaseDigestV1,
   currentDeploymentDigestV1,
@@ -55,6 +57,10 @@ interface CeremonyEntry {
 
 interface CeremonyFixture {
   fixture_version: number;
+  activation_plan_digests: {
+    deployment_plan_digest_hex: string;
+    receipt_plan_digest_hex: string;
+  };
   proposal_pdas: {
     controller_program: string;
     target_program: string;
@@ -181,7 +187,37 @@ test("nine ceremony accounts match the shared Rust/TypeScript golden bytes and d
     } else if (entry.account_type === "BootstrapActivationProposalV1") {
       assert.equal((decoded as ReturnType<typeof deserializeBootstrapActivationProposalV1>).bump, activationBump);
     } else if (entry.account_type === "BootstrapActivationReceiptV1") {
-      assert.ok((decoded as ReturnType<typeof deserializeBootstrapActivationReceiptV1>).proposal.equals(activationPda));
+      const receipt = decoded as ReturnType<typeof deserializeBootstrapActivationReceiptV1>;
+      assert.ok(receipt.proposal.equals(activationPda));
+      assert.equal(
+        bootstrapActivationReceiptPlanDigestV1(receipt).toString("hex"),
+        fixture.activation_plan_digests.receipt_plan_digest_hex,
+      );
     }
   }
+
+  const deploymentEntry = fixture.entries.find((entry) => entry.account_type === "CurrentDeploymentStateV1");
+  assert.ok(deploymentEntry);
+  const deployment = deserializeCurrentDeploymentStateV1(Buffer.from(deploymentEntry.data_base64, "base64"));
+  assert.equal(
+    bootstrapActivationDeploymentPlanDigestV1(deployment).toString("hex"),
+    fixture.activation_plan_digests.deployment_plan_digest_hex,
+  );
+
+  const laterDeployment = {
+    ...deployment,
+    lastUpdatedSlot: deployment.lastUpdatedSlot + 17n,
+    deploymentDigest: Buffer.alloc(32, 97),
+  };
+  assert.deepEqual(
+    bootstrapActivationDeploymentPlanDigestV1(laterDeployment),
+    bootstrapActivationDeploymentPlanDigestV1(deployment),
+  );
+  assert.notDeepEqual(
+    bootstrapActivationDeploymentPlanDigestV1({
+      ...laterDeployment,
+      artifactSha256: Buffer.alloc(32, 98),
+    }),
+    bootstrapActivationDeploymentPlanDigestV1(deployment),
+  );
 });

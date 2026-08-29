@@ -54,8 +54,10 @@ use crate::{
         MAX_CEREMONY_COMPUTE_UNIT_LIMIT_V1, MAX_CEREMONY_COMPUTE_UNIT_PRICE_MICRO_LAMPORTS_V1,
     },
     release1_ceremony_digest::{
+        compute_bootstrap_activation_deployment_plan_digest_v1,
         compute_bootstrap_activation_proposal_digest_v1,
         compute_bootstrap_activation_receipt_digest_v1,
+        compute_bootstrap_activation_receipt_plan_digest_v1,
         compute_controller_immutability_receipt_digest_v1, compute_current_deployment_digest_v1,
         compute_programdata_observation_subject_digest_v1,
         compute_target_handoff_proposal_digest_v1, compute_target_handoff_receipt_digest_v1,
@@ -1447,7 +1449,7 @@ pub fn process_execute_bootstrap_activation_v1(
     proposal.terminal_reason_code = CEREMONY_PROPOSAL_COMPLETED_REASON_V1;
     validate_bootstrap_activation_proposal_digest_v1(&proposal)?;
 
-    let deployment = CurrentDeploymentStateV1 {
+    let mut deployment = CurrentDeploymentStateV1 {
         discriminator: CURRENT_DEPLOYMENT_STATE_V1_DISCRIMINATOR,
         version: CEREMONY_ACCOUNT_VERSION_V1,
         bump: deployment_bump,
@@ -1481,17 +1483,19 @@ pub fn process_execute_bootstrap_activation_v1(
         completed_proposal: OptionalPubkeyV1::none(),
         gate_epoch_at_activation: next_epoch,
         deployment_generation: 1,
-        deployment_digest: instruction.expected_deployment_digest,
+        deployment_digest: [0; 32],
         last_updated_slot: slot,
         reserved: [0; CURRENT_DEPLOYMENT_STATE_V1_RESERVED_LEN],
     };
-    if compute_current_deployment_digest_v1(&deployment)? != instruction.expected_deployment_digest
+    if compute_bootstrap_activation_deployment_plan_digest_v1(&deployment)?
+        != instruction.expected_deployment_plan_digest
     {
         return Err(GovernanceError::Release1DigestMismatch.into());
     }
+    deployment.deployment_digest = compute_current_deployment_digest_v1(&deployment)?;
     validate_current_deployment_digest_v1(&deployment)?;
 
-    let receipt = BootstrapActivationReceiptV1 {
+    let mut receipt = BootstrapActivationReceiptV1 {
         discriminator: BOOTSTRAP_ACTIVATION_RECEIPT_V1_DISCRIMINATOR,
         version: CEREMONY_ACCOUNT_VERSION_V1,
         bump: receipt_bump,
@@ -1536,15 +1540,16 @@ pub fn process_execute_bootstrap_activation_v1(
         current_deployment_digest: deployment.deployment_digest,
         deployment_generation: deployment.deployment_generation,
         finalized_slot: slot,
-        receipt_digest: instruction.expected_receipt_digest,
+        receipt_digest: [0; 32],
         finalized: true,
         reserved: [0; BOOTSTRAP_ACTIVATION_RECEIPT_V1_RESERVED_LEN],
     };
-    if compute_bootstrap_activation_receipt_digest_v1(&receipt)?
-        != instruction.expected_receipt_digest
+    if compute_bootstrap_activation_receipt_plan_digest_v1(&receipt)?
+        != instruction.expected_receipt_plan_digest
     {
         return Err(GovernanceError::Release1DigestMismatch.into());
     }
+    receipt.receipt_digest = compute_bootstrap_activation_receipt_digest_v1(&receipt)?;
     crate::release1_ceremony_digest::validate_bootstrap_activation_receipt_digest_v1(&receipt)?;
 
     let gate_bytes = encode_fixed_account(&next_gate, ProtocolGateV1::LEN)?;

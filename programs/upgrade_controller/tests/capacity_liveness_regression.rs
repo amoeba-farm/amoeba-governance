@@ -20,17 +20,20 @@ fn pinned_runtime_capacity_exceeds_every_published_v1_atomic_ceiling() {
     assert_eq!(MAX_ARTIFACT_BYTES_V1, 1_572_864);
     assert_eq!(MAX_ATOMIC_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1, 1_572_909);
 
-    assert!(PINNED_RUNTIME_MAX_PAYLOAD_BYTES > MAX_ARTIFACT_BYTES_V1);
     assert!(
-        PINNED_RUNTIME_MAX_RAW_PROGRAMDATA_BYTES
-            > MAX_ATOMIC_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1
+        std::hint::black_box(PINNED_RUNTIME_MAX_PAYLOAD_BYTES)
+            > std::hint::black_box(MAX_ARTIFACT_BYTES_V1)
+    );
+    assert!(
+        std::hint::black_box(PINNED_RUNTIME_MAX_RAW_PROGRAMDATA_BYTES)
+            > std::hint::black_box(MAX_ATOMIC_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1)
     );
 }
 
 #[test]
 fn legacy_programdata_verification_geometry_cannot_cover_runtime_max() {
-    let runtime_chunks = PINNED_RUNTIME_MAX_PAYLOAD_BYTES
-        .div_ceil(u64::from(RELEASE1_ARTIFACT_CHUNK_SIZE_V1));
+    let runtime_chunks =
+        PINNED_RUNTIME_MAX_PAYLOAD_BYTES.div_ceil(u64::from(RELEASE1_ARTIFACT_CHUNK_SIZE_V1));
     let padded_chunks = runtime_chunks.next_power_of_two();
     let proof_depth = padded_chunks.trailing_zeros() as usize;
 

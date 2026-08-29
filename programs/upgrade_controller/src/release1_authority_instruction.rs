@@ -199,8 +199,8 @@ fixed_instruction!(
         expected_bridge_observation_digest: [u8; 32],
         expected_gate_epoch: u64,
         expected_target_nonce: u64,
-        expected_deployment_digest: [u8; 32],
-        expected_receipt_digest: [u8; 32],
+        expected_deployment_plan_digest: [u8; 32],
+        expected_receipt_plan_digest: [u8; 32],
         envelope: CeremonyEnvelopeV1
     }
 );

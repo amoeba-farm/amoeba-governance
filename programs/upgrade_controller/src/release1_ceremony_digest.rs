@@ -35,6 +35,10 @@ pub const BOOTSTRAP_ACTIVATION_PROPOSAL_DIGEST_DOMAIN_V1: &[u8] =
     b"AMOEBA_BOOTSTRAP_ACTIVATION_PROPOSAL_V1";
 pub const BOOTSTRAP_ACTIVATION_RECEIPT_DIGEST_DOMAIN_V1: &[u8] =
     b"AMOEBA_BOOTSTRAP_ACTIVATION_RECEIPT_V1";
+pub const BOOTSTRAP_ACTIVATION_DEPLOYMENT_PLAN_DIGEST_DOMAIN_V1: &[u8] =
+    b"AMOEBA_BOOTSTRAP_ACTIVATION_DEPLOYMENT_PLAN_V1";
+pub const BOOTSTRAP_ACTIVATION_RECEIPT_PLAN_DIGEST_DOMAIN_V1: &[u8] =
+    b"AMOEBA_BOOTSTRAP_ACTIVATION_RECEIPT_PLAN_V1";
 
 #[allow(clippy::too_many_arguments)]
 pub fn compute_programdata_observation_subject_digest_v1(
@@ -178,6 +182,22 @@ pub fn validate_current_deployment_digest_v1(
     )
 }
 
+/// Commits the complete static deployment image without requiring an operator
+/// to predict the bank slot in which activation will land. The controller
+/// computes the ordinary deployment digest from the actual slot after this
+/// plan commitment matches.
+pub fn compute_bootstrap_activation_deployment_plan_digest_v1(
+    value: &CurrentDeploymentStateV1,
+) -> GovernanceResult<[u8; 32]> {
+    let mut canonical = value.clone();
+    canonical.deployment_digest = [0; 32];
+    canonical.last_updated_slot = 0;
+    hash_fixed(
+        BOOTSTRAP_ACTIVATION_DEPLOYMENT_PLAN_DIGEST_DOMAIN_V1,
+        &canonical,
+    )
+}
+
 pub fn compute_controller_immutability_receipt_digest_v1(
     value: &ControllerImmutabilityReceiptV1,
 ) -> GovernanceResult<[u8; 32]> {
@@ -278,6 +298,23 @@ pub fn compute_bootstrap_activation_receipt_digest_v1(
     let mut canonical = value.clone();
     canonical.receipt_digest = [0; 32];
     hash_fixed(BOOTSTRAP_ACTIVATION_RECEIPT_DIGEST_DOMAIN_V1, &canonical)
+}
+
+/// Commits the complete static activation-receipt image while excluding only
+/// the actual landing slot and the slot-dependent deployment/receipt digests.
+/// Those final digests are derived and stored by the controller after the plan
+/// has matched.
+pub fn compute_bootstrap_activation_receipt_plan_digest_v1(
+    value: &BootstrapActivationReceiptV1,
+) -> GovernanceResult<[u8; 32]> {
+    let mut canonical = value.clone();
+    canonical.current_deployment_digest = [0; 32];
+    canonical.finalized_slot = 0;
+    canonical.receipt_digest = [0; 32];
+    hash_fixed(
+        BOOTSTRAP_ACTIVATION_RECEIPT_PLAN_DIGEST_DOMAIN_V1,
+        &canonical,
+    )
 }
 
 pub fn validate_bootstrap_activation_receipt_digest_v1(

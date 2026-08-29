@@ -1108,6 +1108,8 @@ export const TARGET_HANDOFF_PROPOSAL_DIGEST_DOMAIN_V1 = "AMOEBA_TARGET_AUTHORITY
 export const TARGET_HANDOFF_RECEIPT_DIGEST_DOMAIN_V1 = "AMOEBA_TARGET_AUTHORITY_HANDOFF_RECEIPT_V1";
 export const BOOTSTRAP_ACTIVATION_PROPOSAL_DIGEST_DOMAIN_V1 = "AMOEBA_BOOTSTRAP_ACTIVATION_PROPOSAL_V1";
 export const BOOTSTRAP_ACTIVATION_RECEIPT_DIGEST_DOMAIN_V1 = "AMOEBA_BOOTSTRAP_ACTIVATION_RECEIPT_V1";
+export const BOOTSTRAP_ACTIVATION_DEPLOYMENT_PLAN_DIGEST_DOMAIN_V1 = "AMOEBA_BOOTSTRAP_ACTIVATION_DEPLOYMENT_PLAN_V1";
+export const BOOTSTRAP_ACTIVATION_RECEIPT_PLAN_DIGEST_DOMAIN_V1 = "AMOEBA_BOOTSTRAP_ACTIVATION_RECEIPT_PLAN_V1";
 
 export type ProgramDataObservationSubjectBindingV1 = Pick<
   ProgramDataObservationV1,
@@ -1171,11 +1173,13 @@ export const programDataCapacityPolicyDigestV1 = (value: ProgramDataCapacityPoli
 export const controllerReleaseDigestV1 = (value: ControllerReleaseCommitmentV1): Buffer => digestFields(CONTROLLER_RELEASE_DIGEST_DOMAIN_V1, value, CONTROLLER_RELEASE_SCHEMA, ["releaseDigest", "creationSlot"]);
 export const programDataObservationDigestV1 = (value: ProgramDataObservationV1): Buffer => digestFields(PROGRAMDATA_OBSERVATION_DIGEST_DOMAIN_V1, value, PROGRAMDATA_OBSERVATION_SCHEMA, ["observationDigest"]);
 export const currentDeploymentDigestV1 = (value: CurrentDeploymentStateV1): Buffer => digestFields(CURRENT_DEPLOYMENT_DIGEST_DOMAIN_V1, value, CURRENT_DEPLOYMENT_SCHEMA, ["deploymentDigest"]);
+export const bootstrapActivationDeploymentPlanDigestV1 = (value: CurrentDeploymentStateV1): Buffer => digestFields(BOOTSTRAP_ACTIVATION_DEPLOYMENT_PLAN_DIGEST_DOMAIN_V1, value, CURRENT_DEPLOYMENT_SCHEMA, ["deploymentDigest", "lastUpdatedSlot"]);
 export const controllerImmutabilityReceiptDigestV1 = (value: ControllerImmutabilityReceiptV1): Buffer => digestFields(CONTROLLER_IMMUTABILITY_DIGEST_DOMAIN_V1, value, CONTROLLER_IMMUTABILITY_SCHEMA, ["receiptDigest"]);
 export const targetAuthorityHandoffProposalDigestV1 = (value: TargetAuthorityHandoffProposalV1): Buffer => digestFields(TARGET_HANDOFF_PROPOSAL_DIGEST_DOMAIN_V1, value, HANDOFF_PROPOSAL_SCHEMA, ["state", "approvalBitset", "approvalCount", "firstApprovalSlot", "councilApprovedSlot", "queuedSlot", "executedSlot", "terminalSlot", "terminalReasonCode", "proposalDigest"]);
 export const targetAuthorityHandoffReceiptDigestV1 = (value: TargetAuthorityHandoffReceiptV1): Buffer => digestFields(TARGET_HANDOFF_RECEIPT_DIGEST_DOMAIN_V1, value, HANDOFF_RECEIPT_SCHEMA, ["receiptDigest"]);
 export const bootstrapActivationProposalDigestV1 = (value: BootstrapActivationProposalV1): Buffer => digestFields(BOOTSTRAP_ACTIVATION_PROPOSAL_DIGEST_DOMAIN_V1, value, ACTIVATION_PROPOSAL_SCHEMA, ["state", "approvalBitset", "approvalCount", "firstApprovalSlot", "councilApprovedSlot", "queuedSlot", "executedSlot", "terminalSlot", "terminalReasonCode", "proposalDigest"]);
 export const bootstrapActivationReceiptDigestV1 = (value: BootstrapActivationReceiptV1): Buffer => digestFields(BOOTSTRAP_ACTIVATION_RECEIPT_DIGEST_DOMAIN_V1, value, ACTIVATION_RECEIPT_SCHEMA, ["receiptDigest"]);
+export const bootstrapActivationReceiptPlanDigestV1 = (value: BootstrapActivationReceiptV1): Buffer => digestFields(BOOTSTRAP_ACTIVATION_RECEIPT_PLAN_DIGEST_DOMAIN_V1, value, ACTIVATION_RECEIPT_SCHEMA, ["currentDeploymentDigest", "finalizedSlot", "receiptDigest"]);
 
 function validateDigest(actual: Buffer, expected: Buffer, name: string): void {
   if (!requireHash(actual, `${name}.storedDigest`).equals(expected)) throw new Error(`${name} digest mismatch`);

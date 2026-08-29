@@ -92,8 +92,8 @@ export interface ExecuteBootstrapActivationV1 {
   expectedBridgeObservationDigest: Digest;
   expectedGateEpoch: bigint;
   expectedTargetNonce: bigint;
-  expectedDeploymentDigest: Digest;
-  expectedReceiptDigest: Digest;
+  expectedDeploymentPlanDigest: Digest;
+  expectedReceiptPlanDigest: Digest;
   envelope: CeremonyEnvelopeV1;
 }
 
@@ -231,8 +231,8 @@ export function encodeExecuteBootstrapActivationV1(value: ExecuteBootstrapActiva
     writer.bytes(digest(value.expectedProposalDigest, "expectedProposalDigest"), 32, "expectedProposalDigest")
       .bytes(digest(value.expectedBridgeObservationDigest, "expectedBridgeObservationDigest"), 32, "expectedBridgeObservationDigest")
       .u64(value.expectedGateEpoch, "expectedGateEpoch").u64(value.expectedTargetNonce, "expectedTargetNonce")
-      .bytes(digest(value.expectedDeploymentDigest, "expectedDeploymentDigest"), 32, "expectedDeploymentDigest")
-      .bytes(digest(value.expectedReceiptDigest, "expectedReceiptDigest"), 32, "expectedReceiptDigest");
+      .bytes(digest(value.expectedDeploymentPlanDigest, "expectedDeploymentPlanDigest"), 32, "expectedDeploymentPlanDigest")
+      .bytes(digest(value.expectedReceiptPlanDigest, "expectedReceiptPlanDigest"), 32, "expectedReceiptPlanDigest");
     writeCeremonyEnvelope(writer, value.envelope);
   });
 }
@@ -240,13 +240,13 @@ export function encodeExecuteBootstrapActivationV1(value: ExecuteBootstrapActiva
 export function decodeExecuteBootstrapActivationV1(data: Buffer): ExecuteBootstrapActivationV1 {
   return decodeFixed(data, EXECUTE_BOOTSTRAP_ACTIVATION_V1_TAG, EXECUTE_BOOTSTRAP_ACTIVATION_V1_LEN, (reader) => ({
     expectedProposalDigest: reader.bytes(32), expectedBridgeObservationDigest: reader.bytes(32),
-    expectedGateEpoch: reader.u64(), expectedTargetNonce: reader.u64(), expectedDeploymentDigest: reader.bytes(32),
-    expectedReceiptDigest: reader.bytes(32), envelope: readCeremonyEnvelope(reader),
+    expectedGateEpoch: reader.u64(), expectedTargetNonce: reader.u64(), expectedDeploymentPlanDigest: reader.bytes(32),
+    expectedReceiptPlanDigest: reader.bytes(32), envelope: readCeremonyEnvelope(reader),
   }), (value) => {
     digest(value.expectedProposalDigest, "expectedProposalDigest");
     digest(value.expectedBridgeObservationDigest, "expectedBridgeObservationDigest");
-    digest(value.expectedDeploymentDigest, "expectedDeploymentDigest");
-    digest(value.expectedReceiptDigest, "expectedReceiptDigest");
+    digest(value.expectedDeploymentPlanDigest, "expectedDeploymentPlanDigest");
+    digest(value.expectedReceiptPlanDigest, "expectedReceiptPlanDigest");
   });
 }
 

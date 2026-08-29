@@ -3031,62 +3031,78 @@ fn load_checkpoint_subject_binding(
                 }
                 (StateCheckpointPhaseV1::Emergency, _) => unreachable!(),
             };
-            let (minimum_required_capacity, observation_expectation) = if manifest.phase
-                == StateCheckpointPhaseV1::Prestate
-                && proposal.proposal_class == ProposalClassV1::EmergencyRollback
-            {
-                if !proposal.primary_proposal.present
-                    || proposal.primary_proposal.value != *linked_primary_or_authority.key
+            let (minimum_required_capacity, observation_expectation) = match manifest.phase {
+                StateCheckpointPhaseV1::Prestate
+                    if proposal.proposal_class == ProposalClassV1::EmergencyRollback =>
                 {
-                    return Err(GovernanceError::InvalidProposalCommitment.into());
+                    if !proposal.primary_proposal.present
+                        || proposal.primary_proposal.value != *linked_primary_or_authority.key
+                    {
+                        return Err(GovernanceError::InvalidProposalCommitment.into());
+                    }
+                    let primary = load_proposal(
+                        program_id,
+                        linked_primary_or_authority,
+                        config_info,
+                        gate_info,
+                        capacity_info,
+                        deployment_info,
+                        context,
+                    )?;
+                    let primary_next_epoch =
+                        checked_nonterminal_increment(primary.freeze_gate_epoch)?;
+                    if primary.proposal_class == ProposalClassV1::EmergencyRollback
+                        || primary.state != ProposalStateV2::UpgradeExecuted
+                        || primary.upgrade_executed_slot == 0
+                        || primary.upgrade_executed_slot > proposal.frozen_slot
+                        || primary_next_epoch != proposal.freeze_gate_epoch
+                        || !primary.rollback_proposal.present
+                        || primary.rollback_proposal.value != *subject_info.key
+                        || !primary.rollback_buffer.present
+                        || primary.rollback_buffer.value != proposal.buffer_pubkey
+                        || primary.rollback_artifact_length != proposal.artifact_length
+                        || primary.rollback_artifact_sha256 != proposal.artifact_sha256
+                        || primary.rollback_artifact_chunk_root
+                            != proposal.artifact_chunk_merkle_root
+                        || primary.rollback_artifact_scheme_id != proposal.artifact_scheme_id
+                        || primary.target_nonce != proposal.target_nonce
+                        || primary.checkpoint_schema_id != proposal.checkpoint_schema_id
+                        || primary.checkpoint_policy_hash != proposal.checkpoint_policy_hash
+                    {
+                        return Err(GovernanceError::InvalidProposalCommitment.into());
+                    }
+                    (
+                        primary.minimum_required_capacity,
+                        failed_primary_observation_expectation(&primary),
+                    )
                 }
-                let primary = load_proposal(
-                    program_id,
-                    linked_primary_or_authority,
-                    config_info,
-                    gate_info,
-                    capacity_info,
-                    deployment_info,
-                    context,
-                )?;
-                let primary_next_epoch = checked_nonterminal_increment(primary.freeze_gate_epoch)?;
-                if primary.proposal_class == ProposalClassV1::EmergencyRollback
-                    || primary.state != ProposalStateV2::UpgradeExecuted
-                    || primary.upgrade_executed_slot == 0
-                    || primary.upgrade_executed_slot > proposal.frozen_slot
-                    || primary_next_epoch != proposal.freeze_gate_epoch
-                    || !primary.rollback_proposal.present
-                    || primary.rollback_proposal.value != *subject_info.key
-                    || !primary.rollback_buffer.present
-                    || primary.rollback_buffer.value != proposal.buffer_pubkey
-                    || primary.rollback_artifact_length != proposal.artifact_length
-                    || primary.rollback_artifact_sha256 != proposal.artifact_sha256
-                    || primary.rollback_artifact_chunk_root != proposal.artifact_chunk_merkle_root
-                    || primary.rollback_artifact_scheme_id != proposal.artifact_scheme_id
-                    || primary.target_nonce != proposal.target_nonce
-                    || primary.checkpoint_schema_id != proposal.checkpoint_schema_id
-                    || primary.checkpoint_policy_hash != proposal.checkpoint_policy_hash
-                {
-                    return Err(GovernanceError::InvalidProposalCommitment.into());
+                StateCheckpointPhaseV1::Prestate => {
+                    if *linked_primary_or_authority.key != context.config.authority_pda {
+                        return Err(GovernanceError::CrossAccountMismatch.into());
+                    }
+                    (
+                        context.deployment.artifact_length,
+                        trusted_observation_expectation(&context.deployment),
+                    )
                 }
-                (
-                    primary.minimum_required_capacity,
-                    failed_primary_observation_expectation(&primary),
-                )
-            } else {
-                if *linked_primary_or_authority.key != context.config.authority_pda {
-                    return Err(GovernanceError::CrossAccountMismatch.into());
+                StateCheckpointPhaseV1::Poststate => {
+                    if *linked_primary_or_authority.key != context.config.authority_pda
+                        || proposal.upgrade_executed_slot == 0
+                    {
+                        return Err(GovernanceError::CrossAccountMismatch.into());
+                    }
+                    (
+                        proposal.minimum_required_capacity,
+                        candidate_observation_expectation(
+                            proposal.artifact_length,
+                            proposal.artifact_sha256,
+                            proposal.artifact_chunk_merkle_root,
+                            proposal.artifact_scheme_id,
+                            proposal.upgrade_executed_slot,
+                        ),
+                    )
                 }
-                let minimum_required_capacity =
-                    if manifest.phase == StateCheckpointPhaseV1::Prestate {
-                        context.deployment.artifact_length
-                    } else {
-                        proposal.minimum_required_capacity
-                    };
-                (
-                    minimum_required_capacity,
-                    trusted_observation_expectation(&context.deployment),
-                )
+                StateCheckpointPhaseV1::Emergency => unreachable!(),
             };
             let observation_subject_digest = expected_programdata_observation_subject_digest(
                 program_id,

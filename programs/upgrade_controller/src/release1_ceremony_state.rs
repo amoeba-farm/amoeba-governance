@@ -1594,8 +1594,10 @@ mod tests {
             PROGRAMDATA_OBSERVATION_MERKLE_SCHEME_MATERIAL_V1,
         },
         release1_ceremony_digest::{
+            compute_bootstrap_activation_deployment_plan_digest_v1,
             compute_bootstrap_activation_proposal_digest_v1,
-            compute_bootstrap_activation_receipt_digest_v1, compute_capacity_policy_digest_v1,
+            compute_bootstrap_activation_receipt_digest_v1,
+            compute_bootstrap_activation_receipt_plan_digest_v1, compute_capacity_policy_digest_v1,
             compute_controller_immutability_receipt_digest_v1,
             compute_controller_release_digest_v1, compute_current_deployment_digest_v1,
             compute_programdata_observation_digest_v1,
@@ -2304,6 +2306,16 @@ mod tests {
         ];
         let fixture = json!({
             "fixture_version": 1,
+            "activation_plan_digests": {
+                "deployment_plan_digest_hex": encode_hex(
+                    &compute_bootstrap_activation_deployment_plan_digest_v1(&deployment)
+                        .expect("activation deployment plan digest must compute")
+                ),
+                "receipt_plan_digest_hex": encode_hex(
+                    &compute_bootstrap_activation_receipt_plan_digest_v1(&activation_receipt)
+                        .expect("activation receipt plan digest must compute")
+                ),
+            },
             "proposal_pdas": {
                 "controller_program": controller_program.to_string(),
                 "target_program": target_program.to_string(),
@@ -2329,6 +2341,45 @@ mod tests {
             ),
         )
         .expect("shared fixture must be writable");
+    }
+
+    #[test]
+    fn activation_plan_digests_ignore_only_slot_derived_fields() {
+        let mut deployment = current_deployment();
+        deployment.deployment_digest = compute_current_deployment_digest_v1(&deployment).unwrap();
+        let deployment_plan =
+            compute_bootstrap_activation_deployment_plan_digest_v1(&deployment).unwrap();
+        let deployment_digest = deployment.deployment_digest;
+        deployment.last_updated_slot += 17;
+        deployment.deployment_digest = compute_current_deployment_digest_v1(&deployment).unwrap();
+        assert_eq!(
+            compute_bootstrap_activation_deployment_plan_digest_v1(&deployment).unwrap(),
+            deployment_plan
+        );
+        assert_ne!(deployment.deployment_digest, deployment_digest);
+        deployment.artifact_sha256[0] ^= 1;
+        assert_ne!(
+            compute_bootstrap_activation_deployment_plan_digest_v1(&deployment).unwrap(),
+            deployment_plan
+        );
+
+        let mut receipt = activation_receipt();
+        receipt.receipt_digest = compute_bootstrap_activation_receipt_digest_v1(&receipt).unwrap();
+        let receipt_plan = compute_bootstrap_activation_receipt_plan_digest_v1(&receipt).unwrap();
+        let receipt_digest = receipt.receipt_digest;
+        receipt.finalized_slot += 17;
+        receipt.current_deployment_digest = digest(97);
+        receipt.receipt_digest = compute_bootstrap_activation_receipt_digest_v1(&receipt).unwrap();
+        assert_eq!(
+            compute_bootstrap_activation_receipt_plan_digest_v1(&receipt).unwrap(),
+            receipt_plan
+        );
+        assert_ne!(receipt.receipt_digest, receipt_digest);
+        receipt.bridge_artifact_sha256[0] ^= 1;
+        assert_ne!(
+            compute_bootstrap_activation_receipt_plan_digest_v1(&receipt).unwrap(),
+            receipt_plan
+        );
     }
 
     macro_rules! assert_strict_account {

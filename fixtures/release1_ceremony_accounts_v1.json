@@ -1,4 +1,8 @@
 {
+  "activation_plan_digests": {
+    "deployment_plan_digest_hex": "beb1fc267db5591bf0bc8beb7a07f4fa6b963e6e87439cdb13c87debe740258b",
+    "receipt_plan_digest_hex": "540a2bb1f69a62fc2517ebb6bcc25ee42e48039c3f98caaedf4370861479f1ad"
+  },
   "entries": [
     {
       "account_type": "ProgramDataCapacityPolicyV1",

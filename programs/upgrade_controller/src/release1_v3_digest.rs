@@ -223,18 +223,32 @@ fn clear_emergency_resolution_lifecycle_v2(value: &mut EmergencyFreezeResolution
     value.terminal_reason_code = 0;
 }
 
+#[inline(never)]
 fn hash_fixed_image<T: BorshSerialize>(
     domain: &[u8],
     value: &T,
     expected_image_len: usize,
 ) -> GovernanceResult<[u8; 32]> {
-    let image = value
-        .try_to_vec()
-        .map_err(|_| GovernanceError::InvalidRelease1Account)?;
-    if image.len() != expected_image_len {
+    // The on-chain allocator is a bump arena, so repeated fixed-account digest
+    // checks cannot rely on dropped `Vec`s returning heap space.  Keep one
+    // bounded image in this callee's stack frame; the largest V3 image is the
+    // 2,048-byte proposal and every smaller account must consume its exact
+    // published fixed length.
+    let mut image = [0u8; UPGRADE_PROPOSAL_V3_DIGEST_IMAGE_LEN];
+    if expected_image_len > image.len() {
         return Err(GovernanceError::InvalidRelease1Account);
     }
-    Ok(hashv(&[domain, &image]).to_bytes())
+    let remaining = {
+        let mut output = &mut image[..expected_image_len];
+        value
+            .serialize(&mut output)
+            .map_err(|_| GovernanceError::InvalidRelease1Account)?;
+        output.len()
+    };
+    if remaining != 0 {
+        return Err(GovernanceError::InvalidRelease1Account);
+    }
+    Ok(hashv(&[domain, &image[..expected_image_len]]).to_bytes())
 }
 
 fn require_digest(actual: [u8; 32], expected: [u8; 32]) -> GovernanceResult<()> {
