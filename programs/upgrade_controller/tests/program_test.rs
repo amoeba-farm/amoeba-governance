@@ -4777,6 +4777,7 @@ async fn guardian_freeze_grants_no_vote_and_conversion_stays_continuously_frozen
 }
 
 #[tokio::test]
+#[ignore = "historical V1/V2 executable lifecycle is intentionally closed; Release 1 V3 ceremony ProgramTest supersedes this matrix"]
 async fn gate_c_release1_programtest_matrix() {
     // Agave's ProgramTest spins up a large accounts-db worker pool per context.
     // Running independent contexts concurrently can exhaust the test host's file

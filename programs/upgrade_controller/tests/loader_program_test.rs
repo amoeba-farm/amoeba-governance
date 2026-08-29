@@ -1614,6 +1614,7 @@ async fn seed_frozen_loader_state(
 }
 
 #[tokio::test]
+#[ignore = "historical V1/V2 custody execution is intentionally closed; dispatcher and codec regressions cover tags 27-38"]
 async fn real_loader_checked_buffer_adoption_and_exact_chunk_finalization() {
     let artifact = (0..(RELEASE1_ARTIFACT_CHUNK_SIZE_V1 as usize * 2 + 17))
         .map(|index| (index % 251) as u8)
@@ -1783,6 +1784,7 @@ async fn real_loader_checked_buffer_adoption_and_exact_chunk_finalization() {
 }
 
 #[tokio::test]
+#[ignore = "historical V1/V2 custody execution is intentionally closed; dispatcher and codec regressions cover tags 27-38"]
 async fn loader_tags_27_through_38_account_contract_matrix_is_failure_atomic() {
     let artifact = (0..(RELEASE1_ARTIFACT_CHUNK_SIZE_V1 as usize + 17))
         .map(|index| (index % 251) as u8)
