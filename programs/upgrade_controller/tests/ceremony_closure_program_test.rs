@@ -163,6 +163,9 @@ const EXPIRY_SLOTS: u64 = 20_000;
 const OBSERVATION_COMPUTE_LIMIT: u32 = 1_400_000;
 const MAX_SELECTED_OBSERVATION_CHUNK_CU_V1: u64 = 200_000;
 
+// Keeping the concrete ProgramTest context in this test-only enum makes the
+// backend switch explicit and avoids an extra allocation in every account read.
+#[allow(clippy::large_enum_variant)]
 enum CeremonyBackend {
     ProgramTest(ProgramTestContext),
     Rpc(RpcCeremonyBackend),
@@ -742,7 +745,7 @@ async fn rpc_submit_v0(
     let message = v0::Message::try_compile(
         &payer.pubkey(),
         instructions,
-        &[lookup_table.clone()],
+        std::slice::from_ref(lookup_table),
         blockhash,
     )
     .map_err(|error| error.to_string())?;
@@ -2782,7 +2785,7 @@ async fn attest_and_finalize_checkpoint_v3(
         )
         .0
     });
-    for index in 0..3 {
+    for (index, attestation) in attestations.iter().enumerate() {
         let create = create_checkpoint_v2_instruction(
             harness.controller,
             CreateCheckpointV2Accounts {
@@ -2799,7 +2802,7 @@ async fn attest_and_finalize_checkpoint_v3(
                 target_program: harness.target,
                 target_programdata: harness.target_programdata,
                 checkpoint: checkpoint_key,
-                checkpoint_attestation: attestations[index],
+                checkpoint_attestation: *attestation,
                 seat_authority: harness.seats[index].pubkey(),
                 system_program: system_program::ID,
             },
