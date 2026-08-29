@@ -522,10 +522,19 @@ fn read_controller_sbf() -> Vec<u8> {
     )
 }
 
-fn read_spread_sbf() -> Vec<u8> {
-    let path = std::env::var_os("AMOEBA_SPREAD_TEST_ARTIFACT")
-        .expect("set AMOEBA_SPREAD_TEST_ARTIFACT to the synthetic identity-bound Spread SBF ELF");
-    read_artifact(std::path::PathBuf::from(path), "Spread bridge")
+fn read_sacrificial_target_sbf() -> (Vec<u8>, bool) {
+    if let Some(path) = std::env::var_os("AMOEBA_SPREAD_TEST_ARTIFACT") {
+        return (
+            read_artifact(std::path::PathBuf::from(path), "Spread bridge"),
+            true,
+        );
+    }
+    let path = std::env::var_os("AMOEBA_SACRIFICIAL_TARGET_ARTIFACT")
+        .expect("set either AMOEBA_SPREAD_TEST_ARTIFACT or AMOEBA_SACRIFICIAL_TARGET_ARTIFACT");
+    (
+        read_artifact(std::path::PathBuf::from(path), "generic sacrificial target"),
+        false,
+    )
 }
 
 async fn maybe_account(context: &mut CeremonyContext, key: Pubkey) -> Option<Account> {
@@ -617,6 +626,27 @@ async fn bytes(context: &mut CeremonyContext, key: Pubkey) -> Vec<u8> {
 
 async fn state<T: BorshDeserialize>(context: &mut CeremonyContext, key: Pubkey) -> T {
     T::try_from_slice(&bytes(context, key).await).expect("strict fixed account state")
+}
+
+async fn snapshot_accounts(context: &mut CeremonyContext, keys: &[Pubkey]) -> Vec<Option<Account>> {
+    let mut snapshots = Vec::with_capacity(keys.len());
+    for key in keys {
+        snapshots.push(maybe_account(context, *key).await);
+    }
+    snapshots
+}
+
+async fn assert_accounts_unchanged(
+    context: &mut CeremonyContext,
+    keys: &[Pubkey],
+    before: &[Option<Account>],
+    label: &str,
+) {
+    assert_eq!(
+        snapshot_accounts(context, keys).await,
+        before,
+        "{label} must leave every writable account byte-identical"
+    );
 }
 
 async fn rpc_send_legacy(
@@ -3320,7 +3350,7 @@ fn standalone_review_profile_covers_two_verified_artifacts() {
 }
 
 #[tokio::test]
-#[ignore = "requires exact controller and synthetic identity-bound Spread SBF artifacts"]
+#[ignore = "requires exact controller and sacrificial target SBF artifacts"]
 async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation() {
     let standalone = std::env::var("AMOEBA_STANDALONE_VALIDATOR").as_deref() == Ok("1");
     let maximum_geometry = std::env::var("AMOEBA_MAXIMUM_GEOMETRY").as_deref() == Ok("1");
@@ -3338,7 +3368,11 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         "the rollback fault trigger is explicitly ProgramTest-only; standalone evidence must not imply a natural failed artifact"
     );
     let controller_artifact = read_controller_sbf();
-    let mut spread_artifact = read_spread_sbf();
+    let (mut spread_artifact, target_is_spread) = read_sacrificial_target_sbf();
+    assert!(
+        target_is_spread || (!standalone && !maximum_geometry),
+        "generic sacrificial target coverage is ProgramTest-only and cannot stand in for Spread or maximum-geometry evidence"
+    );
     if maximum_geometry {
         spread_artifact.resize(MAX_ARTIFACT_BYTES_V1 as usize, 0);
     }
@@ -3893,20 +3927,22 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         &harness.target,
     )
     .0;
-    let frozen_mutation = spread_init_user_collateral_instruction(
-        harness.target,
-        spread_user,
-        spread_user_collateral,
-        harness.gate,
-        frozen_gate.epoch,
-    );
-    assert!(
-        submit(&mut context, &[frozen_mutation], &[]).await.is_err(),
-        "Spread mutation must remain rejected throughout the frozen lifecycle"
-    );
-    assert!(maybe_account(&mut context, spread_user_collateral)
-        .await
-        .is_none());
+    if target_is_spread {
+        let frozen_mutation = spread_init_user_collateral_instruction(
+            harness.target,
+            spread_user,
+            spread_user_collateral,
+            harness.gate,
+            frozen_gate.epoch,
+        );
+        assert!(
+            submit(&mut context, &[frozen_mutation], &[]).await.is_err(),
+            "Spread mutation must remain rejected throughout the frozen lifecycle"
+        );
+        assert!(maybe_account(&mut context, spread_user_collateral)
+            .await
+            .is_none());
+    }
 
     let (prestate_observation_key, prestate_observation) = observe_programdata(
         &mut context,
@@ -4170,7 +4206,14 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
             },
         )
         .expect("activate exact rollback instruction");
-        submit(&mut context, &[activate], &[]).await.expect(
+        let [activation_limit, activation_price] = envelope_prefix();
+        submit(
+            &mut context,
+            &[activation_limit, activation_price, activate],
+            &[],
+        )
+        .await
+        .expect(
             "controller SBF must activate the precommitted rollback without an active interval",
         );
         let rollback_gate: ProtocolGateV1 = state(&mut context, harness.gate).await;
@@ -4187,55 +4230,195 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
             state(&mut context, harness.deployment).await;
         let consumed_primary_verification: BufferVerificationV1 =
             state(&mut context, activation_primary.buffer_verification).await;
+        let rollback_execute_accounts = ExecuteUpgradeV2Accounts {
+            controller_config: harness.config,
+            policy: harness.policy,
+            protocol_gate: harness.gate,
+            proposal: rollback_key,
+            counterpart_proposal: primary_key,
+            counterpart_buffer_verification: activation_primary.buffer_verification,
+            capacity_policy: harness.capacity_policy,
+            current_deployment: harness.deployment,
+            prestate_programdata_observation: prestate_observation_key,
+            prestate_checkpoint: activation_primary.prestate_checkpoint,
+            current_programdata_observation: failure_key,
+            buffer_verification: frozen_rollback.buffer_verification,
+            target_programdata: harness.target_programdata,
+            target_program: harness.target,
+            buffer: rollback_buffer,
+            canonical_spill_treasury: harness.spill,
+            rent_sysvar: sysvar_ids::rent::ID,
+            clock_sysvar: sysvar_ids::clock::ID,
+            authority_pda: harness.authority,
+            upgradeable_loader: UPGRADEABLE_LOADER_ID,
+            instructions_sysvar: sysvar_ids::instructions::ID,
+        };
+        let rollback_execute_data = ExecuteUpgradeV2 {
+            expected: proposal_guard(
+                &frozen_rollback,
+                &rollback_config,
+                &rollback_gate,
+                &rollback_capacity,
+                &rollback_deployment,
+            ),
+            expected_prestate_checkpoint_digest: prestate.checkpoint_digest,
+            expected_prestate_checkpoint_generation: prestate.checkpoint_generation,
+            expected_observation_digest: failure.failure_digest,
+            expected_observation_generation: failure.observation_generation,
+            expected_observation_root: failure.actual_leaf_hash,
+            expected_observation_finalized_slot: failure.finalized_slot,
+            expected_actual_capacity: failure.actual_capacity,
+            expected_sealed_buffer_header_hash: live_rollback_verification
+                .sealed_buffer_header_hash,
+            expected_verified_chunk_count: live_rollback_verification.verified_chunk_count,
+            expected_buffer_verification_status: live_rollback_verification.status,
+            expected_counterpart_proposal_digest: activation_primary.proposal_digest,
+            expected_counterpart_buffer_verification_status: consumed_primary_verification.status,
+            envelope: envelope(),
+        };
+        let rollback_writable_accounts = [
+            rollback_key,
+            frozen_rollback.buffer_verification,
+            harness.target_programdata,
+            harness.target,
+            rollback_buffer,
+            harness.spill,
+        ];
+        let failure_prefix = || envelope_prefix();
+
+        let mut different_witness_accounts = rollback_execute_accounts;
+        different_witness_accounts.current_programdata_observation = failure_observation_key;
+        let different_witness = execute_upgrade_v2_instruction(
+            harness.controller,
+            different_witness_accounts,
+            rollback_execute_data.clone(),
+        )
+        .expect("different witness negative instruction");
+        let before = snapshot_accounts(&mut context, &rollback_writable_accounts).await;
+        let [limit, price] = failure_prefix();
+        let failure = submit_expected_failure_with_evidence(
+            &mut context,
+            &[limit, price, different_witness],
+            &[],
+        )
+        .await;
+        assert!(!failure.error.is_empty());
+        assert_accounts_unchanged(
+            &mut context,
+            &rollback_writable_accounts,
+            &before,
+            "different rollback witness rejection",
+        )
+        .await;
+
+        let mut observation_drift_data = rollback_execute_data.clone();
+        observation_drift_data.expected_observation_generation += 1;
+        observation_drift_data.expected_observation_root[0] ^= 1;
+        let observation_drift = execute_upgrade_v2_instruction(
+            harness.controller,
+            rollback_execute_accounts,
+            observation_drift_data,
+        )
+        .expect("observation drift negative instruction");
+        let before = snapshot_accounts(&mut context, &rollback_writable_accounts).await;
+        let [limit, price] = failure_prefix();
+        let failure = submit_expected_failure_with_evidence(
+            &mut context,
+            &[limit, price, observation_drift],
+            &[],
+        )
+        .await;
+        assert!(!failure.error.is_empty());
+        assert_accounts_unchanged(
+            &mut context,
+            &rollback_writable_accounts,
+            &before,
+            "rollback observation drift rejection",
+        )
+        .await;
+
+        let mut epoch_drift_data = rollback_execute_data.clone();
+        epoch_drift_data.expected.expected_gate_epoch += 1;
+        let epoch_drift = execute_upgrade_v2_instruction(
+            harness.controller,
+            rollback_execute_accounts,
+            epoch_drift_data,
+        )
+        .expect("epoch drift negative instruction");
+        let before = snapshot_accounts(&mut context, &rollback_writable_accounts).await;
+        let [limit, price] = failure_prefix();
+        let failure =
+            submit_expected_failure_with_evidence(&mut context, &[limit, price, epoch_drift], &[])
+                .await;
+        assert!(!failure.error.is_empty());
+        assert_accounts_unchanged(
+            &mut context,
+            &rollback_writable_accounts,
+            &before,
+            "rollback epoch drift rejection",
+        )
+        .await;
+
+        let mut wrong_prestate_accounts = rollback_execute_accounts;
+        wrong_prestate_accounts.prestate_checkpoint = frozen_rollback.prestate_checkpoint;
+        let wrong_prestate = execute_upgrade_v2_instruction(
+            harness.controller,
+            wrong_prestate_accounts,
+            rollback_execute_data.clone(),
+        )
+        .expect("wrong prestate negative instruction");
+        let before = snapshot_accounts(&mut context, &rollback_writable_accounts).await;
+        let [limit, price] = failure_prefix();
+        let failure = submit_expected_failure_with_evidence(
+            &mut context,
+            &[limit, price, wrong_prestate],
+            &[],
+        )
+        .await;
+        assert!(!failure.error.is_empty());
+        assert_accounts_unchanged(
+            &mut context,
+            &rollback_writable_accounts,
+            &before,
+            "wrong rollback prestate rejection",
+        )
+        .await;
+
+        let (repaired_before, repaired_after) =
+            inject_programdata_payload_fault(&mut context, harness.target_programdata, 0).await;
+        assert_eq!(repaired_before, primary_artifact[0] ^ 1);
+        assert_eq!(repaired_after, primary_artifact[0]);
+        let repaired_mismatch = execute_upgrade_v2_instruction(
+            harness.controller,
+            rollback_execute_accounts,
+            rollback_execute_data.clone(),
+        )
+        .expect("repaired mismatch negative instruction");
+        let before = snapshot_accounts(&mut context, &rollback_writable_accounts).await;
+        let [limit, price] = failure_prefix();
+        let failure = submit_expected_failure_with_evidence(
+            &mut context,
+            &[limit, price, repaired_mismatch],
+            &[],
+        )
+        .await;
+        assert!(!failure.error.is_empty());
+        assert_accounts_unchanged(
+            &mut context,
+            &rollback_writable_accounts,
+            &before,
+            "repaired rollback mismatch rejection",
+        )
+        .await;
+        let (fault_restored_before, fault_restored_after) =
+            inject_programdata_payload_fault(&mut context, harness.target_programdata, 0).await;
+        assert_eq!(fault_restored_before, primary_artifact[0]);
+        assert_eq!(fault_restored_after, primary_artifact[0] ^ 1);
+
         let rollback_execute = execute_upgrade_v2_instruction(
             harness.controller,
-            ExecuteUpgradeV2Accounts {
-                controller_config: harness.config,
-                policy: harness.policy,
-                protocol_gate: harness.gate,
-                proposal: rollback_key,
-                counterpart_proposal: primary_key,
-                counterpart_buffer_verification: activation_primary.buffer_verification,
-                capacity_policy: harness.capacity_policy,
-                current_deployment: harness.deployment,
-                prestate_programdata_observation: prestate_observation_key,
-                prestate_checkpoint: activation_primary.prestate_checkpoint,
-                current_programdata_observation: failure_key,
-                buffer_verification: frozen_rollback.buffer_verification,
-                target_programdata: harness.target_programdata,
-                target_program: harness.target,
-                buffer: rollback_buffer,
-                canonical_spill_treasury: harness.spill,
-                rent_sysvar: sysvar_ids::rent::ID,
-                clock_sysvar: sysvar_ids::clock::ID,
-                authority_pda: harness.authority,
-                upgradeable_loader: UPGRADEABLE_LOADER_ID,
-                instructions_sysvar: sysvar_ids::instructions::ID,
-            },
-            ExecuteUpgradeV2 {
-                expected: proposal_guard(
-                    &frozen_rollback,
-                    &rollback_config,
-                    &rollback_gate,
-                    &rollback_capacity,
-                    &rollback_deployment,
-                ),
-                expected_prestate_checkpoint_digest: prestate.checkpoint_digest,
-                expected_prestate_checkpoint_generation: prestate.checkpoint_generation,
-                expected_observation_digest: failure.failure_digest,
-                expected_observation_generation: failure.observation_generation,
-                expected_observation_root: failure.actual_leaf_hash,
-                expected_observation_finalized_slot: failure.finalized_slot,
-                expected_actual_capacity: failure.actual_capacity,
-                expected_sealed_buffer_header_hash: live_rollback_verification
-                    .sealed_buffer_header_hash,
-                expected_verified_chunk_count: live_rollback_verification.verified_chunk_count,
-                expected_buffer_verification_status: live_rollback_verification.status,
-                expected_counterpart_proposal_digest: activation_primary.proposal_digest,
-                expected_counterpart_buffer_verification_status: consumed_primary_verification
-                    .status,
-                envelope: envelope(),
-            },
+            rollback_execute_accounts,
+            rollback_execute_data,
         )
         .expect("execute witness-authorized rollback instruction");
         let [limit, price] = envelope_prefix();
@@ -4320,21 +4503,33 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         let retired_primary: UpgradeProposalV3 = state(&mut context, primary_key).await;
         assert_eq!(retired_primary.state, ProposalStateV2::Retired);
 
-        let permitted_mutation = spread_init_user_collateral_instruction(
-            harness.target,
-            spread_user,
-            spread_user_collateral,
-            harness.gate,
-            final_gate.epoch,
-        );
-        submit(&mut context, &[permitted_mutation], &[])
-            .await
-            .expect(
-                "Spread must resume only after rollback poststate and separate unfreeze quorum",
+        if target_is_spread {
+            let permitted_mutation = spread_init_user_collateral_instruction(
+                harness.target,
+                spread_user,
+                spread_user_collateral,
+                harness.gate,
+                final_gate.epoch,
             );
-        assert!(maybe_account(&mut context, spread_user_collateral)
-            .await
-            .is_some());
+            submit(&mut context, &[permitted_mutation], &[])
+                .await
+                .expect(
+                    "Spread must resume only after rollback poststate and separate unfreeze quorum",
+                );
+            assert!(maybe_account(&mut context, spread_user_collateral)
+                .await
+                .is_some());
+        }
+        println!(
+            "AMOEBA_V3_ROLLBACK_EVIDENCE={{\"sbpf_target\":\"{}\",\"target_kind\":\"{}\",\"controller_elf_length\":{},\"controller_elf_sha256\":\"{}\",\"target_elf_length\":{},\"target_elf_sha256\":\"{}\",\"natural_zero_tail_failure\":false,\"fault_trigger\":\"programtest-one-byte-payload-corruption\",\"failure_witness_actual_controller_sbf\":true,\"rollback_activation_actual_controller_sbf\":true,\"rollback_loader_cpi_actual_controller_sbf\":true,\"rollback_programdata_verified\":true,\"rollback_poststate_accepted\":true,\"separate_unfreeze_quorum\":true,\"first_spread_mutation\":{},\"live_rpc_write\":false}}",
+            std::env::var("AMOEBA_SBPF_TARGET").unwrap_or_else(|_| "unspecified".into()),
+            if target_is_spread { "spread" } else { "generic-sacrificial" },
+            controller_artifact.len(),
+            lower_hex(hashv(&[&controller_artifact]).as_ref()),
+            spread_artifact.len(),
+            lower_hex(hashv(&[&spread_artifact]).as_ref()),
+            target_is_spread,
+        );
         return;
     }
 

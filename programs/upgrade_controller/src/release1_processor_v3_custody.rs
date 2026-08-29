@@ -2665,10 +2665,7 @@ fn load_and_revalidate_rollback_failure(
         || failure.actual_authority.value != config.authority_pda
         || failure.finalized_slot < primary.upgrade_executed_slot
         || failure.finalized_slot > rollback.frozen_slot
-        || !matches!(
-            failure.mismatch_class,
-            ProgramDataMismatchClassV2::ArtifactPayload | ProgramDataMismatchClassV2::ZeroTail
-        )
+        || !is_loader_executable_rollback_failure(failure.mismatch_class)
     {
         return Err(GovernanceError::CrossAccountMismatch.into());
     }
@@ -2732,6 +2729,13 @@ fn load_and_revalidate_rollback_failure(
     }
     drop(data);
     Ok(failure)
+}
+
+fn is_loader_executable_rollback_failure(mismatch_class: ProgramDataMismatchClassV2) -> bool {
+    matches!(
+        mismatch_class,
+        ProgramDataMismatchClassV2::ArtifactPayload | ProgramDataMismatchClassV2::ZeroTail
+    )
 }
 
 fn require_rollback_failure_guard(
@@ -4163,6 +4167,32 @@ mod tests {
             ProgramDataMismatchClassV2::ZeroTail,
         ] {
             validate_rollback_authorizing_mismatch_class(mismatch_class).unwrap();
+        }
+    }
+
+    #[test]
+    fn rollback_execution_accepts_only_live_byte_mismatch_classes() {
+        for mismatch_class in [
+            ProgramDataMismatchClassV2::ProgramLinkage,
+            ProgramDataMismatchClassV2::ProgramOwner,
+            ProgramDataMismatchClassV2::ProgramExecutable,
+            ProgramDataMismatchClassV2::ProgramDataOwner,
+            ProgramDataMismatchClassV2::ProgramDataExecutable,
+            ProgramDataMismatchClassV2::Header,
+            ProgramDataMismatchClassV2::Authority,
+            ProgramDataMismatchClassV2::CapacityDecrease,
+            ProgramDataMismatchClassV2::CapacityAboveRuntimeMaximum,
+            ProgramDataMismatchClassV2::ArtifactLength,
+            ProgramDataMismatchClassV2::ObservationStale,
+            ProgramDataMismatchClassV2::ObservationScheme,
+        ] {
+            assert!(!is_loader_executable_rollback_failure(mismatch_class));
+        }
+        for mismatch_class in [
+            ProgramDataMismatchClassV2::ArtifactPayload,
+            ProgramDataMismatchClassV2::ZeroTail,
+        ] {
+            assert!(is_loader_executable_rollback_failure(mismatch_class));
         }
     }
 }
