@@ -32,6 +32,7 @@ import {
   deserializeTargetAuthorityHandoffReceiptV1,
   programDataCapacityPolicyDigestV1,
   programDataObservationDigestV1,
+  programDataObservationSubjectDigestV1,
   targetAuthorityHandoffProposalDigestV1,
   targetAuthorityHandoffReceiptDigestV1,
   validateBootstrapActivationProposalDigestV1,
@@ -376,7 +377,13 @@ function validateCanonicalPdas(
     ["activation-observation", accounts.activationObservation],
   ];
   for (const [role, observation] of observationRoles) {
-    const expectedKey = deriveProgramDataObservationPdaV1(controller, observation.targetProgram, observation.purpose, observation.generation)[0];
+    const expectedKey = deriveProgramDataObservationPdaV1(
+      controller,
+      observation.targetProgram,
+      observation.purpose,
+      observation.subjectDigest,
+      observation.generation,
+    )[0];
     sameKey(accounts.accountKeys.get(role)!, expectedKey, `accounts.${role}.pda`);
   }
 }
@@ -388,15 +395,19 @@ function validateObservation(
   expectedPurpose: number,
   policy: ProgramDataCapacityPolicyV1,
   policyKey: PublicKey,
+  expectedGate: PublicKey,
   path: string,
 ): void {
   if (observation.status !== ProgramDataObservationStatusV1.Finalized || observation.purpose !== expectedPurpose) fail(path, "observation is stale, incomplete, or bound to the wrong purpose");
   sameKey(observation.targetProgram, expectedProgram, `${path}.targetProgram`);
   sameKey(observation.targetProgramdata, expectedProgramdata, `${path}.targetProgramdata`);
   sameKey(observation.capacityPolicy, policyKey, `${path}.capacityPolicy`);
+  sameKey(observation.protocolGate, expectedGate, `${path}.protocolGate`);
   sameBytes(observation.capacityPolicyDigest, policy.policyDigest, `${path}.capacityPolicyDigest`);
+  sameBytes(observation.subjectDigest, programDataObservationSubjectDigestV1(observation), `${path}.subjectDigest`);
   if (observation.tailBytesVerified !== observation.actualCapacity - observation.expectedArtifactLength) fail(path, "zero-only extension tail is not completely verified");
   sameBytes(observation.rawObservationSchemeId, policy.observationSchemeId, `${path}.rawObservationSchemeId`);
+  if (observation.rawChunkSize !== policy.observationChunkSize || observation.expectedArtifactSchemeId.equals(policy.artifactSchemeId) === false) fail(path, "observation chunk or artifact scheme drifted from capacity policy");
 }
 
 function validateControllerImmutability(
@@ -407,16 +418,25 @@ function validateControllerImmutability(
 ): void {
   if (receipt.controllerImmutabilityTransition !== "loader-set-authority-to-none") fail("controllerImmutabilityTransition", "controller immutability must be a real Loader authority transition");
   const policyKey = accounts.accountKeys.get("capacity-policy")!;
-  validateObservation(accounts.controllerPre, controller, controllerProgramdata, ProgramDataObservationPurposeV1.ControllerImmutability, accounts.capacityPolicy, policyKey, "controllerPreObservation");
-  validateObservation(accounts.controllerPost, controller, controllerProgramdata, ProgramDataObservationPurposeV1.ControllerImmutability, accounts.capacityPolicy, policyKey, "controllerPostObservation");
+  const protocolGate = accounts.handoffProposal.gate;
+  validateObservation(accounts.controllerPre, controller, controllerProgramdata, ProgramDataObservationPurposeV1.ControllerImmutability, accounts.capacityPolicy, policyKey, protocolGate, "controllerPreObservation");
+  validateObservation(accounts.controllerPost, controller, controllerProgramdata, ProgramDataObservationPurposeV1.ControllerImmutability, accounts.capacityPolicy, policyKey, protocolGate, "controllerPostObservation");
   const before = accounts.controllerPre;
   const after = accounts.controllerPost;
   if (!before.upgradeAuthority.present || after.upgradeAuthority.present) fail("controllerImmutability", "controller authority did not transition from Some to None");
-  if (before.deployedSlot !== after.deployedSlot || before.actualCapacity !== after.actualCapacity || before.expectedArtifactLength !== after.expectedArtifactLength) fail("controllerImmutability", "authority-only transition changed slot, capacity, or artifact length");
+  if (before.deployedSlot > after.deployedSlot || before.actualCapacity > after.actualCapacity || before.rawDataLength > after.rawDataLength || before.expectedArtifactLength !== after.expectedArtifactLength) fail("controllerImmutability", "authority transition regressed ProgramData chronology, capacity, raw length, or artifact identity");
   for (const [name, left, right] of [
     ["artifactSha256", before.expectedArtifactSha256, after.expectedArtifactSha256],
     ["artifactMerkleRoot", before.expectedArtifactMerkleRoot, after.expectedArtifactMerkleRoot],
+    ["artifactSchemeId", before.expectedArtifactSchemeId, after.expectedArtifactSchemeId],
+    ["programHeaderSnapshot", before.programHeaderSnapshot, after.programHeaderSnapshot],
   ] as const) sameBytes(left, right, `controllerImmutability.${name}`);
+  const release = accounts.controllerRelease;
+  if (release.minimumProgramdataCapacity > before.actualCapacity || release.minimumProgramdataCapacity > after.actualCapacity) fail("controllerImmutability", "observed capacity is below the release minimum");
+  if (release.artifactLength !== after.expectedArtifactLength) fail("controllerImmutability", "release artifact length drifted from the post-observation");
+  sameBytes(release.artifactSha256, after.expectedArtifactSha256, "controllerImmutability.releaseArtifactSha256");
+  sameBytes(release.artifactMerkleRoot, after.expectedArtifactMerkleRoot, "controllerImmutability.releaseArtifactMerkleRoot");
+  sameBytes(release.artifactSchemeId, after.expectedArtifactSchemeId, "controllerImmutability.releaseArtifactSchemeId");
   if (before.finalRawMerkleRoot.equals(after.finalRawMerkleRoot)) fail("controllerImmutability", "pre/post raw ProgramData roots must differ across the authority transition");
   const evidence = accounts.immutability;
   sameKey(evidence.preObservation, accounts.accountKeys.get("controller-pre-observation")!, "controllerImmutability.receipt.preObservation");
@@ -446,7 +466,7 @@ function validateHandoff(
   legacyAuthority: PublicKey,
 ): void {
   const policyKey = accounts.accountKeys.get("capacity-policy")!;
-  validateObservation(accounts.handoffPre, target, targetProgramdata, ProgramDataObservationPurposeV1.TargetHandoffBridge, accounts.capacityPolicy, policyKey, "handoffPreObservation");
+  validateObservation(accounts.handoffPre, target, targetProgramdata, ProgramDataObservationPurposeV1.TargetHandoffBridge, accounts.capacityPolicy, policyKey, accounts.handoffProposal.gate, "handoffPreObservation");
   if (!accounts.handoffPre.upgradeAuthority.present || !accounts.handoffPre.upgradeAuthority.value.equals(legacyAuthority)) fail("checkedHandoff", "pre-observation authority graph is invalid");
 
   const proposal = accounts.handoffProposal;
@@ -456,8 +476,17 @@ function validateHandoff(
   sameKey(proposal.controllerProgram, controller, "handoffProposal.controllerProgram");
   sameKey(proposal.targetProgram, target, "handoffProposal.targetProgram");
   sameKey(proposal.targetProgramdata, targetProgramdata, "handoffProposal.targetProgramdata");
-  sameKey(proposal.bridgeObservation, accounts.accountKeys.get("handoff-pre-observation")!, "handoffProposal.bridgeObservation");
-  sameBytes(proposal.bridgeObservationDigest, accounts.handoffPre.observationDigest, "handoffProposal.bridgeObservationDigest");
+  if (accounts.handoffPre.generation < proposal.bridgeObservationGeneration) fail("handoffProposal.bridgeObservationGeneration", "fresh handoff observation regressed below the proposal minimum generation");
+  if (accounts.handoffPre.generation === proposal.bridgeObservationGeneration) {
+    sameKey(proposal.bridgeObservation, accounts.accountKeys.get("handoff-pre-observation")!, "handoffProposal.bridgeObservation");
+    sameBytes(proposal.bridgeObservationRoot, accounts.handoffPre.finalRawMerkleRoot, "handoffProposal.bridgeObservationRoot");
+    sameBytes(proposal.bridgeObservationDigest, accounts.handoffPre.observationDigest, "handoffProposal.bridgeObservationDigest");
+  }
+  if (proposal.minimumTargetDeployedSlot > accounts.handoffPre.deployedSlot || proposal.minimumTargetCapacity > accounts.handoffPre.actualCapacity || proposal.minimumTargetRawLength > accounts.handoffPre.rawDataLength) fail("handoffProposal", "fresh handoff observation is below a committed ProgramData minimum");
+  if (proposal.bridgeArtifactLength !== accounts.handoffPre.expectedArtifactLength) fail("handoffProposal.bridgeArtifactLength", "artifact length drifted from observation");
+  sameBytes(proposal.bridgeArtifactSha256, accounts.handoffPre.expectedArtifactSha256, "handoffProposal.bridgeArtifactSha256");
+  sameBytes(proposal.bridgeArtifactMerkleRoot, accounts.handoffPre.expectedArtifactMerkleRoot, "handoffProposal.bridgeArtifactMerkleRoot");
+  sameBytes(proposal.bridgeArtifactSchemeId, accounts.handoffPre.expectedArtifactSchemeId, "handoffProposal.bridgeArtifactSchemeId");
   sameKey(handoffReceipt.proposal, accounts.accountKeys.get("handoff-proposal")!, "handoffReceipt.proposal");
   sameBytes(handoffReceipt.proposalDigest, proposal.proposalDigest, "handoffReceipt.proposalDigest");
   sameKey(handoffReceipt.preObservation, accounts.accountKeys.get("handoff-pre-observation")!, "handoffReceipt.preObservation");
@@ -503,15 +532,22 @@ function validateActivation(
   controllerAuthority: PublicKey,
 ): void {
   const policyKey = accounts.accountKeys.get("capacity-policy")!;
-  validateObservation(accounts.activationObservation, target, targetProgramdata, ProgramDataObservationPurposeV1.BootstrapActivation, accounts.capacityPolicy, policyKey, "activationObservation");
+  validateObservation(accounts.activationObservation, target, targetProgramdata, ProgramDataObservationPurposeV1.BootstrapActivation, accounts.capacityPolicy, policyKey, accounts.activationProposal.gate, "activationObservation");
   if (!accounts.activationObservation.upgradeAuthority.present || !accounts.activationObservation.upgradeAuthority.value.equals(controllerAuthority)) fail("activationObservation", "target authority is not the controller PDA");
   const proposal = accounts.activationProposal;
   const activationReceipt = accounts.activationReceipt;
   const deployment = accounts.deployment;
   if (proposal.state !== CeremonyProposalStateV1.Completed || proposal.approvalCount !== RELEASE1_APPROVAL_THRESHOLD || proposal.approvalThreshold !== RELEASE1_APPROVAL_THRESHOLD) fail("activationProposal", "bootstrap activation lacks equal-seat 3-of-5 completed governance");
   sameBytes(proposal.clusterDomain, Buffer.from(receipt.clusterDomainHex, "hex"), "activationProposal.clusterDomain");
-  sameKey(proposal.bridgeObservation, accounts.accountKeys.get("activation-observation")!, "activationProposal.bridgeObservation");
-  sameBytes(proposal.bridgeObservationDigest, accounts.activationObservation.observationDigest, "activationProposal.bridgeObservationDigest");
+  sameKey(proposal.gate, accounts.handoffProposal.gate, "activationProposal.gate");
+  if (accounts.activationObservation.generation < proposal.bridgeObservationGeneration) fail("activationProposal.bridgeObservationGeneration", "fresh activation observation regressed below the proposal minimum generation");
+  if (accounts.activationObservation.generation === proposal.bridgeObservationGeneration) {
+    sameKey(proposal.bridgeObservation, accounts.accountKeys.get("activation-observation")!, "activationProposal.bridgeObservation");
+    sameBytes(proposal.bridgeObservationRoot, accounts.activationObservation.finalRawMerkleRoot, "activationProposal.bridgeObservationRoot");
+    sameBytes(proposal.bridgeObservationDigest, accounts.activationObservation.observationDigest, "activationProposal.bridgeObservationDigest");
+  }
+  if (proposal.minimumTargetDeployedSlot > accounts.activationObservation.deployedSlot || proposal.minimumTargetCapacity > accounts.activationObservation.actualCapacity || proposal.minimumTargetRawLength > accounts.activationObservation.rawDataLength) fail("activationProposal", "fresh activation observation is below a committed ProgramData minimum");
+  if (accounts.activationObservation.deployedSlot < accounts.handoffReceipt.deployedSlot || accounts.activationObservation.actualCapacity < accounts.handoffReceipt.programdataCapacity || accounts.activationObservation.rawDataLength < accounts.handoffReceipt.rawProgramdataLength) fail("activationObservation", "target ProgramData regressed after handoff");
   sameKey(proposal.targetHandoffReceipt, accounts.accountKeys.get("handoff-receipt")!, "activationProposal.handoffReceipt");
   sameBytes(proposal.targetHandoffDigest, accounts.handoffReceipt.receiptDigest, "activationProposal.handoffDigest");
   sameKey(activationReceipt.proposal, accounts.accountKeys.get("activation-proposal")!, "activationReceipt.proposal");

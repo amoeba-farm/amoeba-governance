@@ -31,7 +31,7 @@ import {
   release1AddressLookupPlanIdV1,
   type Release1AddressLookupPlanV1,
 } from "./release1PacketPlanning.js";
-import { decodeRelease1InstructionV1 } from "./release1LifecycleInstructions.js";
+import { decodeRelease1CurrentInstruction } from "./release1CurrentInstructions.js";
 import {
   MAX_ENVELOPE_COMPUTE_UNIT_LIMIT_V1,
   MAX_ENVELOPE_COMPUTE_UNIT_PRICE_MICRO_LAMPORTS_V1,
@@ -62,30 +62,30 @@ export const RECENT_BLOCKHASHES_SYSVAR_ID_V1 = new PublicKey(
 );
 
 export const OPERATOR_EXPECTED_TAGS_V1: Readonly<Record<OperatorMutationCommandV1, readonly number[]>> = Object.freeze({
-  "adopt-buffer": [27],
-  "verify-buffer": [28, 29],
-  approve: [3],
-  "finalize-governance": [4],
-  queue: [5],
-  "guardian-freeze": [9],
-  "create-emergency-resolution": [10],
-  "approve-emergency-resolution": [11],
-  "queue-emergency-resolution": [12],
-  "execute-emergency-resolution": [13],
-  freeze: [6, 14],
-  "bind-prestate": [15, 16, 17],
-  "approve-checkpoint": [15, 16],
-  "execute-extension": [30],
-  "execute-upgrade": [31],
-  "verify-programdata": [32, 33],
-  "bind-poststate": [15, 16, 17],
-  "approve-unfreeze": [34],
-  unfreeze: [35],
-  cancel: [7, 24],
-  expire: [8, 23, 25],
-  "close-buffer": [36],
-  "observe-programdata-failure": [38],
-  "activate-rollback": [37],
+  "adopt-buffer": [75],
+  "verify-buffer": [76, 77],
+  approve: [55],
+  "finalize-governance": [56],
+  queue: [57],
+  "guardian-freeze": [61],
+  "create-emergency-resolution": [62],
+  "approve-emergency-resolution": [63],
+  "queue-emergency-resolution": [64],
+  "execute-emergency-resolution": [65],
+  freeze: [58],
+  "bind-prestate": [67, 68, 69],
+  "approve-checkpoint": [67, 68],
+  "execute-extension": [78],
+  "execute-upgrade": [79],
+  "verify-programdata": [70, 71],
+  "bind-poststate": [67, 68, 69],
+  "approve-unfreeze": [73],
+  unfreeze: [74],
+  cancel: [59, 24],
+  expire: [60, 66, 25],
+  "close-buffer": [80],
+  "observe-programdata-failure": [72],
+  "activate-rollback": [81],
   "create-council-set": [18],
   "rotate-council": [19, 20, 21, 22, 24, 25],
 });
@@ -294,7 +294,7 @@ function exactMeta(
 }
 
 function envelopeFromDecodedInstruction(
-  decoded: ReturnType<typeof decodeRelease1InstructionV1>,
+  decoded: ReturnType<typeof decodeRelease1CurrentInstruction>,
 ): EnvelopeExpectationV1 | undefined {
   const value = decoded.value as unknown;
   if (value === null || typeof value !== "object" || !("envelope" in value)) return undefined;
@@ -302,23 +302,28 @@ function envelopeFromDecodedInstruction(
 }
 
 const OPERATOR_INSTRUCTION_NAMES_V1: Readonly<Record<number, string>> = Object.freeze({
-  1: "InitializeControllerV1", 2: "CreateProposalV2", 3: "ApproveProposalV2",
-  4: "FinalizeGovernanceV2", 5: "QueueProposalV2", 6: "FreezeProposalV2",
-  7: "CancelProposalV2", 8: "ExpireProposalV2", 9: "GuardianFreezeV1",
-  10: "CreateEmergencyResolutionV1", 11: "ApproveEmergencyResolutionV1",
-  12: "QueueEmergencyResolutionV1", 13: "ExecuteEmergencyResolutionV1",
-  14: "ConvertEmergencyFreezeV2", 15: "CreateCheckpointAttestationV1",
-  16: "RecastCheckpointAttestationV1", 17: "FinalizeCheckpointV1",
   18: "CreateCandidateCouncilSetV1", 19: "CreateCouncilRotationV1",
   20: "ApproveCouncilRotationV1", 21: "ActivateCouncilRotationV1",
-  22: "QueueCouncilRotationV1", 23: "ExpireEmergencyResolutionV1",
+  22: "QueueCouncilRotationV1",
   24: "CancelCouncilRotationV1", 25: "ExpireCouncilRotationV1",
-  27: "AdoptBufferV1", 28: "VerifyBufferChunkV1",
-  29: "FinalizeBufferVerificationV1", 30: "ExtendTargetV1",
-  31: "ExecuteUpgradeV1", 32: "VerifyProgramDataChunkV1",
-  33: "FinalizeProgramDataVerificationV1", 34: "ApproveUnfreezeV1",
-  35: "ExecuteUnfreezeV1", 36: "CloseAbandonedBufferV1",
-  37: "ActivateRollbackV1", 38: "ObserveProgramDataFailureV1",
+  39: "BeginProgramDataObservationV1", 40: "AppendProgramDataObservationChunkV1",
+  41: "VerifyObservedArtifactChunkV1", 42: "FinalizeProgramDataObservationV1",
+  43: "RecordControllerImmutabilityV1", 44: "CreateTargetAuthorityHandoffV1",
+  45: "ApproveTargetAuthorityHandoffV1", 46: "QueueTargetAuthorityHandoffV1",
+  47: "AcceptTargetAuthorityCheckedV1", 49: "CreateBootstrapActivationV1",
+  50: "ApproveBootstrapActivationV1", 51: "QueueBootstrapActivationV1",
+  52: "ExecuteBootstrapActivationV1", 53: "InitializeControllerV2",
+  54: "CreateProposalV3", 55: "ApproveProposalV3", 56: "FinalizeGovernanceV3",
+  57: "QueueProposalV3", 58: "FreezeProposalV3", 59: "CancelProposalV3",
+  60: "ExpireProposalV3", 61: "GuardianFreezeV2", 62: "CreateEmergencyResolutionV2",
+  63: "ApproveEmergencyResolutionV2", 64: "QueueEmergencyResolutionV2",
+  65: "ExecuteEmergencyResolutionV2", 66: "ExpireEmergencyResolutionV2",
+  67: "CreateCheckpointV2", 68: "RecastCheckpointV2", 69: "FinalizeCheckpointV2",
+  70: "BindProgramDataVerificationV2", 71: "FinalizeProgramDataVerificationV2",
+  72: "ObserveProgramDataFailureV2", 73: "ApproveUnfreezeV2", 74: "ExecuteUnfreezeV2",
+  75: "AdoptBufferV2", 76: "VerifyBufferChunkV2", 77: "FinalizeBufferVerificationV2",
+  78: "ExtendTargetV2", 79: "ExecuteUpgradeV2", 80: "CloseAbandonedBufferV2",
+  81: "ActivateRollbackV2",
 });
 
 function decodedActionValue(value: unknown): unknown {
@@ -342,7 +347,7 @@ function decodedActionValue(value: unknown): unknown {
 export function decodePreparedGovernanceActionV1(
   prepared: PreparedGovernanceTransactionV1,
 ): Readonly<Record<string, unknown>> {
-  const decoded = decodeRelease1InstructionV1(prepared.controllerInstructionData);
+  const decoded = decodeRelease1CurrentInstruction(prepared.controllerInstructionData);
   const controller = prepared.topLevelInstructions.find((instruction) => instruction.kind === "controller");
   if (controller === undefined) throw new Error("prepared transaction has no controller instruction");
   return Object.freeze({
@@ -671,7 +676,7 @@ export function validatePreparedGovernanceTransactionV1(
 ): Readonly<Record<string, unknown>> {
   if (!prepared.controllerProgram.equals(plan.controllerProgram)) throw new Error("prepared controller program drifted");
   exactPreparedLookupSnapshot(plan, prepared);
-  const decoded = decodeRelease1InstructionV1(prepared.controllerInstructionData);
+  const decoded = decodeRelease1CurrentInstruction(prepared.controllerInstructionData);
   if (!OPERATOR_EXPECTED_TAGS_V1[command].includes(decoded.tag)) throw new Error(`controller tag ${decoded.tag} is not admitted for ${command}`);
   const controllerInstructions = prepared.topLevelInstructions.filter((instruction) => instruction.kind === "controller");
   if (controllerInstructions.length !== 1 || prepared.topLevelInstructions.at(-1)?.kind !== "controller") throw new Error("prepared envelope must end with exactly one controller instruction");
@@ -690,8 +695,9 @@ export function validatePreparedGovernanceTransactionV1(
   if (prepared.topLevelInstructions.filter((instruction) => instruction.kind === "compute-unit-limit").length > 1 || prepared.topLevelInstructions.filter((instruction) => instruction.kind === "compute-unit-price").length > 1) throw new Error("prepared envelope contains duplicate compute-budget fields");
   const controllerIndex = prepared.topLevelInstructions.length - 1;
   if (prepared.topLevelInstructions.slice(0, controllerIndex).some((instruction) => instruction.kind === "controller")) throw new Error("prepared envelope contains a sibling controller instruction");
-  if (decoded.tag === 13) {
+  if (decoded.tag === 65) {
     validateBoundedEmergencyResolutionEnvelopeV1(prepared.topLevelInstructions);
+    validateExactEnvelope(envelopeFromDecodedInstruction(decoded), prepared.topLevelInstructions);
   } else {
     validateExactEnvelope(envelopeFromDecodedInstruction(decoded), prepared.topLevelInstructions);
   }

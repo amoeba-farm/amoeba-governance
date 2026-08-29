@@ -10,8 +10,11 @@ const k = (value: number): PublicKey => new PublicKey(b(value));
 test("public package exports account, Merkle, instruction, planning, and bridge namespaces", () => {
   assert.equal(publicPackage.release1Accounts.UPGRADE_PROPOSAL_V2_LEN, 1_792);
   assert.equal(publicPackage.artifactMerkleV1.RELEASE1_ARTIFACT_CHUNK_SIZE_V1, 16 * 1024);
-  assert.equal(publicPackage.release1LifecycleInstructions.INITIALIZE_CONTROLLER_V1_TAG, 1);
-  assert.equal(publicPackage.release1LoaderInstructions.OBSERVE_PROGRAMDATA_FAILURE_V1_TAG, 38);
+  assert.equal(publicPackage.release1CurrentInstructions.CREATE_CANDIDATE_COUNCIL_SET_V1_TAG, 18);
+  assert.equal(publicPackage.release1V3Instructions.INITIALIZE_CONTROLLER_V2_TAG, 53);
+  assert.equal(publicPackage.release1V3CustodyInstructions.ACTIVATE_ROLLBACK_V2_TAG, 81);
+  assert.equal("release1LifecycleInstructions" in publicPackage, false);
+  assert.equal("release1LoaderInstructions" in publicPackage, false);
   assert.equal(publicPackage.legacyV1.GOVERNANCE_TAIL_LEN, 16);
   assert.ok(publicPackage.spreadGateBridgeV1.SYNTHETIC_CONTROLLER_PROGRAM_V1 instanceof PublicKey);
 });

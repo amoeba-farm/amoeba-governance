@@ -17,6 +17,9 @@ import {
 } from "./operator.js";
 import * as lifecycle from "./release1LifecycleInstructions.js";
 import * as loader from "./release1LoaderInstructions.js";
+import * as v3 from "./release1V3Instructions.js";
+import * as v3Builders from "./release1V3Builders.js";
+import * as custody from "./release1V3CustodyInstructions.js";
 import {
   BufferVerificationStatusV1,
   CouncilRotationStateV1,
@@ -357,6 +360,49 @@ const executeEmergency: loader.ExecuteEmergencyResolutionV1 = {
   expectedProgramdataAuthority: some("execute-emergency-authority"),
 };
 
+const v3Envelope = (): loader.EnvelopeExpectationV1 => ({
+  computeUnitLimit: loader.MAX_ENVELOPE_COMPUTE_UNIT_LIMIT_V1,
+  computeUnitPriceMicroLamports: loader.MAX_ENVELOPE_COMPUTE_UNIT_PRICE_MICRO_LAMPORTS_V1,
+  durableNonceAccount: none(),
+  durableNonceAuthority: none(),
+});
+const v3Guard = (state: ProposalStateV2, gateStatus: GateStatusV1 = GateStatusV1.FrozenForUpgrade): v3.ProposalGuardV3 => ({
+  expectedProposalDigest: bytes("v3-proposal"), expectedState: state, expectedGateStatus: gateStatus,
+  expectedGateEpoch: 4n, expectedTargetNonce: 5n, expectedCapacityPolicyDigest: bytes("v3-capacity"),
+  expectedCurrentDeploymentDigest: bytes("v3-deployment"), expectedCurrentDeploymentGeneration: 6n,
+});
+const v3EmergencyGuard = (state: EmergencyFreezeResolutionStateV1): v3.EmergencyResolutionGuardV2 => ({
+  expectedResolutionDigest: bytes("v3-resolution"), expectedState: state, expectedGateStatus: GateStatusV1.EmergencyFrozen,
+  expectedGateEpoch: 4n, expectedTargetNonce: 5n, expectedCapacityPolicyDigest: bytes("v3-capacity"),
+  expectedCurrentDeploymentDigest: bytes("v3-deployment"), expectedCurrentDeploymentGeneration: 6n,
+  expectedFreezeObservationDigest: bytes("v3-freeze-observation"),
+  expectedProgramdataObservationDigest: bytes("v3-programdata-observation"), expectedObservationGeneration: 7n,
+  expectedCheckpointDigest: bytes("v3-emergency-checkpoint"),
+});
+const v3Checkpoint = (): v3.CheckpointManifestV2 => ({
+  phase: StateCheckpointPhaseV1.Prestate, checkpointGeneration: 1n, previousCheckpointDigest: Buffer.alloc(32),
+  expectedSubjectDigest: bytes("v3-checkpoint-subject"), expectedGateEpoch: 4n,
+  expectedCapacityPolicyDigest: bytes("v3-capacity"), expectedCurrentDeploymentDigest: bytes("v3-deployment"),
+  expectedCurrentDeploymentGeneration: 6n, expectedObservationDigest: bytes("v3-checkpoint-observation"),
+  expectedObservationGeneration: 7n, programOwnedStateRoot: bytes("v3-owned"), programOwnedStateCount: 8n,
+  logicalCompressedStateRoot: bytes("v3-compressed"), logicalCompressedStateCount: 9n,
+  semanticCustodyAccountingRoot: bytes("v3-semantic"), hardCombinedRoot: bytes("v3-hard"),
+  externalMetadataObservationRoot: bytes("v3-external-metadata"), externalRawBalanceObservationRoot: bytes("v3-external-raw"),
+  schemaIdentifier: bytes("v3-schema"), admittedPositiveDonationRoot: Buffer.alloc(32), admittedPositiveDonationCount: 0n,
+  forbiddenDriftCount: 0, expectedCouncilVersion: 2n, expectedCouncilHash: bytes("v3-council"),
+  expectedCheckpointDigest: bytes("v3-checkpoint"), planValidUntilSlot: 100n,
+});
+const v3Unfreeze = (approvalCount: number): v3.UnfreezeGuardV2 => ({
+  expectedProposalDigest: bytes("v3-proposal"), expectedCheckpointDigest: bytes("v3-checkpoint"),
+  expectedCheckpointGeneration: 1n, expectedVerificationDigest: bytes("v3-verification"), expectedVerificationGeneration: 1n,
+  expectedOriginalCouncilVersion: 1n, expectedOriginalCouncilHash: bytes("v3-original-council"),
+  expectedCurrentCouncilVersion: 2n, expectedCurrentCouncilHash: bytes("v3-current-council"), expectedGateEpoch: 4n,
+  expectedTargetNonce: 5n, expectedCurrentDeploymentDigest: bytes("v3-deployment"),
+  expectedCurrentDeploymentGeneration: 6n, expectedArtifactSha256: bytes("v3-artifact"),
+  expectedArtifactMerkleRoot: bytes("v3-artifact-root"), expectedActualCapacity: 1_572_864n,
+  expectedApprovalBitset: approvalCount === 3 ? 0b00111 : 0, expectedApprovalCount: approvalCount,
+});
+
 interface SurfaceCase {
   label: string;
   tag: number;
@@ -487,6 +533,154 @@ function allSurfaceCases(): readonly SurfaceCase[] {
   ];
 }
 
+function currentMutationSurfaceCases(): readonly SurfaceCase[] {
+  const checkpoint = v3Checkpoint();
+  const proof: custody.ArtifactChunkProofV2 = {
+    proofLen: custody.MAX_FIXED_MERKLE_PROOF_NODES_V1,
+    nodes: Array.from({ length: custody.MAX_FIXED_MERKLE_PROOF_NODES_V1 }, (_, index) => bytes(`v3-proof-${index}`)),
+  };
+  const executeEmergencyIx = build(v3Builders.buildExecuteEmergencyResolutionV2Instruction, {
+    expected: v3EmergencyGuard(EmergencyFreezeResolutionStateV1.Timelocked), envelope: v3Envelope(),
+  });
+  const extendIx = build(custody.buildExtendTargetV2Instruction, {
+    expected: v3Guard(ProposalStateV2.Frozen), expectedPrestateCheckpointDigest: bytes("v3-prestate"),
+    expectedPrestateCheckpointGeneration: 1n, expectedObservationDigest: bytes("v3-observation"),
+    expectedObservationGeneration: 7n, expectedObservationRoot: bytes("v3-observation-root"),
+    expectedObservationFinalizedSlot: 80n, expectedCurrentCapacity: 1_500_000n, expectedExtensionDelta: 72_864n,
+    expectedPostCapacity: 1_572_864n, expectedNextDeploymentGeneration: 7n,
+    expectedNextDeploymentDigest: bytes("v3-next-deployment"), envelope: v3Envelope(),
+  });
+  const executeUpgradeIx = build(custody.buildExecuteUpgradeV2Instruction, {
+    expected: v3Guard(ProposalStateV2.Frozen), expectedPrestateCheckpointDigest: bytes("v3-prestate"),
+    expectedPrestateCheckpointGeneration: 1n, expectedObservationDigest: bytes("v3-observation"),
+    expectedObservationGeneration: 7n, expectedObservationRoot: bytes("v3-observation-root"),
+    expectedObservationFinalizedSlot: 80n, expectedActualCapacity: 1_572_864n,
+    expectedSealedBufferHeaderHash: bytes("v3-sealed-buffer"), expectedVerifiedChunkCount: 96,
+    expectedBufferVerificationStatus: BufferVerificationStatusV1.Verified,
+    expectedCounterpartProposalDigest: bytes("v3-counterpart"),
+    expectedCounterpartBufferVerificationStatus: BufferVerificationStatusV1.Verified, envelope: v3Envelope(),
+  });
+  const executeUnfreezeIx = build(v3Builders.buildExecuteUnfreezeV2Instruction, {
+    expected: v3Unfreeze(3), linkedProposal: key("v3-linked-proposal"), envelope: v3Envelope(),
+  });
+  return [
+    one("v3-approve-proposal", build(v3Builders.buildApproveProposalV3Instruction, {
+      expected: v3Guard(ProposalStateV2.BufferVerified), expectedCreationCouncilVersion: 2n,
+      expectedCreationCouncilHash: bytes("v3-council"), expectedApprovalBitset: 1, expectedApprovalCount: 1,
+    })),
+    one("v3-finalize-governance", build(v3Builders.buildFinalizeGovernanceV3Instruction, {
+      expected: v3Guard(ProposalStateV2.CouncilApproved), expectedApprovalBitset: 0b00111, expectedApprovalCount: 3,
+    })),
+    one("v3-queue-proposal", build(v3Builders.buildQueueProposalV3Instruction, { expected: v3Guard(ProposalStateV2.GovernanceSatisfied) })),
+    one("v3-freeze-proposal", build(v3Builders.buildFreezeProposalV3Instruction, { expected: v3Guard(ProposalStateV2.Timelocked, GateStatusV1.Active), expectedNextGateEpoch: 5n })),
+    one("v3-cancel-proposal", build(v3Builders.buildCancelProposalV3Instruction, {
+      expected: v3Guard(ProposalStateV2.Draft, GateStatusV1.Active), expectedCancellationCouncilVersion: 2n,
+      expectedCancellationCouncilHash: bytes("v3-council"), expectedCancellationApprovalBitset: 1,
+      expectedCancellationApprovalCount: 1, cancellationReasonCode: 2,
+    })),
+    one("v3-expire-proposal", build(v3Builders.buildExpireProposalV3Instruction, { expected: v3Guard(ProposalStateV2.Draft, GateStatusV1.Active) })),
+    one("v3-guardian-freeze", build(v3Builders.buildGuardianFreezeV2Instruction, { manifest: {
+      expectedGateEpoch: 4n, expectedTargetNonce: 5n, expectedCapacityPolicyDigest: bytes("v3-capacity"),
+      expectedCurrentDeploymentDigest: bytes("v3-deployment"), expectedCurrentDeploymentGeneration: 6n,
+      freezeReasonCode: 2, planValidUntilSlot: 100n,
+    } })),
+    one("v3-create-emergency-resolution", build(v3Builders.buildCreateEmergencyResolutionV2Instruction, { manifest: {
+      resolutionKind: EmergencyFreezeResolutionKindV1.ResumeWithoutUpgrade, expectedGateEpoch: 4n, expectedTargetNonce: 5n,
+      expectedCapacityPolicyDigest: bytes("v3-capacity"), expectedCurrentDeploymentDigest: bytes("v3-deployment"),
+      expectedCurrentDeploymentGeneration: 6n, expectedFreezeObservationDigest: bytes("v3-freeze-observation"),
+      expectedProgramdataObservationDigest: bytes("v3-programdata-observation"), expectedProgramdataObservationGeneration: 7n,
+      expectedPolicyVersion: 1n, expectedPolicyHash: bytes("v3-policy"), expectedCouncilVersion: 2n,
+      expectedCouncilHash: bytes("v3-council"), planValidUntilSlot: 100n,
+    } })),
+    one("v3-approve-emergency-resolution", build(v3Builders.buildApproveEmergencyResolutionV2Instruction, {
+      expected: v3EmergencyGuard(EmergencyFreezeResolutionStateV1.Draft), expectedApprovalBitset: 1, expectedApprovalCount: 1,
+    })),
+    one("v3-queue-emergency-resolution", build(v3Builders.buildQueueEmergencyResolutionV2Instruction, {
+      expected: v3EmergencyGuard(EmergencyFreezeResolutionStateV1.CouncilApproved),
+    })),
+    enveloped("v3-execute-emergency-resolution", executeEmergencyIx, buildCanonicalRelease1LoaderEnvelopeV1(executeEmergencyIx)),
+    one("v3-expire-emergency-resolution", build(v3Builders.buildExpireEmergencyResolutionV2Instruction, {
+      expected: v3EmergencyGuard(EmergencyFreezeResolutionStateV1.Draft),
+    })),
+    one("v3-create-checkpoint", build(v3Builders.buildCreateCheckpointV2Instruction, {
+      attestation: { manifest: checkpoint, seatIndex: 0, expectedPreviousAttestationDigest: Buffer.alloc(32) },
+    })),
+    one("v3-recast-checkpoint", build(v3Builders.buildRecastCheckpointV2Instruction, {
+      attestation: { manifest: checkpoint, seatIndex: 0, expectedPreviousAttestationDigest: bytes("v3-previous-attestation") },
+    })),
+    one("v3-finalize-checkpoint", build(v3Builders.buildFinalizeCheckpointV2Instruction, { manifest: checkpoint })),
+    one("v3-bind-programdata-verification", build(v3Builders.buildBindProgramDataVerificationV2Instruction, { manifest: {
+      expected: v3Guard(ProposalStateV2.UpgradeExecuted), expectedObservationDigest: bytes("v3-observation"),
+      expectedObservationGeneration: 7n, expectedObservationRoot: bytes("v3-observation-root"),
+      expectedObservationFinalizedSlot: 80n, verificationGeneration: 1n, previousVerificationDigest: Buffer.alloc(32),
+      planValidUntilSlot: 100n,
+    } })),
+    one("v3-finalize-programdata-verification", build(v3Builders.buildFinalizeProgramDataVerificationV2Instruction, { expected: {
+      expectedProposalDigest: bytes("v3-proposal"), expectedVerificationDigest: bytes("v3-verification"),
+      expectedVerificationGeneration: 1n, expectedStatus: v3.ProgramDataVerificationStatusV2.ObservationBound,
+      expectedGateEpoch: 4n, expectedTargetNonce: 5n, expectedCapacityPolicyDigest: bytes("v3-capacity"),
+      expectedCurrentDeploymentDigest: bytes("v3-deployment"), expectedCurrentDeploymentGeneration: 6n,
+      expectedObservationDigest: bytes("v3-observation"), expectedObservationGeneration: 7n,
+      expectedActualCapacity: 1_572_864n, expectedAuthority: key("authorityPda"),
+    } })),
+    one("v3-observe-programdata-failure", build(v3Builders.buildObserveProgramDataFailureV2Instruction, { witness: {
+      expectedProposal: v3Guard(ProposalStateV2.UpgradeExecuted), expectedVerificationDigest: Buffer.alloc(32),
+      expectedVerificationGeneration: 0n, expectedObservationGeneration: 7n, expectedObservationStateHash: Buffer.alloc(32),
+      mismatchClass: v3.ProgramDataMismatchClassV2.ProgramLinkage, failingChunkIndex: 0xffff_ffff,
+      expectedLeafHash: Buffer.alloc(32), proof: { proofLen: 0, nodes: Array.from({ length: 7 }, () => Buffer.alloc(32)) },
+      planValidUntilSlot: 100n,
+    } })),
+    one("v3-approve-unfreeze", build(v3Builders.buildApproveUnfreezeV2Instruction, { expected: v3Unfreeze(0) })),
+    enveloped("v3-execute-unfreeze", executeUnfreezeIx, buildCanonicalRelease1LoaderEnvelopeV1(executeUnfreezeIx)),
+    one("v3-adopt-buffer", build(custody.buildAdoptBufferV2Instruction, { expected: v3Guard(ProposalStateV2.Draft) })),
+    one("v3-verify-buffer", build(custody.buildVerifyBufferChunkV2Instruction, {
+      expected: v3Guard(ProposalStateV2.BufferAdopted), chunkIndex: 95, proof,
+      expectedVerificationStatus: BufferVerificationStatusV1.Verifying, expectedVerifiedChunkBitmap: bitmap(0x5a),
+      expectedVerifiedChunkCount: 95,
+    })),
+    one("v3-finalize-buffer", build(custody.buildFinalizeBufferVerificationV2Instruction, {
+      expected: v3Guard(ProposalStateV2.BufferAdopted), expectedVerificationStatus: BufferVerificationStatusV1.ReadyToFinalize,
+      expectedVerifiedChunkBitmap: bitmap(0xff), expectedVerifiedChunkCount: 96,
+      expectedSealedBufferHeaderHash: bytes("v3-sealed-buffer"),
+    })),
+    enveloped("v3-extend-target", extendIx, buildCanonicalRelease1LoaderEnvelopeV1(extendIx)),
+    enveloped("v3-execute-upgrade", executeUpgradeIx, buildCanonicalRelease1LoaderEnvelopeV1(executeUpgradeIx)),
+    one("v3-close-buffer", build(custody.buildCloseAbandonedBufferV2Instruction, {
+      expected: v3Guard(ProposalStateV2.Cancelled), expectedVerificationStatus: BufferVerificationStatusV1.Verified,
+      expectedVerifiedChunkBitmap: bitmap(0xff), expectedVerifiedChunkCount: 96, expectedBufferVerificationFinalizedSlot: 90n,
+    })),
+    one("v3-activate-rollback", build(custody.buildActivateRollbackV2Instruction, {
+      expectedPrimary: v3Guard(ProposalStateV2.UpgradeExecuted), expectedRollback: v3Guard(ProposalStateV2.Timelocked),
+      expectedFailureEvidenceDigest: bytes("v3-failure"), expectedPrimaryVerificationGeneration: 0n,
+      expectedProgramdataObservationStateHash: bytes("v3-observation-state"), expectedProgramdataObservationGeneration: 7n,
+      expectedRollbackBufferVerificationStatus: BufferVerificationStatusV1.Verified,
+      expectedRollbackVerifiedChunkBitmap: bitmap(0xff), expectedRollbackVerifiedChunkCount: 96,
+      expectedRollbackBufferFinalizedSlot: 90n, expectedNextGateEpoch: 5n,
+    })),
+  ];
+}
+
+function retainedCouncilSurfaceCases(): readonly SurfaceCase[] {
+  return [
+    one("create-candidate-council", build(lifecycle.buildCreateCandidateCouncilSetV1Instruction, {
+      expectedCurrentCouncilVersion: 1n, expectedCurrentCouncilHash: bytes("current-council"), candidateCouncilVersion: 2n,
+      activationSlot: 120n, expectedTargetNonce: 1n, expectedGateStatus: GateStatusV1.Active, expectedGateEpoch: 2n,
+      expectedCandidateCouncilHash: bytes("candidate-council"), seatTerms,
+    })),
+    one("create-council-rotation", build(lifecycle.buildCreateCouncilRotationV1Instruction, {
+      creationSlot: 100n, notBeforeSlot: 120n, expirySlot: 200n, expectedCurrentCouncilVersion: 1n,
+      expectedCurrentCouncilHash: bytes("current-council"), expectedCandidateCouncilVersion: 2n,
+      expectedCandidateCouncilHash: bytes("candidate-council"), expectedGateStatus: GateStatusV1.Active,
+      expectedGateEpoch: 2n, expectedTargetNonce: 1n, expectedRotationDigest: bytes("rotation-digest"),
+    })),
+    one("approve-council-rotation", build(lifecycle.buildApproveCouncilRotationV1Instruction, { expected: rotationExpectation, expectedApprovalBitset: 1, expectedApprovalCount: 1 })),
+    one("activate-council-rotation", build(lifecycle.buildActivateCouncilRotationV1Instruction, { expected: rotationExpectation, expectedApprovalBitset: 0b00111, expectedApprovalCount: 3 })),
+    one("queue-council-rotation", build(lifecycle.buildQueueCouncilRotationV1Instruction, { expected: rotationExpectation, expectedApprovalBitset: 0b00111, expectedApprovalCount: 3 })),
+    one("cancel-council-rotation", build(lifecycle.buildCancelCouncilRotationV1Instruction, { expected: rotationExpectation, expectedCancellationApprovalBitset: 1, expectedCancellationApprovalCount: 1, cancellationReasonCode: 50 })),
+    one("expire-council-rotation", build(lifecycle.buildExpireCouncilRotationV1Instruction, { expected: rotationExpectation })),
+  ];
+}
+
 function lookupCandidates(
   instructions: readonly TransactionInstruction[],
 ): PublicKey[] {
@@ -569,12 +763,15 @@ function actualWireBytes(input: Release1PacketPlanningInputV1): number {
   return new VersionedTransaction(message).serialize().length;
 }
 
-test("every executable Release 1 tag and CLI mutation surface has a bounded packet plan", () => {
-  const surfaces = allSurfaceCases();
-  assert.equal(surfaces.length, 40);
+test("every current Release 1 operator mutation surface has a bounded packet plan", () => {
+  const surfaces = [
+    ...retainedCouncilSurfaceCases(),
+    ...currentMutationSurfaceCases(),
+  ];
+  assert.equal(surfaces.length, 34);
   assert.deepEqual(
     [...new Set(surfaces.map((surface) => surface.tag))].sort((a, b) => a - b),
-    [...Array.from({ length: 25 }, (_, index) => index + 1), ...Array.from({ length: 12 }, (_, index) => index + 27)],
+    [18, 19, 20, 21, 22, 24, 25, ...Array.from({ length: 27 }, (_, index) => index + 55)],
   );
 
   const coveredTags = new Set(surfaces.map((surface) => surface.tag));
@@ -611,7 +808,7 @@ test("every executable Release 1 tag and CLI mutation surface has a bounded pack
   }
 
   assert.deepEqual(v0Blockers, [], `non-fitting required v0 surfaces: ${v0Blockers.join(", ")}`);
-  assert.equal(Object.keys(results).length, 40);
+  assert.equal(Object.keys(results).length, 34);
   const evidence = JSON.parse(
     readFileSync(
       new URL(

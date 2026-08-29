@@ -20,23 +20,12 @@ import {
   StateCheckpointPhaseV1,
 } from "./release1.js";
 import {
-  CheckpointSubjectStateV1,
-  buildCreateProposalV2Instruction,
-  buildFinalizeCheckpointV1Instruction,
-  type CheckpointCandidateV1,
-  type CreateProposalV2,
-} from "./release1LifecycleInstructions.js";
-import {
-  MAX_FIXED_MERKLE_PROOF_NODES_V1,
-  ProgramDataChunkPhaseV1,
-  buildExecuteUpgradeV1Instruction,
-  buildVerifyProgramDataChunkV1Instruction,
   type EnvelopeExpectationV1,
-  type ExecuteUpgradeV1,
   type OptionalInstructionPublicKeyV1,
-  type ProposalExpectationV2,
-  type VerifyProgramDataChunkV1,
 } from "./release1LoaderInstructions.js";
+import * as v3 from "./release1V3Instructions.js";
+import * as v3Builders from "./release1V3Builders.js";
+import * as custody from "./release1V3CustodyInstructions.js";
 import {
   RELEASE1_TRANSACTION_PACKET_LIMIT_V1,
   Release1PacketLimitError,
@@ -83,66 +72,36 @@ const some = (label: string): OptionalInstructionPublicKeyV1 => ({
 });
 const bytes = (label: string): Buffer => hash(`bytes:${label}`);
 
-const proposalExpectation = (): ProposalExpectationV2 => ({
+const proposalExpectation = (state: ProposalStateV2 = ProposalStateV2.Frozen): v3.ProposalGuardV3 => ({
   expectedProposalDigest: bytes("proposal-digest"),
-  expectedPolicyVersion: 2n,
-  expectedPolicyHash: bytes("policy-hash"),
-  expectedCouncilVersion: 3n,
-  expectedCouncilHash: bytes("council-hash"),
+  expectedState: state,
   expectedGateStatus: GateStatusV1.FrozenForUpgrade,
   expectedGateEpoch: 4n,
   expectedTargetNonce: 5n,
-  expectedState: ProposalStateV2.Frozen,
-  expectedReviewStartSlot: 10n,
-  expectedReviewEndSlot: 20n,
-  expectedNotBeforeSlot: 30n,
-  expectedExpirySlot: 100n,
+  expectedCapacityPolicyDigest: bytes("capacity-policy"),
+  expectedCurrentDeploymentDigest: bytes("current-deployment"),
+  expectedCurrentDeploymentGeneration: 6n,
 });
 
-const createProposal: CreateProposalV2 = {
-  proposalClass: ProposalClassV1.RoutineUpgrade,
-  creationGateStatus: GateStatusV1.Active,
-  expectedProposalId: 1n,
-  expectedTargetNonce: 2n,
-  creationSlot: 3n,
-  expectedPolicyVersion: 4n,
-  expectedPolicyHash: bytes("create-policy"),
-  expectedCreationCouncilVersion: 5n,
-  expectedCreationCouncilHash: bytes("create-council"),
-  expectedCreationGateEpoch: 6n,
-  expectedFreezeGateEpoch: 7n,
-  artifactLength: 1_100_003n,
-  artifactSha256: bytes("artifact-sha"),
-  artifactChunkMerkleRoot: bytes("artifact-root"),
-  sourceCommitHash: bytes("source-commit"),
-  sourceTreeHash: bytes("source-tree"),
-  buildInputInventoryHash: bytes("build-inventory"),
-  reproducibleBuildReceiptHash: bytes("build-receipt"),
-  packageReceiptHash: bytes("package-receipt"),
-  releaseIntentHash: bytes("release-intent"),
-  expectedExecutionPrePayloadHash: bytes("pre-payload"),
-  expectedExecutionPreChunkRoot: bytes("pre-root"),
-  currentRawProgramdataHash: bytes("raw-programdata"),
-  deployedSlot: 8n,
-  currentCapacity: 1_200_000n,
-  extensionDelta: 100_000n,
-  expectedPostCapacity: 1_300_000n,
-  checkpointSchemaId: bytes("checkpoint-schema"),
-  checkpointPolicyHash: bytes("checkpoint-policy"),
-  primaryProposal: none(),
-  rollbackProposal: some("rollback-proposal"),
-  rollbackBuffer: some("rollback-buffer"),
-  rollbackArtifactSha256: bytes("rollback-sha"),
-  rollbackArtifactChunkRoot: bytes("rollback-root"),
-  reviewStartSlot: 10n,
-  reviewEndSlot: 20n,
-  notBeforeSlot: 30n,
-  expirySlot: 100n,
-  expectedProposalDigest: bytes("create-proposal-digest"),
-};
+const createProposal: v3.CreateProposalV3 = { manifest: {
+  proposalClass: ProposalClassV1.RoutineUpgrade, expectedProposalId: 1n, expectedTargetNonce: 2n,
+  expectedGateStatus: GateStatusV1.Active, expectedGateEpoch: 6n,
+  expectedCapacityPolicyDigest: bytes("capacity-policy"), expectedCurrentDeploymentDigest: bytes("current-deployment"),
+  expectedCurrentDeploymentGeneration: 1n, expectedPolicyVersion: 4n, expectedPolicyHash: bytes("create-policy"),
+  expectedCouncilVersion: 5n, expectedCouncilHash: bytes("create-council"), artifactLength: 1_100_003n,
+  artifactSha256: bytes("artifact-sha"), artifactChunkMerkleRoot: bytes("artifact-root"),
+  sourceCommitHash: bytes("source-commit"), sourceTreeHash: bytes("source-tree"),
+  buildInputInventoryHash: bytes("build-inventory"), reproducibleBuildReceiptHash: bytes("build-receipt"),
+  packageReceiptHash: bytes("package-receipt"), releaseIntentHash: bytes("release-intent"),
+  minimumRequiredCapacity: 1_300_000n, checkpointSchemaId: bytes("checkpoint-schema"),
+  checkpointPolicyHash: bytes("checkpoint-policy"), primaryProposal: none(), rollbackProposal: some("rollback-proposal"),
+  rollbackBuffer: some("rollback-buffer"), rollbackArtifactLength: 1_000_000n,
+  rollbackArtifactSha256: bytes("rollback-sha"), rollbackArtifactChunkRoot: bytes("rollback-root"),
+  planValidUntilSlot: 100n,
+} };
 
 function buildCreateProposalInstruction(): TransactionInstruction {
-  return buildCreateProposalV2Instruction(
+  return v3Builders.buildCreateProposalV3Instruction(
     controllerProgram,
     {
       payer,
@@ -151,6 +110,8 @@ function buildCreateProposalInstruction(): TransactionInstruction {
       policy: key("policy"),
       council: key("council"),
       protocolGate: key("gate"),
+      capacityPolicy: key("capacity-policy"),
+      currentDeployment: key("current-deployment"),
       targetProgram: key("target-program"),
       targetProgramdata: key("target-programdata"),
       upgradeableLoader: key("upgradeable-loader"),
@@ -165,18 +126,16 @@ function buildCreateProposalInstruction(): TransactionInstruction {
   );
 }
 
-function checkpointCandidate(): CheckpointCandidateV1 {
+function checkpointCandidate(): v3.CheckpointManifestV2 {
   return {
     phase: StateCheckpointPhaseV1.Poststate,
-    expectedSubjectState: CheckpointSubjectStateV1.ProposalProgramDataVerified,
+    checkpointGeneration: 1n,
+    previousCheckpointDigest: Buffer.alloc(32),
     expectedSubjectDigest: bytes("checkpoint-subject"),
-    expectedGateStatus: GateStatusV1.FrozenForUpgrade,
     expectedGateEpoch: 9n,
-    finalizedObservationSlot: 10n,
-    targetProgramdataSlot: 11n,
-    targetPayloadCommitment: bytes("checkpoint-payload"),
-    targetRawProgramdataCommitment: bytes("checkpoint-raw"),
-    targetCapacity: 1_300_000n,
+    expectedCapacityPolicyDigest: bytes("capacity-policy"), expectedCurrentDeploymentDigest: bytes("current-deployment"),
+    expectedCurrentDeploymentGeneration: 1n, expectedObservationDigest: bytes("checkpoint-observation"),
+    expectedObservationGeneration: 1n,
     programOwnedStateRoot: bytes("program-owned-root"),
     programOwnedStateCount: 12n,
     logicalCompressedStateRoot: bytes("compressed-root"),
@@ -189,24 +148,29 @@ function checkpointCandidate(): CheckpointCandidateV1 {
     admittedPositiveDonationRoot: bytes("donation-root"),
     admittedPositiveDonationCount: 1n,
     forbiddenDriftCount: 0,
+    expectedCouncilVersion: 3n,
+    expectedCouncilHash: bytes("council-hash"),
     expectedCheckpointDigest: bytes("checkpoint-digest"),
+    planValidUntilSlot: 100n,
   };
 }
 
 function buildCheckpointInstruction(): TransactionInstruction {
-  return buildFinalizeCheckpointV1Instruction(
+  return v3Builders.buildFinalizeCheckpointV2Instruction(
     controllerProgram,
     {
       payer,
       controllerConfig: key("config"),
       policy: key("policy"),
-      council: key("council"),
+      currentCouncil: key("council"),
       protocolGate: key("gate"),
       subject: key("proposal"),
+      linkedPrimaryOrAuthority: key("linked-primary"),
+      capacityPolicy: key("capacity-policy"),
+      currentDeployment: key("current-deployment"),
+      programdataObservation: key("programdata-observation"),
       targetProgram: key("target-program"),
       targetProgramdata: key("target-programdata"),
-      phaseEvidence: key("programdata-verification"),
-      baselineCheckpoint: key("prestate-checkpoint"),
       checkpoint: key("poststate-checkpoint"),
       checkpointAttestations: [
         key("checkpoint-attestation-0"),
@@ -215,55 +179,44 @@ function buildCheckpointInstruction(): TransactionInstruction {
       ],
       systemProgram: SystemProgram.programId,
     },
-    {
-      candidate: checkpointCandidate(),
-      expectedCouncilVersion: 3n,
-      expectedCouncilHash: bytes("council-hash"),
-    },
+    { manifest: checkpointCandidate() },
   );
 }
 
 function buildMaxProofInstruction(): TransactionInstruction {
-  const value: VerifyProgramDataChunkV1 = {
-    expected: proposalExpectation(),
-    phase: ProgramDataChunkPhaseV1.Payload,
+  const value: custody.VerifyBufferChunkV2 = {
+    expected: proposalExpectation(ProposalStateV2.BufferAdopted),
     chunkIndex: 67,
     proof: {
-      proofLen: MAX_FIXED_MERKLE_PROOF_NODES_V1,
+      proofLen: custody.MAX_FIXED_MERKLE_PROOF_NODES_V1,
       nodes: Array.from(
-        { length: MAX_FIXED_MERKLE_PROOF_NODES_V1 },
+        { length: custody.MAX_FIXED_MERKLE_PROOF_NODES_V1 },
         (_, index) => bytes(`proof-node-${index}`),
       ),
     },
-    expectedVerificationStatus: ProgramDataVerificationStatusV1.Verifying,
-    expectedVerifiedPayloadChunkBitmap: Buffer.alloc(
+    expectedVerificationStatus: BufferVerificationStatusV1.Verifying,
+    expectedVerifiedChunkBitmap: Buffer.alloc(
       VERIFICATION_BITMAP_BYTES_V1,
       0x5a,
     ),
-    expectedVerifiedPayloadChunkCount: 67,
-    expectedVerifiedTailChunkBitmap: Buffer.alloc(
-      VERIFICATION_BITMAP_BYTES_V1,
-      0xa5,
-    ),
-    expectedVerifiedTailChunkCount: 2,
+    expectedVerifiedChunkCount: 67,
   };
-  return buildVerifyProgramDataChunkV1Instruction(
+  return custody.buildVerifyBufferChunkV2Instruction(
     controllerProgram,
     {
       controllerConfig: key("config"),
       protocolGate: key("gate"),
       proposal: key("proposal"),
-      targetProgram: key("target-program"),
-      targetProgramdata: key("target-programdata"),
+      buffer: key("buffer"),
+      bufferVerification: key("buffer-verification"),
       authorityPda: key("authority"),
       upgradeableLoader: key("upgradeable-loader"),
-      programdataVerification: key("programdata-verification"),
     },
     value,
   );
 }
 
-function executeUpgradeValue(withNonce: boolean): ExecuteUpgradeV1 {
+function executeUpgradeValue(withNonce: boolean): custody.ExecuteUpgradeV2 {
   const envelope: EnvelopeExpectationV1 = {
     computeUnitLimit: 1_400_000,
     computeUnitPriceMicroLamports: 10_000_000n,
@@ -273,11 +226,12 @@ function executeUpgradeValue(withNonce: boolean): ExecuteUpgradeV1 {
   return {
     expected: proposalExpectation(),
     expectedPrestateCheckpointDigest: bytes("prestate-checkpoint-digest"),
-    expectedCurrentRawProgramdataHash: bytes("current-programdata-hash"),
+    expectedPrestateCheckpointGeneration: 1n,
+    expectedObservationDigest: bytes("programdata-observation"), expectedObservationGeneration: 1n,
+    expectedObservationRoot: bytes("programdata-observation-root"), expectedObservationFinalizedSlot: 40n,
     expectedSealedBufferHeaderHash: bytes("sealed-buffer-header"),
     expectedCounterpartProposalDigest: bytes("counterpart-proposal"),
-    expectedProgramdataSlot: 40n,
-    expectedCapacity: 1_300_000n,
+    expectedActualCapacity: 1_300_000n,
     expectedVerifiedChunkCount: 68,
     expectedBufferVerificationStatus: BufferVerificationStatusV1.Verified,
     expectedCounterpartBufferVerificationStatus: BufferVerificationStatusV1.Verified,
@@ -286,19 +240,21 @@ function executeUpgradeValue(withNonce: boolean): ExecuteUpgradeV1 {
 }
 
 function buildExecuteUpgradeEnvelope(withNonce: boolean): readonly TransactionInstruction[] {
-  const controller = buildExecuteUpgradeV1Instruction(
+  const controller = custody.buildExecuteUpgradeV2Instruction(
     controllerProgram,
     {
-      payer,
       controllerConfig: key("config"),
       policy: key("policy"),
       protocolGate: key("gate"),
       proposal: key("proposal"),
       counterpartProposal: key("rollback-proposal"),
       counterpartBufferVerification: key("rollback-buffer-verification"),
+      capacityPolicy: key("capacity-policy"),
+      currentDeployment: key("current-deployment"),
+      prestateProgramdataObservation: key("prestate-programdata-observation"),
       prestateCheckpoint: key("prestate-checkpoint"),
+      currentProgramdataObservation: key("current-programdata-observation"),
       bufferVerification: key("buffer-verification"),
-      programdataVerification: key("programdata-verification"),
       targetProgramdata: key("target-programdata"),
       targetProgram: key("target-program"),
       buffer: key("candidate-buffer"),
@@ -307,7 +263,6 @@ function buildExecuteUpgradeEnvelope(withNonce: boolean): readonly TransactionIn
       clockSysvar: key("clock-sysvar"),
       authorityPda: key("authority"),
       upgradeableLoader: key("upgradeable-loader"),
-      systemProgram: SystemProgram.programId,
       instructionsSysvar: key("instructions-sysvar"),
     },
     executeUpgradeValue(withNonce),
@@ -463,44 +418,44 @@ test("official Release 1 builders have deterministic legacy and v0 packet measur
 
   assert.deepEqual(measured, {
     "create-proposal": {
-      legacy: 1_503,
-      v0: 1_136,
+      legacy: 1_457,
+      v0: 1_028,
       signatures: 2,
       staticKeys: 3,
       lookupWritable: 2,
-      lookupReadonly: 11,
+      lookupReadonly: 13,
     },
     "max-merkle-proof": {
-      legacy: 964,
-      v0: 752,
+      legacy: 822,
+      v0: 641,
       signatures: 1,
       staticKeys: 2,
       lookupWritable: 1,
-      lookupReadonly: 7,
+      lookupReadonly: 6,
     },
     "poststate-checkpoint": {
-      legacy: 1_121,
-      v0: 723,
+      legacy: 1_257,
+      v0: 797,
       signatures: 1,
       staticKeys: 2,
       lookupWritable: 2,
-      lookupReadonly: 12,
+      lookupReadonly: 14,
     },
     "execute-upgrade": {
-      legacy: 1_241,
-      v0: 688,
+      legacy: 1_314,
+      v0: 699,
       signatures: 1,
       staticKeys: 3,
-      lookupWritable: 7,
-      lookupReadonly: 12,
+      lookupWritable: 6,
+      lookupReadonly: 15,
     },
     "execute-upgrade-nonce": {
-      legacy: 1_411,
-      v0: 827,
+      legacy: 1_516,
+      v0: 839,
       signatures: 2,
       staticKeys: 5,
-      lookupWritable: 8,
-      lookupReadonly: 12,
+      lookupWritable: 7,
+      lookupReadonly: 16,
     },
   });
 });

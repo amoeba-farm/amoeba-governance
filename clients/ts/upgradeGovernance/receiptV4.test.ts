@@ -17,12 +17,14 @@ import {
   CURRENT_DEPLOYMENT_STATE_V1_DISCRIMINATOR,
   CURRENT_DEPLOYMENT_STATE_V1_RESERVED_LEN,
   CeremonyProposalStateV1,
+  EXTEND_PROGRAM_CHECKED_FEATURE_ID_V1,
   PROGRAMDATA_CAPACITY_POLICY_V1_DISCRIMINATOR,
   PROGRAMDATA_CAPACITY_POLICY_V1_RESERVED_LEN,
   PROGRAMDATA_OBSERVATION_V1_DISCRIMINATOR,
   PROGRAMDATA_OBSERVATION_V1_RESERVED_LEN,
   ProgramDataObservationPurposeV1,
   ProgramDataObservationStatusV1,
+  SET_AUTHORITY_CHECKED_FEATURE_ID_V1,
   TARGET_AUTHORITY_HANDOFF_PROPOSAL_V1_DISCRIMINATOR,
   TARGET_AUTHORITY_HANDOFF_PROPOSAL_V1_RESERVED_LEN,
   TARGET_AUTHORITY_HANDOFF_RECEIPT_V1_DISCRIMINATOR,
@@ -43,6 +45,7 @@ import {
   deriveTargetAuthorityHandoffReceiptPdaV1,
   programDataCapacityPolicyDigestV1,
   programDataObservationDigestV1,
+  programDataObservationSubjectDigestV1,
   serializeBootstrapActivationProposalV1,
   serializeBootstrapActivationReceiptV1,
   serializeControllerImmutabilityReceiptV1,
@@ -75,7 +78,10 @@ import {
   type GovernedRelease1CeremonyReceiptV4,
   type GovernedRelease1CeremonyReceiptV4Material,
 } from "./receiptV4.js";
-import { GateStatusV1 } from "./release1.js";
+import {
+  BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1,
+  GateStatusV1,
+} from "./release1.js";
 import { SYNTHETIC_CONTROLLER_PROGRAM_V1 } from "./spreadGateBridgeV1.js";
 import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from "./v1.js";
 
@@ -143,8 +149,8 @@ function makeCapacityPolicy(): ProgramDataCapacityPolicyV1 {
     artifactSchemeId: ARTIFACT_MERKLE_SCHEME_ID,
     artifactChunkSize: 16 * 1024,
     zeroTailRequired: true,
-    extendProgramCheckedFeature: key(11),
-    setAuthorityCheckedFeature: key(12),
+    extendProgramCheckedFeature: EXTEND_PROGRAM_CHECKED_FEATURE_ID_V1,
+    setAuthorityCheckedFeature: SET_AUTHORITY_CHECKED_FEATURE_ID_V1,
     policyDigest: hash(250),
     creationSlot: 1n,
     reserved: Buffer.alloc(PROGRAMDATA_CAPACITY_POLICY_V1_RESERVED_LEN),
@@ -178,7 +184,7 @@ function makeControllerRelease(policy: ProgramDataCapacityPolicyV1): ControllerR
     releaseManifestCommitment: hash(25),
     abiCommitment: hash(26),
     preImmutabilityAuthority: present(controllerInitialAuthority),
-    expectedProgramdataCapacity: capacity,
+    minimumProgramdataCapacity: capacity,
     releaseDigest: hash(251),
     creationSlot: 2n,
     finalized: true,
@@ -204,7 +210,7 @@ function makeObservation(policy: ProgramDataCapacityPolicyV1, input: Observation
   const value: ProgramDataObservationV1 = {
     discriminator: PROGRAMDATA_OBSERVATION_V1_DISCRIMINATOR,
     version: 1,
-    bump: deriveProgramDataObservationPdaV1(controller, observedProgram, purpose, generation)[1],
+    bump: 0,
     initialized: true,
     controllerProgram: controller,
     controllerConfig,
@@ -214,6 +220,12 @@ function makeObservation(policy: ProgramDataCapacityPolicyV1, input: Observation
     subject: key(30 + Number(generation) + purpose),
     subjectDigest: hash(80 + Number(generation) + purpose),
     generation,
+    protocolGate: gate,
+    gateStatus: GateStatusV1.EmergencyFrozen,
+    gateEpoch: 1n,
+    gateActiveProposal: PublicKey.default,
+    gateFreezeSlot: 19n,
+    gateFreezeReasonCode: BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1,
     targetProgram: observedProgram,
     targetProgramdata: observedProgramdata,
     upgradeableLoader: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
@@ -257,6 +269,8 @@ function makeObservation(policy: ProgramDataCapacityPolicyV1, input: Observation
     status: ProgramDataObservationStatusV1.Finalized,
     reserved: Buffer.alloc(PROGRAMDATA_OBSERVATION_V1_RESERVED_LEN),
   };
+  value.subjectDigest = programDataObservationSubjectDigestV1(value);
+  value.bump = deriveProgramDataObservationPdaV1(controller, observedProgram, purpose, value.subjectDigest, generation)[1];
   value.observationDigest = programDataObservationDigestV1(value);
   return value;
 }
@@ -279,12 +293,12 @@ function makeImmutabilityReceipt(
     capacityPolicyDigest: policy.policyDigest,
     releaseCommitment: deriveControllerReleaseCommitmentPdaV1(controller, target)[0],
     releaseCommitmentDigest: release.releaseDigest,
-    preObservation: deriveProgramDataObservationPdaV1(controller, controller, pre.purpose, pre.generation)[0],
+    preObservation: deriveProgramDataObservationPdaV1(controller, controller, pre.purpose, pre.subjectDigest, pre.generation)[0],
     preObservationGeneration: pre.generation,
     preObservationRoot: pre.finalRawMerkleRoot,
     preObservationDigest: pre.observationDigest,
     preUpgradeAuthority: pre.upgradeAuthority,
-    postObservation: deriveProgramDataObservationPdaV1(controller, controller, post.purpose, post.generation)[0],
+    postObservation: deriveProgramDataObservationPdaV1(controller, controller, post.purpose, post.subjectDigest, post.generation)[0],
     postObservationGeneration: post.generation,
     postObservationRoot: post.finalRawMerkleRoot,
     postObservationDigest: post.observationDigest,
@@ -344,13 +358,13 @@ function makeHandoffProposal(
     bridgeBuildInputsCommitment: hash(75),
     bridgePackageCommitment: hash(76),
     bridgeReleaseManifestCommitment: hash(77),
-    bridgeObservation: deriveProgramDataObservationPdaV1(controller, target, bridge.purpose, bridge.generation)[0],
+    bridgeObservation: deriveProgramDataObservationPdaV1(controller, target, bridge.purpose, bridge.subjectDigest, bridge.generation)[0],
     bridgeObservationGeneration: bridge.generation,
     bridgeObservationRoot: bridge.finalRawMerkleRoot,
     bridgeObservationDigest: bridge.observationDigest,
-    expectedTargetDeployedSlot: deployedSlot,
-    expectedTargetCapacity: capacity,
-    expectedTargetRawLength: capacity + 45n,
+    minimumTargetDeployedSlot: deployedSlot,
+    minimumTargetCapacity: capacity,
+    minimumTargetRawLength: capacity + 45n,
     bootstrapGateStatus: GateStatusV1.EmergencyFrozen,
     bootstrapGateEpoch: 1n,
     bootstrapFreezeReasonCode: 1,
@@ -399,7 +413,7 @@ function makeHandoffReceipt(
     targetProgram: target,
     targetProgramdata,
     upgradeableLoader: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
-    preObservation: deriveProgramDataObservationPdaV1(controller, target, pre.purpose, pre.generation)[0],
+    preObservation: deriveProgramDataObservationPdaV1(controller, target, pre.purpose, pre.subjectDigest, pre.generation)[0],
     preObservationGeneration: pre.generation,
     preObservationRoot: pre.finalRawMerkleRoot,
     preObservationDigest: pre.observationDigest,
@@ -467,13 +481,13 @@ function makeActivationProposal(
     bridgeBuildInputsCommitment: handoff.bridgeBuildInputsCommitment,
     bridgePackageCommitment: handoff.bridgePackageCommitment,
     bridgeReleaseManifestCommitment: handoff.bridgeReleaseManifestCommitment,
-    bridgeObservation: deriveProgramDataObservationPdaV1(controller, target, observation.purpose, observation.generation)[0],
+    bridgeObservation: deriveProgramDataObservationPdaV1(controller, target, observation.purpose, observation.subjectDigest, observation.generation)[0],
     bridgeObservationGeneration: observation.generation,
     bridgeObservationRoot: observation.finalRawMerkleRoot,
     bridgeObservationDigest: observation.observationDigest,
-    expectedTargetDeployedSlot: deployedSlot,
-    expectedTargetCapacity: capacity,
-    expectedTargetRawLength: capacity + 45n,
+    minimumTargetDeployedSlot: deployedSlot,
+    minimumTargetCapacity: capacity,
+    minimumTargetRawLength: capacity + 45n,
     bootstrapGateStatus: GateStatusV1.EmergencyFrozen,
     bootstrapGateEpoch: 1n,
     bootstrapFreezeReasonCode: 1,
@@ -525,7 +539,7 @@ function makeDeployment(
     artifactMerkleRoot: artifactRoot,
     artifactSchemeId: ARTIFACT_MERKLE_SCHEME_ID,
     actualProgramdataCapacity: capacity,
-    programdataObservation: deriveProgramDataObservationPdaV1(controller, target, observation.purpose, observation.generation)[0],
+    programdataObservation: deriveProgramDataObservationPdaV1(controller, target, observation.purpose, observation.subjectDigest, observation.generation)[0],
     observationGeneration: observation.generation,
     observationRoot: observation.finalRawMerkleRoot,
     observationDigest: observation.observationDigest,
@@ -579,7 +593,7 @@ function makeActivationReceipt(
     targetProgramdata,
     upgradeableLoader: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
     controllerAuthority,
-    bridgeObservation: deriveProgramDataObservationPdaV1(controller, target, observation.purpose, observation.generation)[0],
+    bridgeObservation: deriveProgramDataObservationPdaV1(controller, target, observation.purpose, observation.subjectDigest, observation.generation)[0],
     bridgeObservationGeneration: observation.generation,
     bridgeObservationRoot: observation.finalRawMerkleRoot,
     bridgeObservationDigest: observation.observationDigest,
@@ -677,14 +691,14 @@ function fixture(options: { sameControllerRoots?: boolean } = {}): GovernedRelea
   const encoded = new Map<CeremonyAccountRoleV4, readonly [PublicKey, Buffer, bigint]>([
     ["capacity-policy", [deriveCapacityPolicyPdaV1(controller, target)[0], serializeProgramDataCapacityPolicyV1(policy), 1n]],
     ["controller-release", [deriveControllerReleaseCommitmentPdaV1(controller, target)[0], serializeControllerReleaseCommitmentV1(release), 2n]],
-    ["controller-pre-observation", [deriveProgramDataObservationPdaV1(controller, controller, controllerPre.purpose, controllerPre.generation)[0], serializeProgramDataObservationV1(controllerPre), controllerPre.finalizedSlot]],
-    ["controller-post-observation", [deriveProgramDataObservationPdaV1(controller, controller, controllerPost.purpose, controllerPost.generation)[0], serializeProgramDataObservationV1(controllerPost), controllerPost.finalizedSlot]],
+    ["controller-pre-observation", [deriveProgramDataObservationPdaV1(controller, controller, controllerPre.purpose, controllerPre.subjectDigest, controllerPre.generation)[0], serializeProgramDataObservationV1(controllerPre), controllerPre.finalizedSlot]],
+    ["controller-post-observation", [deriveProgramDataObservationPdaV1(controller, controller, controllerPost.purpose, controllerPost.subjectDigest, controllerPost.generation)[0], serializeProgramDataObservationV1(controllerPost), controllerPost.finalizedSlot]],
     ["controller-immutability-receipt", [deriveControllerImmutabilityReceiptPdaV1(controller, target)[0], serializeControllerImmutabilityReceiptV1(immutability), immutability.finalizedSlot]],
     ["handoff-proposal", [deriveTargetAuthorityHandoffProposalPdaV1(controller, target, handoffProposal.councilVersion)[0], serializeTargetAuthorityHandoffProposalV1(handoffProposal), handoffProposal.executedSlot]],
-    ["handoff-pre-observation", [deriveProgramDataObservationPdaV1(controller, target, handoffPre.purpose, handoffPre.generation)[0], serializeProgramDataObservationV1(handoffPre), handoffPre.finalizedSlot]],
+    ["handoff-pre-observation", [deriveProgramDataObservationPdaV1(controller, target, handoffPre.purpose, handoffPre.subjectDigest, handoffPre.generation)[0], serializeProgramDataObservationV1(handoffPre), handoffPre.finalizedSlot]],
     ["handoff-receipt", [deriveTargetAuthorityHandoffReceiptPdaV1(controller, target)[0], serializeTargetAuthorityHandoffReceiptV1(handoffReceipt), handoffReceipt.acceptedSlot]],
     ["activation-proposal", [deriveBootstrapActivationProposalPdaV1(controller, target, activationProposal.councilVersion)[0], serializeBootstrapActivationProposalV1(activationProposal), activationProposal.executedSlot]],
-    ["activation-observation", [deriveProgramDataObservationPdaV1(controller, target, activationObservation.purpose, activationObservation.generation)[0], serializeProgramDataObservationV1(activationObservation), activationObservation.finalizedSlot]],
+    ["activation-observation", [deriveProgramDataObservationPdaV1(controller, target, activationObservation.purpose, activationObservation.subjectDigest, activationObservation.generation)[0], serializeProgramDataObservationV1(activationObservation), activationObservation.finalizedSlot]],
     ["activation-receipt", [deriveBootstrapActivationReceiptPdaV1(controller, target)[0], serializeBootstrapActivationReceiptV1(activationReceipt), activationReceipt.finalizedSlot]],
     ["current-deployment-state", [deriveCurrentDeploymentStatePdaV1(controller, target)[0], serializeCurrentDeploymentStateV1(deployment), deployment.lastUpdatedSlot]],
   ]);
@@ -849,7 +863,7 @@ test("receipt v4 rejects stale observations, omitted finalization, and nonzero-t
   const stale = rematerialize(receipt, (material) => {
     const evidence = material.accounts.find((entry) => entry.role === "activation-observation")!;
     const bytes = Buffer.from(evidence.dataBase64, "base64");
-    bytes[1_181] = ProgramDataObservationStatusV1.Stale;
+    bytes[1_264] = ProgramDataObservationStatusV1.Stale;
     evidence.dataBase64 = bytes.toString("base64");
     evidence.dataSha256 = createHash("sha256").update(bytes).digest("hex");
   });
@@ -865,8 +879,8 @@ test("receipt v4 rejects stale observations, omitted finalization, and nonzero-t
   const nonzeroTail = rematerialize(receipt, (material) => {
     const evidence = material.accounts.find((entry) => entry.role === "activation-observation")!;
     const bytes = Buffer.from(evidence.dataBase64, "base64");
-    // tail_bytes_verified is the u64 at byte offset 1085.
-    bytes.writeBigUInt64LE(99n, 1_085);
+    // tail_bytes_verified is the u64 at byte offset 1168 after the gate snapshot.
+    bytes.writeBigUInt64LE(99n, 1_168);
     evidence.dataBase64 = bytes.toString("base64");
     evidence.dataSha256 = createHash("sha256").update(bytes).digest("hex");
   });

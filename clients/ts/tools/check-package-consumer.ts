@@ -56,8 +56,11 @@ try {
       "--input-type=module",
       "--eval",
       `const root = await import("@amoeba/upgrade-governance");
-       if (root.release1LifecycleInstructions.INITIALIZE_CONTROLLER_V1_TAG !== 1 ||
-           root.release1LoaderInstructions.OBSERVE_PROGRAMDATA_FAILURE_V1_TAG !== 38 ||
+       if (root.release1CurrentInstructions.CREATE_CANDIDATE_COUNCIL_SET_V1_TAG !== 18 ||
+           root.release1V3Instructions.INITIALIZE_CONTROLLER_V2_TAG !== 53 ||
+           root.release1V3CustodyInstructions.ACTIVATE_ROLLBACK_V2_TAG !== 81 ||
+           "release1LifecycleInstructions" in root ||
+           "release1LoaderInstructions" in root ||
            root.artifactMerkleV1.RELEASE1_ARTIFACT_CHUNK_SIZE_V1 !== 16 * 1024 ||
            root.UPGRADE_GOVERNANCE_CLI_COMMANDS_V1.length !== 35 ||
            !root.OPERATOR_MUTATION_COMMANDS_V1.includes("execute-upgrade") ||

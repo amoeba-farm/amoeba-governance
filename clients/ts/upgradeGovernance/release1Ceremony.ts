@@ -52,7 +52,7 @@ export const BOOTSTRAP_ACTIVATION_RECEIPT_V1_LEN = 1_024;
 
 export const PROGRAMDATA_CAPACITY_POLICY_V1_RESERVED_LEN = 122;
 export const CONTROLLER_RELEASE_COMMITMENT_V1_RESERVED_LEN = 59;
-export const PROGRAMDATA_OBSERVATION_V1_RESERVED_LEN = 98;
+export const PROGRAMDATA_OBSERVATION_V1_RESERVED_LEN = 15;
 export const CURRENT_DEPLOYMENT_STATE_V1_RESERVED_LEN = 187;
 export const CONTROLLER_IMMUTABILITY_RECEIPT_V1_RESERVED_LEN = 218;
 export const TARGET_AUTHORITY_HANDOFF_PROPOSAL_V1_RESERVED_LEN = 212;
@@ -64,6 +64,12 @@ export const LOADER_V3_PROGRAMDATA_METADATA_LEN_V1 = 45n;
 export const LOADER_V3_PROGRAM_ACCOUNT_LEN_V1 = 36;
 export const MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 =
   BigInt(MAX_PROGRAMDATA_ACCOUNT_BYTES_V1) - LOADER_V3_PROGRAMDATA_METADATA_LEN_V1;
+export const EXTEND_PROGRAM_CHECKED_FEATURE_ID_V1 = new PublicKey(
+  "2oMRZEDWT2tqtYMofhmmfQ8SsjqUFzT6sYXppQDavxwz",
+);
+export const SET_AUTHORITY_CHECKED_FEATURE_ID_V1 = new PublicKey(
+  "5x3825XS7M2A3Ekbn5VGGkvFoAg5qrRWkTrY4bARP1GL",
+);
 export const CEREMONY_PROPOSAL_COMPLETED_REASON_V1 = 1;
 export const CEREMONY_PROPOSAL_EXPIRED_REASON_V1 = 2;
 
@@ -150,7 +156,7 @@ export interface ControllerReleaseCommitmentV1 {
   releaseManifestCommitment: Buffer;
   abiCommitment: Buffer;
   preImmutabilityAuthority: OptionalPublicKeyV1;
-  expectedProgramdataCapacity: bigint;
+  minimumProgramdataCapacity: bigint;
   releaseDigest: Buffer;
   creationSlot: bigint;
   finalized: boolean;
@@ -170,6 +176,12 @@ export interface ProgramDataObservationV1 {
   subject: PublicKey;
   subjectDigest: Buffer;
   generation: bigint;
+  protocolGate: PublicKey;
+  gateStatus: GateStatusV1;
+  gateEpoch: bigint;
+  gateActiveProposal: PublicKey;
+  gateFreezeSlot: bigint;
+  gateFreezeReasonCode: number;
   targetProgram: PublicKey;
   targetProgramdata: PublicKey;
   upgradeableLoader: PublicKey;
@@ -326,9 +338,9 @@ export interface TargetAuthorityHandoffProposalV1 {
   bridgeObservationGeneration: bigint;
   bridgeObservationRoot: Buffer;
   bridgeObservationDigest: Buffer;
-  expectedTargetDeployedSlot: bigint;
-  expectedTargetCapacity: bigint;
-  expectedTargetRawLength: bigint;
+  minimumTargetDeployedSlot: bigint;
+  minimumTargetCapacity: bigint;
+  minimumTargetRawLength: bigint;
   bootstrapGateStatus: GateStatusV1;
   bootstrapGateEpoch: bigint;
   bootstrapFreezeReasonCode: number;
@@ -432,9 +444,9 @@ export interface BootstrapActivationProposalV1 {
   bridgeObservationGeneration: bigint;
   bridgeObservationRoot: Buffer;
   bridgeObservationDigest: Buffer;
-  expectedTargetDeployedSlot: bigint;
-  expectedTargetCapacity: bigint;
-  expectedTargetRawLength: bigint;
+  minimumTargetDeployedSlot: bigint;
+  minimumTargetCapacity: bigint;
+  minimumTargetRawLength: bigint;
   bootstrapGateStatus: GateStatusV1;
   bootstrapGateEpoch: bigint;
   bootstrapFreezeReasonCode: number;
@@ -554,14 +566,15 @@ const CONTROLLER_RELEASE_SCHEMA: readonly FieldSpec[] = [
   u64("artifactLength"), bytes("artifactSha256", 32), bytes("artifactMerkleRoot", 32), bytes("artifactSchemeId", 32),
   bytes("sourceCommitment", 32), bytes("sourceTreeCommitment", 32), bytes("buildInputsCommitment", 32), bytes("toolchainCommitment", 32),
   bytes("packageCommitment", 32), bytes("releaseManifestCommitment", 32), bytes("abiCommitment", 32), optionalKey("preImmutabilityAuthority"),
-  u64("expectedProgramdataCapacity"), bytes("releaseDigest", 32), u64("creationSlot"), bool("finalized"),
+  u64("minimumProgramdataCapacity"), bytes("releaseDigest", 32), u64("creationSlot"), bool("finalized"),
   bytes("reserved", CONTROLLER_RELEASE_COMMITMENT_V1_RESERVED_LEN),
 ];
 
 const PROGRAMDATA_OBSERVATION_SCHEMA: readonly FieldSpec[] = [
   ...HEADER_FIELDS,
   key("controllerProgram"), key("controllerConfig"), key("capacityPolicy"), bytes("capacityPolicyDigest", 32), u8("purpose"),
-  key("subject"), bytes("subjectDigest", 32), u64("generation"), key("targetProgram"), key("targetProgramdata"), key("upgradeableLoader"),
+  key("subject"), bytes("subjectDigest", 32), u64("generation"), key("protocolGate"), u8("gateStatus"), u64("gateEpoch"),
+  key("gateActiveProposal"), u64("gateFreezeSlot"), u16("gateFreezeReasonCode"), key("targetProgram"), key("targetProgramdata"), key("upgradeableLoader"),
   key("programOwner"), bool("programExecutable"), u64("programDataLength"), bool("programHeaderPresent"), bytes("programHeaderSnapshot", LOADER_V3_PROGRAM_ACCOUNT_LEN_V1),
   key("linkedProgramdata"), key("programdataOwner"), bool("programdataExecutable"), bool("programdataHeaderPresent"),
   bytes("programdataHeaderSnapshot", Number(LOADER_V3_PROGRAMDATA_METADATA_LEN_V1)), u64("deployedSlot"), optionalKey("upgradeAuthority"),
@@ -607,8 +620,8 @@ const HANDOFF_PROPOSAL_SCHEMA: readonly FieldSpec[] = [
   bytes("bridgeArtifactSha256", 32), bytes("bridgeArtifactMerkleRoot", 32), bytes("bridgeArtifactSchemeId", 32),
   bytes("bridgeSourceCommitment", 32), bytes("bridgeBuildInputsCommitment", 32), bytes("bridgePackageCommitment", 32),
   bytes("bridgeReleaseManifestCommitment", 32), key("bridgeObservation"), u64("bridgeObservationGeneration"),
-  bytes("bridgeObservationRoot", 32), bytes("bridgeObservationDigest", 32), u64("expectedTargetDeployedSlot"),
-  u64("expectedTargetCapacity"), u64("expectedTargetRawLength"), u8("bootstrapGateStatus"), u64("bootstrapGateEpoch"),
+  bytes("bridgeObservationRoot", 32), bytes("bridgeObservationDigest", 32), u64("minimumTargetDeployedSlot"),
+  u64("minimumTargetCapacity"), u64("minimumTargetRawLength"), u8("bootstrapGateStatus"), u64("bootstrapGateEpoch"),
   u16("bootstrapFreezeReasonCode"), u64("bootstrapFreezeSlot"), u64("targetNonce"), u64("councilVersion"), bytes("councilHash", 32),
   u64("reviewStartSlot"), u64("reviewEndSlot"), u64("notBeforeSlot"), u64("expirySlot"), u8("approvalBitset"),
   u8("approvalCount"), u8("approvalThreshold"), u64("firstApprovalSlot"), u64("councilApprovedSlot"), u64("queuedSlot"),
@@ -636,8 +649,8 @@ const ACTIVATION_PROPOSAL_SCHEMA: readonly FieldSpec[] = [
   bytes("bridgeArtifactSha256", 32), bytes("bridgeArtifactMerkleRoot", 32), bytes("bridgeArtifactSchemeId", 32),
   bytes("bridgeSourceCommitment", 32), bytes("bridgeBuildInputsCommitment", 32), bytes("bridgePackageCommitment", 32),
   bytes("bridgeReleaseManifestCommitment", 32), key("bridgeObservation"), u64("bridgeObservationGeneration"),
-  bytes("bridgeObservationRoot", 32), bytes("bridgeObservationDigest", 32), u64("expectedTargetDeployedSlot"), u64("expectedTargetCapacity"),
-  u64("expectedTargetRawLength"), u8("bootstrapGateStatus"), u64("bootstrapGateEpoch"), u16("bootstrapFreezeReasonCode"),
+  bytes("bridgeObservationRoot", 32), bytes("bridgeObservationDigest", 32), u64("minimumTargetDeployedSlot"), u64("minimumTargetCapacity"),
+  u64("minimumTargetRawLength"), u8("bootstrapGateStatus"), u64("bootstrapGateEpoch"), u16("bootstrapFreezeReasonCode"),
   u64("bootstrapFreezeSlot"), u64("targetNonce"), u64("councilVersion"), bytes("councilHash", 32), u64("reviewStartSlot"),
   u64("reviewEndSlot"), u64("notBeforeSlot"), u64("expirySlot"), u8("approvalBitset"), u8("approvalCount"), u8("approvalThreshold"),
   u64("firstApprovalSlot"), u64("councilApprovedSlot"), u64("queuedSlot"), u64("executedSlot"), u64("terminalSlot"),
@@ -880,13 +893,15 @@ export function validateProgramDataCapacityPolicyV1(value: ProgramDataCapacityPo
   requireU8(value.bump, "bump");
   for (const [field, entry] of Object.entries({ controllerProgram: value.controllerProgram, controllerConfig: value.controllerConfig, targetProgram: value.targetProgram, targetProgramdata: value.targetProgramdata, upgradeableLoader: value.upgradeableLoader, extendProgramCheckedFeature: value.extendProgramCheckedFeature, setAuthorityCheckedFeature: value.setAuthorityCheckedFeature })) requireNondefaultKey(entry, field);
   validateLoaderGraph(value.upgradeableLoader);
-  if (value.extendProgramCheckedFeature.equals(value.setAuthorityCheckedFeature)) throw new Error("checked Loader features must be distinct");
   if (
+    !value.extendProgramCheckedFeature.equals(EXTEND_PROGRAM_CHECKED_FEATURE_ID_V1) ||
+    !value.setAuthorityCheckedFeature.equals(SET_AUTHORITY_CHECKED_FEATURE_ID_V1) ||
     value.loaderProgramdataMetadataLen !== LOADER_V3_PROGRAMDATA_METADATA_LEN_V1 ||
     value.maximumRawProgramdataLength !== BigInt(MAX_PROGRAMDATA_ACCOUNT_BYTES_V1) ||
     value.maximumPayloadCapacity !== MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 ||
     value.maximumArtifactLength !== BigInt(MAX_ARTIFACT_BYTES_V1) ||
     !requireHash(value.observationSchemeId, "observationSchemeId").equals(PROGRAMDATA_OBSERVATION_MERKLE_SCHEME_ID_V1) ||
+    value.observationChunkSize !== 16 * 1024 ||
     !requireHash(value.artifactSchemeId, "artifactSchemeId").equals(ARTIFACT_MERKLE_SCHEME_ID) ||
     value.artifactChunkSize !== RELEASE1_ARTIFACT_CHUNK_SIZE_V1 ||
     value.zeroTailRequired !== true || value.creationSlot === 0n
@@ -904,7 +919,7 @@ export function validateControllerReleaseCommitmentV1(value: ControllerReleaseCo
   if (!value.preImmutabilityAuthority.present) throw new Error("controller release requires the pre-immutability authority");
   validateArtifactIdentity(value.artifactLength, value.artifactSha256, value.artifactMerkleRoot, value.artifactSchemeId);
   for (const [field, entry] of Object.entries({ capacityPolicyDigest: value.capacityPolicyDigest, sourceCommitment: value.sourceCommitment, sourceTreeCommitment: value.sourceTreeCommitment, buildInputsCommitment: value.buildInputsCommitment, toolchainCommitment: value.toolchainCommitment, packageCommitment: value.packageCommitment, releaseManifestCommitment: value.releaseManifestCommitment, abiCommitment: value.abiCommitment, releaseDigest: value.releaseDigest })) requireHash(entry, field);
-  if (value.expectedProgramdataCapacity < value.artifactLength || value.expectedProgramdataCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.creationSlot === 0n || value.finalized !== true) throw new Error("controller release commitment is incomplete");
+  if (value.minimumProgramdataCapacity < value.artifactLength || value.minimumProgramdataCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.creationSlot === 0n || value.finalized !== true) throw new Error("controller release commitment is incomplete");
 }
 
 function loaderProgramHeader(programdata: PublicKey): Buffer {
@@ -927,12 +942,31 @@ export function validateProgramDataObservationV1(value: ProgramDataObservationV1
   requireHeader(value, PROGRAMDATA_OBSERVATION_V1_DISCRIMINATOR, PROGRAMDATA_OBSERVATION_V1_RESERVED_LEN, "ProgramDataObservationV1");
   requireEnum(value.purpose, Object.values(ProgramDataObservationPurposeV1), "ProgramDataObservationPurposeV1");
   requireEnum(value.status, Object.values(ProgramDataObservationStatusV1), "ProgramDataObservationStatusV1");
-  for (const [field, entry] of Object.entries({ controllerProgram: value.controllerProgram, controllerConfig: value.controllerConfig, capacityPolicy: value.capacityPolicy, subject: value.subject, targetProgram: value.targetProgram, targetProgramdata: value.targetProgramdata, upgradeableLoader: value.upgradeableLoader, programOwner: value.programOwner, linkedProgramdata: value.linkedProgramdata, programdataOwner: value.programdataOwner })) requireNondefaultKey(entry, field);
+  requireEnum(value.gateStatus, Object.values(GateStatusV1), "GateStatusV1");
+  for (const [field, entry] of Object.entries({ controllerProgram: value.controllerProgram, controllerConfig: value.controllerConfig, capacityPolicy: value.capacityPolicy, subject: value.subject, protocolGate: value.protocolGate, targetProgram: value.targetProgram, targetProgramdata: value.targetProgramdata, upgradeableLoader: value.upgradeableLoader, programOwner: value.programOwner, linkedProgramdata: value.linkedProgramdata, programdataOwner: value.programdataOwner })) requireNondefaultKey(entry, field);
   for (const [field, entry] of Object.entries({ capacityPolicyDigest: value.capacityPolicyDigest, subjectDigest: value.subjectDigest, expectedArtifactSha256: value.expectedArtifactSha256, expectedArtifactMerkleRoot: value.expectedArtifactMerkleRoot, expectedArtifactSchemeId: value.expectedArtifactSchemeId, rawObservationSchemeId: value.rawObservationSchemeId })) requireHash(entry, field);
   validateLoaderGraph(value.upgradeableLoader);
   const authority = requireOptionalKey(value.upgradeAuthority, "upgradeAuthority");
   if (!value.programOwner.equals(value.upgradeableLoader) || !value.programdataOwner.equals(value.upgradeableLoader) || !value.programExecutable || value.programdataExecutable || !value.programHeaderPresent || !value.programdataHeaderPresent || value.programDataLength !== BigInt(LOADER_V3_PROGRAM_ACCOUNT_LEN_V1) || !value.linkedProgramdata.equals(value.targetProgramdata) || !requireBytes(value.programHeaderSnapshot, LOADER_V3_PROGRAM_ACCOUNT_LEN_V1, "programHeaderSnapshot").equals(loaderProgramHeader(value.targetProgramdata)) || !requireBytes(value.programdataHeaderSnapshot, Number(LOADER_V3_PROGRAMDATA_METADATA_LEN_V1), "programdataHeaderSnapshot").equals(loaderProgramdataHeader(value.deployedSlot, authority))) throw new Error("ProgramData observation Loader graph or header snapshot mismatch");
-  if (value.generation === 0n || value.payloadOffset !== Number(LOADER_V3_PROGRAMDATA_METADATA_LEN_V1) || value.rawDataLength !== value.actualCapacity + LOADER_V3_PROGRAMDATA_METADATA_LEN_V1 || value.rawDataLength > BigInt(MAX_PROGRAMDATA_ACCOUNT_BYTES_V1) || value.actualCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.minimumRequiredCapacity < value.expectedArtifactLength || value.minimumRequiredCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.actualCapacity < value.minimumRequiredCapacity || value.deployedSlot === 0n || value.startSlot === 0n || value.lastObservedSlot < value.startSlot) throw new Error("ProgramData observation numeric binding mismatch");
+  if (value.generation === 0n || value.gateEpoch === 0n || value.payloadOffset !== Number(LOADER_V3_PROGRAMDATA_METADATA_LEN_V1) || value.rawDataLength !== value.actualCapacity + LOADER_V3_PROGRAMDATA_METADATA_LEN_V1 || value.rawDataLength > BigInt(MAX_PROGRAMDATA_ACCOUNT_BYTES_V1) || value.actualCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.minimumRequiredCapacity < value.expectedArtifactLength || value.minimumRequiredCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.actualCapacity < value.minimumRequiredCapacity || value.deployedSlot === 0n || value.startSlot === 0n || value.lastObservedSlot < value.startSlot) throw new Error("ProgramData observation numeric binding mismatch");
+  const activeGate = value.gateActiveProposal.equals(PublicKey.default) && value.gateFreezeSlot === 0n && value.gateFreezeReasonCode === 0;
+  const upgradeFrozenGate = value.gateActiveProposal.equals(value.subject) && value.gateFreezeSlot !== 0n && value.gateFreezeReasonCode !== 0 && value.gateFreezeReasonCode !== BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1;
+  const emergencyFrozenGate = value.gateActiveProposal.equals(PublicKey.default) && value.gateFreezeSlot !== 0n && value.gateFreezeReasonCode !== 0;
+  const gateMatchesPurpose = (() => {
+    switch (value.purpose) {
+      case ProgramDataObservationPurposeV1.ControllerImmutability:
+      case ProgramDataObservationPurposeV1.TargetHandoffBridge:
+      case ProgramDataObservationPurposeV1.BootstrapActivation:
+        return value.gateStatus === GateStatusV1.EmergencyFrozen && emergencyFrozenGate && value.gateFreezeReasonCode === BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1;
+      case ProgramDataObservationPurposeV1.ProposalPrestate:
+      case ProgramDataObservationPurposeV1.PostUpgrade:
+      case ProgramDataObservationPurposeV1.Rollback:
+        return value.gateStatus === GateStatusV1.FrozenForUpgrade && upgradeFrozenGate;
+      case ProgramDataObservationPurposeV1.EmergencyResolution:
+        return value.gateStatus === GateStatusV1.EmergencyFrozen && emergencyFrozenGate && value.gateFreezeReasonCode !== BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1;
+    }
+  })();
+  if (activeGate || !gateMatchesPurpose) throw new Error("ProgramData observation gate snapshot does not match its purpose");
   validateArtifactIdentity(value.expectedArtifactLength, value.expectedArtifactSha256, value.expectedArtifactMerkleRoot, value.expectedArtifactSchemeId);
   if (value.artifactChunkSize !== RELEASE1_ARTIFACT_CHUNK_SIZE_V1 || value.artifactChunkCount !== artifactChunkCount(value.expectedArtifactLength, value.artifactChunkSize) || !value.rawObservationSchemeId.equals(PROGRAMDATA_OBSERVATION_MERKLE_SCHEME_ID_V1)) throw new Error("ProgramData observation artifact or raw scheme mismatch");
   const geometry = programDataObservationGeometryV1(Number(value.rawDataLength), value.rawChunkSize);
@@ -995,7 +1029,7 @@ function validateHandoffCommon(value: TargetAuthorityHandoffProposalV1): void {
   for (const [field, entry] of Object.entries({ clusterDomain: value.clusterDomain, controllerImmutabilityDigest: value.controllerImmutabilityDigest, governancePolicyHash: value.governancePolicyHash, capacityPolicyDigest: value.capacityPolicyDigest, bridgeSourceCommitment: value.bridgeSourceCommitment, bridgeBuildInputsCommitment: value.bridgeBuildInputsCommitment, bridgePackageCommitment: value.bridgePackageCommitment, bridgeReleaseManifestCommitment: value.bridgeReleaseManifestCommitment, bridgeObservationRoot: value.bridgeObservationRoot, bridgeObservationDigest: value.bridgeObservationDigest, councilHash: value.councilHash, proposalDigest: value.proposalDigest })) requireHash(entry, field);
   validateLoaderGraph(value.upgradeableLoader);
   validateArtifactIdentity(value.bridgeArtifactLength, value.bridgeArtifactSha256, value.bridgeArtifactMerkleRoot, value.bridgeArtifactSchemeId);
-  if (value.legacyTargetAuthority.equals(value.controllerAuthority) || value.bridgeObservationGeneration === 0n || value.expectedTargetDeployedSlot === 0n || value.expectedTargetCapacity < value.bridgeArtifactLength || value.expectedTargetCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.expectedTargetRawLength !== value.expectedTargetCapacity + LOADER_V3_PROGRAMDATA_METADATA_LEN_V1 || value.bootstrapGateStatus !== GateStatusV1.EmergencyFrozen || value.bootstrapGateEpoch === 0n || value.bootstrapFreezeReasonCode !== BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1 || value.bootstrapFreezeSlot === 0n || value.targetNonce === 0n || value.councilVersion === 0n) throw new Error("handoff proposal bootstrap or observation binding is invalid");
+  if (value.legacyTargetAuthority.equals(value.controllerAuthority) || value.bridgeObservationGeneration === 0n || value.minimumTargetDeployedSlot === 0n || value.minimumTargetCapacity < value.bridgeArtifactLength || value.minimumTargetCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.minimumTargetRawLength !== value.minimumTargetCapacity + LOADER_V3_PROGRAMDATA_METADATA_LEN_V1 || value.bootstrapGateStatus !== GateStatusV1.EmergencyFrozen || value.bootstrapGateEpoch === 0n || value.bootstrapFreezeReasonCode !== BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1 || value.bootstrapFreezeSlot === 0n || value.targetNonce === 0n || value.councilVersion === 0n) throw new Error("handoff proposal bootstrap or observation binding is invalid");
 }
 
 export function validateTargetAuthorityHandoffProposalV1(value: TargetAuthorityHandoffProposalV1): void {
@@ -1026,7 +1060,7 @@ function validateActivationCommon(value: BootstrapActivationProposalV1): void {
   for (const [field, entry] of Object.entries({ clusterDomain: value.clusterDomain, governancePolicyHash: value.governancePolicyHash, capacityPolicyDigest: value.capacityPolicyDigest, controllerImmutabilityDigest: value.controllerImmutabilityDigest, targetHandoffDigest: value.targetHandoffDigest, bridgeSourceCommitment: value.bridgeSourceCommitment, bridgeBuildInputsCommitment: value.bridgeBuildInputsCommitment, bridgePackageCommitment: value.bridgePackageCommitment, bridgeReleaseManifestCommitment: value.bridgeReleaseManifestCommitment, bridgeObservationRoot: value.bridgeObservationRoot, bridgeObservationDigest: value.bridgeObservationDigest, councilHash: value.councilHash, proposalDigest: value.proposalDigest })) requireHash(entry, field);
   validateLoaderGraph(value.upgradeableLoader);
   validateArtifactIdentity(value.bridgeArtifactLength, value.bridgeArtifactSha256, value.bridgeArtifactMerkleRoot, value.bridgeArtifactSchemeId);
-  if (value.bridgeObservationGeneration === 0n || value.expectedTargetDeployedSlot === 0n || value.expectedTargetCapacity < value.bridgeArtifactLength || value.expectedTargetCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.expectedTargetRawLength !== value.expectedTargetCapacity + LOADER_V3_PROGRAMDATA_METADATA_LEN_V1 || value.bootstrapGateStatus !== GateStatusV1.EmergencyFrozen || value.bootstrapGateEpoch === 0n || value.bootstrapFreezeReasonCode !== BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1 || value.bootstrapFreezeSlot === 0n || value.targetNonce === 0n || value.councilVersion === 0n) throw new Error("activation proposal bootstrap or observation binding is invalid");
+  if (value.bridgeObservationGeneration === 0n || value.minimumTargetDeployedSlot === 0n || value.minimumTargetCapacity < value.bridgeArtifactLength || value.minimumTargetCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.minimumTargetRawLength !== value.minimumTargetCapacity + LOADER_V3_PROGRAMDATA_METADATA_LEN_V1 || value.bootstrapGateStatus !== GateStatusV1.EmergencyFrozen || value.bootstrapGateEpoch === 0n || value.bootstrapFreezeReasonCode !== BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1 || value.bootstrapFreezeSlot === 0n || value.targetNonce === 0n || value.councilVersion === 0n) throw new Error("activation proposal bootstrap or observation binding is invalid");
 }
 
 export function validateBootstrapActivationProposalV1(value: BootstrapActivationProposalV1): void {
@@ -1066,6 +1100,7 @@ export const [serializeBootstrapActivationReceiptV1, deserializeBootstrapActivat
 
 export const CAPACITY_POLICY_DIGEST_DOMAIN_V1 = "AMOEBA_PROGRAMDATA_CAPACITY_POLICY_V1";
 export const CONTROLLER_RELEASE_DIGEST_DOMAIN_V1 = "AMOEBA_CONTROLLER_RELEASE_COMMITMENT_V1";
+export const PROGRAMDATA_OBSERVATION_SUBJECT_DIGEST_DOMAIN_V1 = "AMOEBA_PROGRAMDATA_OBSERVATION_SUBJECT_V1";
 export const PROGRAMDATA_OBSERVATION_DIGEST_DOMAIN_V1 = "AMOEBA_PROGRAMDATA_OBSERVATION_V1";
 export const CURRENT_DEPLOYMENT_DIGEST_DOMAIN_V1 = "AMOEBA_CURRENT_DEPLOYMENT_STATE_V1";
 export const CONTROLLER_IMMUTABILITY_DIGEST_DOMAIN_V1 = "AMOEBA_CONTROLLER_IMMUTABILITY_RECEIPT_V1";
@@ -1074,8 +1109,66 @@ export const TARGET_HANDOFF_RECEIPT_DIGEST_DOMAIN_V1 = "AMOEBA_TARGET_AUTHORITY_
 export const BOOTSTRAP_ACTIVATION_PROPOSAL_DIGEST_DOMAIN_V1 = "AMOEBA_BOOTSTRAP_ACTIVATION_PROPOSAL_V1";
 export const BOOTSTRAP_ACTIVATION_RECEIPT_DIGEST_DOMAIN_V1 = "AMOEBA_BOOTSTRAP_ACTIVATION_RECEIPT_V1";
 
-export const programDataCapacityPolicyDigestV1 = (value: ProgramDataCapacityPolicyV1): Buffer => digestFields(CAPACITY_POLICY_DIGEST_DOMAIN_V1, value, CAPACITY_POLICY_SCHEMA, ["policyDigest"]);
-export const controllerReleaseDigestV1 = (value: ControllerReleaseCommitmentV1): Buffer => digestFields(CONTROLLER_RELEASE_DIGEST_DOMAIN_V1, value, CONTROLLER_RELEASE_SCHEMA, ["releaseDigest"]);
+export type ProgramDataObservationSubjectBindingV1 = Pick<
+  ProgramDataObservationV1,
+  | "controllerProgram"
+  | "controllerConfig"
+  | "targetProgram"
+  | "targetProgramdata"
+  | "purpose"
+  | "subject"
+  | "generation"
+  | "protocolGate"
+  | "gateStatus"
+  | "gateEpoch"
+  | "gateActiveProposal"
+  | "gateFreezeSlot"
+  | "gateFreezeReasonCode"
+  | "capacityPolicyDigest"
+  | "expectedArtifactLength"
+  | "expectedArtifactSha256"
+  | "expectedArtifactMerkleRoot"
+  | "expectedArtifactSchemeId"
+  | "minimumRequiredCapacity"
+>;
+
+export function programDataObservationSubjectDigestV1(
+  value: ProgramDataObservationSubjectBindingV1,
+): Buffer {
+  const gateReason = Buffer.alloc(2);
+  gateReason.writeUInt16LE(requireU16(value.gateFreezeReasonCode, "gateFreezeReasonCode"));
+  const purpose = requireEnum(value.purpose, Object.values(ProgramDataObservationPurposeV1), "ProgramDataObservationPurposeV1");
+  const gateStatus = requireEnum(value.gateStatus, Object.values(GateStatusV1), "GateStatusV1");
+  const parts = [
+    Buffer.from(PROGRAMDATA_OBSERVATION_SUBJECT_DIGEST_DOMAIN_V1, "ascii"),
+    requireNondefaultKey(value.controllerProgram, "controllerProgram").toBuffer(),
+    requireNondefaultKey(value.controllerConfig, "controllerConfig").toBuffer(),
+    requireNondefaultKey(value.targetProgram, "targetProgram").toBuffer(),
+    requireNondefaultKey(value.targetProgramdata, "targetProgramdata").toBuffer(),
+    Buffer.from([purpose]),
+    requireNondefaultKey(value.subject, "subject").toBuffer(),
+    u64Seed(value.generation),
+    requireNondefaultKey(value.protocolGate, "protocolGate").toBuffer(),
+    Buffer.from([gateStatus]),
+    u64Seed(value.gateEpoch),
+    requirePublicKey(value.gateActiveProposal, "gateActiveProposal").toBuffer(),
+    u64Seed(value.gateFreezeSlot),
+    gateReason,
+    requireHash(value.capacityPolicyDigest, "capacityPolicyDigest"),
+    u64Seed(value.expectedArtifactLength),
+    requireHash(value.expectedArtifactSha256, "expectedArtifactSha256"),
+    requireHash(value.expectedArtifactMerkleRoot, "expectedArtifactMerkleRoot"),
+    requireHash(value.expectedArtifactSchemeId, "expectedArtifactSchemeId"),
+    u64Seed(value.minimumRequiredCapacity),
+  ];
+  if (value.generation === 0n || value.gateEpoch === 0n || value.expectedArtifactLength === 0n || value.minimumRequiredCapacity === 0n) {
+    throw new Error("ProgramData observation subject binding contains a zero numeric identity");
+  }
+  return createHash("sha256").update(Buffer.concat(parts)).digest();
+}
+
+export const programDataCapacityPolicyDigestV1 = (value: ProgramDataCapacityPolicyV1): Buffer => digestFields(CAPACITY_POLICY_DIGEST_DOMAIN_V1, value, CAPACITY_POLICY_SCHEMA, ["policyDigest", "creationSlot"]);
+export const controllerReleaseDigestV1 = (value: ControllerReleaseCommitmentV1): Buffer => digestFields(CONTROLLER_RELEASE_DIGEST_DOMAIN_V1, value, CONTROLLER_RELEASE_SCHEMA, ["releaseDigest", "creationSlot"]);
 export const programDataObservationDigestV1 = (value: ProgramDataObservationV1): Buffer => digestFields(PROGRAMDATA_OBSERVATION_DIGEST_DOMAIN_V1, value, PROGRAMDATA_OBSERVATION_SCHEMA, ["observationDigest"]);
 export const currentDeploymentDigestV1 = (value: CurrentDeploymentStateV1): Buffer => digestFields(CURRENT_DEPLOYMENT_DIGEST_DOMAIN_V1, value, CURRENT_DEPLOYMENT_SCHEMA, ["deploymentDigest"]);
 export const controllerImmutabilityReceiptDigestV1 = (value: ControllerImmutabilityReceiptV1): Buffer => digestFields(CONTROLLER_IMMUTABILITY_DIGEST_DOMAIN_V1, value, CONTROLLER_IMMUTABILITY_SCHEMA, ["receiptDigest"]);
@@ -1090,7 +1183,12 @@ function validateDigest(actual: Buffer, expected: Buffer, name: string): void {
 
 export const validateProgramDataCapacityPolicyDigestV1 = (value: ProgramDataCapacityPolicyV1): void => { validateProgramDataCapacityPolicyV1(value); validateDigest(value.policyDigest, programDataCapacityPolicyDigestV1(value), "ProgramDataCapacityPolicyV1"); };
 export const validateControllerReleaseDigestV1 = (value: ControllerReleaseCommitmentV1): void => { validateControllerReleaseCommitmentV1(value); validateDigest(value.releaseDigest, controllerReleaseDigestV1(value), "ControllerReleaseCommitmentV1"); };
-export const validateProgramDataObservationDigestV1 = (value: ProgramDataObservationV1): void => { validateProgramDataObservationV1(value); if (value.status !== ProgramDataObservationStatusV1.Finalized) throw new Error("only a finalized observation has a consensus digest"); validateDigest(value.observationDigest, programDataObservationDigestV1(value), "ProgramDataObservationV1"); };
+export const validateProgramDataObservationDigestV1 = (value: ProgramDataObservationV1): void => {
+  validateProgramDataObservationV1(value);
+  if (value.status !== ProgramDataObservationStatusV1.Finalized) throw new Error("only a finalized observation has a consensus digest");
+  validateDigest(value.subjectDigest, programDataObservationSubjectDigestV1(value), "ProgramDataObservationV1.subject");
+  validateDigest(value.observationDigest, programDataObservationDigestV1(value), "ProgramDataObservationV1");
+};
 export const validateCurrentDeploymentDigestV1 = (value: CurrentDeploymentStateV1): void => { validateCurrentDeploymentStateV1(value); validateDigest(value.deploymentDigest, currentDeploymentDigestV1(value), "CurrentDeploymentStateV1"); };
 export const validateControllerImmutabilityReceiptDigestV1 = (value: ControllerImmutabilityReceiptV1): void => { validateControllerImmutabilityReceiptV1(value); validateDigest(value.receiptDigest, controllerImmutabilityReceiptDigestV1(value), "ControllerImmutabilityReceiptV1"); };
 export const validateTargetAuthorityHandoffProposalDigestV1 = (value: TargetAuthorityHandoffProposalV1): void => { validateTargetAuthorityHandoffProposalV1(value); validateDigest(value.proposalDigest, targetAuthorityHandoffProposalDigestV1(value), "TargetAuthorityHandoffProposalV1"); };
@@ -1112,7 +1210,20 @@ function u64Seed(value: bigint): Buffer { const out = Buffer.alloc(8); out.write
 function derive(controllerProgram: PublicKey, seeds: readonly Buffer[]): [PublicKey, number] { return PublicKey.findProgramAddressSync([...seeds], controllerProgram); }
 export const deriveCapacityPolicyPdaV1 = (controllerProgram: PublicKey, targetProgram: PublicKey): [PublicKey, number] => derive(controllerProgram, [UPGRADE_SEED_DOMAIN_V1, CAPACITY_POLICY_SEED, targetProgram.toBuffer()]);
 export const deriveControllerReleaseCommitmentPdaV1 = (controllerProgram: PublicKey, targetProgram: PublicKey): [PublicKey, number] => derive(controllerProgram, [UPGRADE_SEED_DOMAIN_V1, CONTROLLER_RELEASE_SEED, targetProgram.toBuffer()]);
-export const deriveProgramDataObservationPdaV1 = (controllerProgram: PublicKey, observedProgram: PublicKey, purpose: ProgramDataObservationPurposeV1, generation: bigint): [PublicKey, number] => derive(controllerProgram, [UPGRADE_SEED_DOMAIN_V1, PROGRAMDATA_OBSERVATION_SEED, observedProgram.toBuffer(), Buffer.from([requireEnum(purpose, Object.values(ProgramDataObservationPurposeV1), "purpose")]), u64Seed(generation)]);
+export const deriveProgramDataObservationPdaV1 = (
+  controllerProgram: PublicKey,
+  observedProgram: PublicKey,
+  purpose: ProgramDataObservationPurposeV1,
+  subjectDigest: Uint8Array,
+  generation: bigint,
+): [PublicKey, number] => derive(controllerProgram, [
+  UPGRADE_SEED_DOMAIN_V1,
+  PROGRAMDATA_OBSERVATION_SEED,
+  observedProgram.toBuffer(),
+  Buffer.from([requireEnum(purpose, Object.values(ProgramDataObservationPurposeV1), "purpose")]),
+  requireHash(subjectDigest, "subjectDigest"),
+  u64Seed(generation),
+]);
 export const deriveCurrentDeploymentStatePdaV1 = (controllerProgram: PublicKey, targetProgram: PublicKey): [PublicKey, number] => derive(controllerProgram, [UPGRADE_SEED_DOMAIN_V1, DEPLOYMENT_STATE_SEED, targetProgram.toBuffer()]);
 export const deriveControllerImmutabilityReceiptPdaV1 = (controllerProgram: PublicKey, targetProgram: PublicKey): [PublicKey, number] => derive(controllerProgram, [UPGRADE_SEED_DOMAIN_V1, CONTROLLER_IMMUTABILITY_SEED, targetProgram.toBuffer()]);
 export const deriveTargetAuthorityHandoffProposalPdaV1 = (controllerProgram: PublicKey, targetProgram: PublicKey, councilVersion: bigint): [PublicKey, number] => derive(controllerProgram, [UPGRADE_SEED_DOMAIN_V1, TARGET_HANDOFF_SEED, targetProgram.toBuffer(), u64Seed(councilVersion)]);

@@ -10,16 +10,14 @@ import {
   type MessageV0,
 } from "@solana/web3.js";
 import {
-  EXECUTE_EMERGENCY_RESOLUTION_V1_TAG,
-  EXECUTE_UNFREEZE_V1_TAG,
-  EXECUTE_UPGRADE_V1_TAG,
-  EXTEND_TARGET_V1_TAG,
   MAX_ENVELOPE_COMPUTE_UNIT_LIMIT_V1,
   MAX_ENVELOPE_COMPUTE_UNIT_PRICE_MICRO_LAMPORTS_V1,
-  decodeRelease1LoaderInstructionV1,
   type EnvelopeExpectationV1,
 } from "./release1LoaderInstructions.js";
-import { decodeRelease1InstructionV1 } from "./release1LifecycleInstructions.js";
+import { decodeRelease1CurrentInstruction } from "./release1CurrentInstructions.js";
+import { ACCEPT_TARGET_AUTHORITY_CHECKED_V1_TAG, EXECUTE_BOOTSTRAP_ACTIVATION_V1_TAG } from "./release1AuthorityInstructions.js";
+import { EXECUTE_EMERGENCY_RESOLUTION_V2_TAG, EXECUTE_UNFREEZE_V2_TAG } from "./release1V3Instructions.js";
+import { EXECUTE_UPGRADE_V2_TAG, EXTEND_TARGET_V2_TAG } from "./release1V3CustodyInstructions.js";
 
 /** Solana's complete transaction wire-packet ceiling. */
 export const RELEASE1_TRANSACTION_PACKET_LIMIT_V1 = 1_232;
@@ -419,15 +417,8 @@ function decodedControllerValue(controller: TransactionInstruction): {
   tag: number;
   value: unknown;
 } {
-  try {
-    return decodeRelease1InstructionV1(controller.data);
-  } catch {
-    try {
-      return decodeRelease1LoaderInstructionV1(controller.data);
-    } catch {
-      throw new Error("controller instruction is not a strict Release 1 instruction");
-    }
-  }
+  try { return decodeRelease1CurrentInstruction(controller.data); }
+  catch { throw new Error("controller instruction is not a strict current Release 1 instruction"); }
 }
 
 function envelopeFromValue(value: unknown): EnvelopeExpectationV1 | null {
@@ -440,9 +431,12 @@ export function buildCanonicalRelease1LoaderEnvelopeV1(
 ): readonly TransactionInstruction[] {
   const decoded = decodedControllerValue(controllerInstruction);
   if (
-    decoded.tag !== EXTEND_TARGET_V1_TAG
-    && decoded.tag !== EXECUTE_UPGRADE_V1_TAG
-    && decoded.tag !== EXECUTE_UNFREEZE_V1_TAG
+    decoded.tag !== ACCEPT_TARGET_AUTHORITY_CHECKED_V1_TAG
+    && decoded.tag !== EXECUTE_BOOTSTRAP_ACTIVATION_V1_TAG
+    && decoded.tag !== EXECUTE_EMERGENCY_RESOLUTION_V2_TAG
+    && decoded.tag !== EXECUTE_UNFREEZE_V2_TAG
+    && decoded.tag !== EXTEND_TARGET_V2_TAG
+    && decoded.tag !== EXECUTE_UPGRADE_V2_TAG
   ) {
     throw new Error("controller instruction does not carry a typed loader envelope");
   }
@@ -521,7 +515,15 @@ function validateControllerEnvelope(
   const controller = instructions[controllerIndex]!;
   const decoded = decodedControllerValue(controller);
   const envelope = envelopeFromValue(decoded.value);
-  if (envelope !== null) {
+  if (decoded.tag === EXECUTE_EMERGENCY_RESOLUTION_V2_TAG) {
+    if (envelope === null || envelope.durableNonceAccount.present || envelope.durableNonceAuthority.present) {
+      throw new Error("emergency resolution requires its nonce-free typed envelope");
+    }
+    const expected = buildCanonicalRelease1LoaderEnvelopeV1(controller);
+    if (expected.length !== instructions.length) throw new Error("emergency resolution envelope has the wrong instruction count");
+    expected.forEach((instruction, index) => exactInstruction(instructions[index]!, instruction, `envelope[${index}]`));
+    validateEmergencyComputeEnvelope(instructions, controllerIndex);
+  } else if (envelope !== null) {
     const expected = buildCanonicalRelease1LoaderEnvelopeV1(controller);
     if (expected.length !== instructions.length) {
       throw new Error("typed loader envelope has the wrong instruction count");
@@ -529,8 +531,6 @@ function validateControllerEnvelope(
     expected.forEach((instruction, index) =>
       exactInstruction(instructions[index]!, instruction, `envelope[${index}]`),
     );
-  } else if (decoded.tag === EXECUTE_EMERGENCY_RESOLUTION_V1_TAG) {
-    validateEmergencyComputeEnvelope(instructions, controllerIndex);
   } else if (instructions.length !== 1) {
     throw new Error("non-envelope Release 1 instruction cannot have siblings");
   }

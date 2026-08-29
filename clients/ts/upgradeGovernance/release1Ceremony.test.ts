@@ -8,8 +8,12 @@ import {
   BOOTSTRAP_ACTIVATION_PROPOSAL_V1_DISCRIMINATOR,
   BOOTSTRAP_ACTIVATION_PROPOSAL_V1_LEN,
   BOOTSTRAP_ACTIVATION_PROPOSAL_V1_RESERVED_LEN,
+  CONTROLLER_RELEASE_COMMITMENT_V1_DISCRIMINATOR,
+  CONTROLLER_RELEASE_COMMITMENT_V1_LEN,
+  CONTROLLER_RELEASE_COMMITMENT_V1_RESERVED_LEN,
   CeremonyPlanOperationV1,
   CeremonyProposalStateV1,
+  EXTEND_PROGRAM_CHECKED_FEATURE_ID_V1,
   MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1,
   PROGRAMDATA_CAPACITY_POLICY_V1_DISCRIMINATOR,
   PROGRAMDATA_CAPACITY_POLICY_V1_LEN,
@@ -19,32 +23,39 @@ import {
   PROGRAMDATA_OBSERVATION_V1_RESERVED_LEN,
   ProgramDataObservationPurposeV1,
   ProgramDataObservationStatusV1,
+  SET_AUTHORITY_CHECKED_FEATURE_ID_V1,
   TARGET_AUTHORITY_HANDOFF_PROPOSAL_V1_DISCRIMINATOR,
   TARGET_AUTHORITY_HANDOFF_PROPOSAL_V1_LEN,
   TARGET_AUTHORITY_HANDOFF_PROPOSAL_V1_RESERVED_LEN,
   bootstrapActivationProposalDigestV1,
+  controllerReleaseDigestV1,
   deriveBootstrapActivationProposalPdaV1,
   deriveCapacityPolicyPdaV1,
   deriveProgramDataObservationPdaV1,
   deriveTargetAuthorityHandoffProposalPdaV1,
   deserializeBootstrapActivationProposalV1,
+  deserializeControllerReleaseCommitmentV1,
   deserializeProgramDataCapacityPolicyV1,
   deserializeProgramDataObservationV1,
   deserializeTargetAuthorityHandoffProposalV1,
   programDataCapacityPolicyDigestV1,
   programDataObservationDigestV1,
+  programDataObservationSubjectDigestV1,
   release1CeremonyOperationIdV1,
   serializeBootstrapActivationProposalV1,
+  serializeControllerReleaseCommitmentV1,
   serializeProgramDataCapacityPolicyV1,
   serializeProgramDataObservationV1,
   serializeTargetAuthorityHandoffProposalV1,
   targetAuthorityHandoffProposalDigestV1,
   validateBootstrapActivationProposalDigestV1,
+  validateControllerReleaseDigestV1,
   validateProgramDataCapacityPolicyDigestV1,
   validateProgramDataObservationDigestV1,
   validateRelease1CeremonyPlanV1,
   validateTargetAuthorityHandoffProposalDigestV1,
   type BootstrapActivationProposalV1,
+  type ControllerReleaseCommitmentV1,
   type ProgramDataCapacityPolicyV1,
   type ProgramDataObservationV1,
   type Release1CeremonyPlanV1,
@@ -71,8 +82,6 @@ const legacyAuthority = key(6);
 const controllerProgramdata = key(7);
 const governancePolicy = key(8);
 const gate = key(9);
-const extendFeature = key(10);
-const setAuthorityFeature = key(11);
 const artifactLength = 100n;
 const capacity = 200n;
 const deployedSlot = 7n;
@@ -102,14 +111,47 @@ function capacityPolicy(): ProgramDataCapacityPolicyV1 {
     artifactSchemeId: ARTIFACT_MERKLE_SCHEME_ID,
     artifactChunkSize: 16 * 1024,
     zeroTailRequired: true,
-    extendProgramCheckedFeature: extendFeature,
-    setAuthorityCheckedFeature: setAuthorityFeature,
+    extendProgramCheckedFeature: EXTEND_PROGRAM_CHECKED_FEATURE_ID_V1,
+    setAuthorityCheckedFeature: SET_AUTHORITY_CHECKED_FEATURE_ID_V1,
     policyDigest: hash(250),
     creationSlot: 1n,
     reserved: Buffer.alloc(PROGRAMDATA_CAPACITY_POLICY_V1_RESERVED_LEN),
   };
   value.policyDigest = programDataCapacityPolicyDigestV1(value);
   assert.ok(capacityPolicyPda);
+  return value;
+}
+
+function controllerRelease(): ControllerReleaseCommitmentV1 {
+  const value: ControllerReleaseCommitmentV1 = {
+    discriminator: CONTROLLER_RELEASE_COMMITMENT_V1_DISCRIMINATOR,
+    version: 1,
+    bump: 1,
+    initialized: true,
+    controllerProgram: controller,
+    controllerProgramdata,
+    upgradeableLoader: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
+    capacityPolicy: deriveCapacityPolicyPdaV1(controller, target)[0],
+    capacityPolicyDigest: capacityPolicy().policyDigest,
+    artifactLength,
+    artifactSha256: hash(40),
+    artifactMerkleRoot: hash(41),
+    artifactSchemeId: ARTIFACT_MERKLE_SCHEME_ID,
+    sourceCommitment: hash(42),
+    sourceTreeCommitment: hash(43),
+    buildInputsCommitment: hash(44),
+    toolchainCommitment: hash(45),
+    packageCommitment: hash(46),
+    releaseManifestCommitment: hash(47),
+    abiCommitment: hash(48),
+    preImmutabilityAuthority: present(legacyAuthority),
+    minimumProgramdataCapacity: capacity,
+    releaseDigest: hash(249),
+    creationSlot: 2n,
+    finalized: true,
+    reserved: Buffer.alloc(CONTROLLER_RELEASE_COMMITMENT_V1_RESERVED_LEN),
+  };
+  value.releaseDigest = controllerReleaseDigestV1(value);
   return value;
 }
 
@@ -140,7 +182,7 @@ function observation(
   const value: ProgramDataObservationV1 = {
     discriminator: PROGRAMDATA_OBSERVATION_V1_DISCRIMINATOR,
     version: 1,
-    bump: deriveProgramDataObservationPdaV1(controller, target, purpose, generation)[1],
+    bump: 0,
     initialized: true,
     controllerProgram: controller,
     controllerConfig,
@@ -150,6 +192,12 @@ function observation(
     subject,
     subjectDigest: hash(30 + Number(generation)),
     generation,
+    protocolGate: gate,
+    gateStatus: GateStatusV1.EmergencyFrozen,
+    gateEpoch: 1n,
+    gateActiveProposal: PublicKey.default,
+    gateFreezeSlot: 19n,
+    gateFreezeReasonCode: BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1,
     targetProgram: target,
     targetProgramdata,
     upgradeableLoader: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
@@ -193,6 +241,8 @@ function observation(
     status: ProgramDataObservationStatusV1.Finalized,
     reserved: Buffer.alloc(PROGRAMDATA_OBSERVATION_V1_RESERVED_LEN),
   };
+  value.subjectDigest = programDataObservationSubjectDigestV1(value);
+  value.bump = deriveProgramDataObservationPdaV1(controller, target, purpose, value.subjectDigest, generation)[1];
   value.observationDigest = programDataObservationDigestV1(value);
   return value;
 }
@@ -229,13 +279,13 @@ function handoffProposal(mask = 0b00111): TargetAuthorityHandoffProposalV1 {
     bridgeBuildInputsCommitment: hash(75),
     bridgePackageCommitment: hash(76),
     bridgeReleaseManifestCommitment: hash(77),
-    bridgeObservation: deriveProgramDataObservationPdaV1(controller, target, ProgramDataObservationPurposeV1.TargetHandoffBridge, 1n)[0],
+    bridgeObservation: deriveProgramDataObservationPdaV1(controller, target, ProgramDataObservationPurposeV1.TargetHandoffBridge, bridge.subjectDigest, 1n)[0],
     bridgeObservationGeneration: 1n,
     bridgeObservationRoot: bridge.finalRawMerkleRoot,
     bridgeObservationDigest: bridge.observationDigest,
-    expectedTargetDeployedSlot: deployedSlot,
-    expectedTargetCapacity: capacity,
-    expectedTargetRawLength: capacity + 45n,
+    minimumTargetDeployedSlot: deployedSlot,
+    minimumTargetCapacity: capacity,
+    minimumTargetRawLength: capacity + 45n,
     bootstrapGateStatus: GateStatusV1.EmergencyFrozen,
     bootstrapGateEpoch: 1n,
     bootstrapFreezeReasonCode: BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1,
@@ -297,13 +347,13 @@ function activationProposal(): BootstrapActivationProposalV1 {
     bridgeBuildInputsCommitment: hash(75),
     bridgePackageCommitment: hash(76),
     bridgeReleaseManifestCommitment: hash(77),
-    bridgeObservation: deriveProgramDataObservationPdaV1(controller, target, ProgramDataObservationPurposeV1.BootstrapActivation, 3n)[0],
+    bridgeObservation: deriveProgramDataObservationPdaV1(controller, target, ProgramDataObservationPurposeV1.BootstrapActivation, bridge.subjectDigest, 3n)[0],
     bridgeObservationGeneration: 3n,
     bridgeObservationRoot: bridge.finalRawMerkleRoot,
     bridgeObservationDigest: bridge.observationDigest,
-    expectedTargetDeployedSlot: deployedSlot,
-    expectedTargetCapacity: capacity,
-    expectedTargetRawLength: capacity + 45n,
+    minimumTargetDeployedSlot: deployedSlot,
+    minimumTargetCapacity: capacity,
+    minimumTargetRawLength: capacity + 45n,
     bootstrapGateStatus: GateStatusV1.EmergencyFrozen,
     bootstrapGateEpoch: 1n,
     bootstrapFreezeReasonCode: 1,
@@ -345,6 +395,25 @@ test("capacity policy has exact fixed bytes, digest, and maximum-runtime geometr
   const nonzeroReserved = Buffer.from(encoded);
   nonzeroReserved[nonzeroReserved.length - 1] = 1;
   assert.throws(() => deserializeProgramDataCapacityPolicyV1(nonzeroReserved), /reserved/u);
+  assert.deepEqual(
+    programDataCapacityPolicyDigestV1({ ...policy, creationSlot: 9_999n }),
+    policy.policyDigest,
+    "capacity policy creation slot is chronology, not immutable identity",
+  );
+});
+
+test("controller release uses minimum capacity and excludes its creation slot from identity", () => {
+  const release = controllerRelease();
+  const encoded = serializeControllerReleaseCommitmentV1(release);
+  assert.equal(encoded.length, CONTROLLER_RELEASE_COMMITMENT_V1_LEN);
+  assert.deepEqual(deserializeControllerReleaseCommitmentV1(encoded), release);
+  validateControllerReleaseDigestV1(release);
+  assert.equal(release.minimumProgramdataCapacity, capacity);
+  assert.deepEqual(
+    controllerReleaseDigestV1({ ...release, creationSlot: 9_999n }),
+    release.releaseDigest,
+    "controller release creation slot is chronology, not immutable identity",
+  );
 });
 
 test("finalized observation strictly binds headers, frontier, zero tail, purpose, and digest", () => {
@@ -360,6 +429,39 @@ test("finalized observation strictly binds headers, frontier, zero tail, purpose
   assert.throws(() => deserializeProgramDataObservationV1(encoded.subarray(0, -1)), /1280 bytes/u);
 });
 
+test("observation subject digest and PDA bind artifact length and scheme", () => {
+  const value = observation(ProgramDataObservationPurposeV1.ProposalPrestate, 1n, present(legacyAuthority), 61);
+  const baseSubject = programDataObservationSubjectDigestV1(value);
+  assert.deepEqual(baseSubject, value.subjectDigest);
+  const longerSubject = programDataObservationSubjectDigestV1({
+    ...value,
+    expectedArtifactLength: value.expectedArtifactLength + 1n,
+  });
+  const alternateScheme = Buffer.from(value.expectedArtifactSchemeId);
+  alternateScheme[0] ^= 1;
+  const alternateSchemeSubject = programDataObservationSubjectDigestV1({
+    ...value,
+    expectedArtifactSchemeId: alternateScheme,
+  });
+  assert.notDeepEqual(longerSubject, baseSubject);
+  assert.notDeepEqual(alternateSchemeSubject, baseSubject);
+  const basePda = deriveProgramDataObservationPdaV1(
+    controller,
+    target,
+    value.purpose,
+    baseSubject,
+    value.generation,
+  )[0];
+  assert.notEqual(
+    deriveProgramDataObservationPdaV1(controller, target, value.purpose, longerSubject, value.generation)[0].toBase58(),
+    basePda.toBase58(),
+  );
+  assert.notEqual(
+    deriveProgramDataObservationPdaV1(controller, target, value.purpose, alternateSchemeSubject, value.generation)[0].toBase58(),
+    basePda.toBase58(),
+  );
+});
+
 test("handoff and activation proposals preserve immutable digests across lifecycle fields", () => {
   const handoff = handoffProposal();
   const handoffBytes = serializeTargetAuthorityHandoffProposalV1(handoff);
@@ -373,6 +475,15 @@ test("handoff and activation proposals preserve immutable digests across lifecyc
   validateBootstrapActivationProposalDigestV1(activation);
   const mutatedLifecycle = { ...handoff, state: CeremonyProposalStateV1.Timelocked, executedSlot: 0n, terminalSlot: 0n, terminalReasonCode: 0 };
   assert.deepEqual(targetAuthorityHandoffProposalDigestV1(mutatedLifecycle), handoff.proposalDigest);
+  const lowerBound: TargetAuthorityHandoffProposalV1 = {
+    ...handoff,
+    minimumTargetDeployedSlot: 1n,
+    minimumTargetCapacity: artifactLength,
+    minimumTargetRawLength: artifactLength + 45n,
+    proposalDigest: Buffer.alloc(32),
+  };
+  lowerBound.proposalDigest = targetAuthorityHandoffProposalDigestV1(lowerBound);
+  assert.doesNotThrow(() => serializeTargetAuthorityHandoffProposalV1(lowerBound));
   assert.throws(() => serializeTargetAuthorityHandoffProposalV1({ ...handoff, approvalThreshold: 4 }), /timing or quorum/u);
 });
 
@@ -389,6 +500,7 @@ test("all 32 equal-seat masks have canonical popcount and threshold behavior", (
 });
 
 function ceremonyPlan(): Release1CeremonyPlanV1 {
+  const bridge = observation(ProgramDataObservationPurposeV1.TargetHandoffBridge, 1n, present(legacyAuthority), 61);
   return {
     operation: CeremonyPlanOperationV1.AcceptTargetAuthority,
     production: false,
@@ -403,10 +515,10 @@ function ceremonyPlan(): Release1CeremonyPlanV1 {
     controllerRelease: key(81),
     controllerReleaseDigest: hash(82),
     controllerImmutabilityReceipt: key(83),
-    programdataObservation: deriveProgramDataObservationPdaV1(controller, target, ProgramDataObservationPurposeV1.TargetHandoffBridge, 1n)[0],
+    programdataObservation: deriveProgramDataObservationPdaV1(controller, target, ProgramDataObservationPurposeV1.TargetHandoffBridge, bridge.subjectDigest, 1n)[0],
     observationPurpose: ProgramDataObservationPurposeV1.TargetHandoffBridge,
     observationGeneration: 1n,
-    observationDigest: observation(ProgramDataObservationPurposeV1.TargetHandoffBridge, 1n, present(legacyAuthority), 61).observationDigest,
+    observationDigest: bridge.observationDigest,
     actualCapacity: capacity,
     handoffProposal: deriveTargetAuthorityHandoffProposalPdaV1(controller, target, 1n)[0],
     handoffReceipt: key(84),
@@ -448,9 +560,11 @@ test("ceremony PDAs separate roles, purposes, and observation generations", () =
   const rotatedHandoff = deriveTargetAuthorityHandoffProposalPdaV1(controller, target, 2n)[0];
   const activation = deriveBootstrapActivationProposalPdaV1(controller, target, 1n)[0];
   const rotatedActivation = deriveBootstrapActivationProposalPdaV1(controller, target, 2n)[0];
-  const observation1 = deriveProgramDataObservationPdaV1(controller, target, ProgramDataObservationPurposeV1.TargetHandoffBridge, 1n)[0];
-  const observation2 = deriveProgramDataObservationPdaV1(controller, target, ProgramDataObservationPurposeV1.TargetHandoffBridge, 2n)[0];
-  const activationObservation = deriveProgramDataObservationPdaV1(controller, target, ProgramDataObservationPurposeV1.BootstrapActivation, 1n)[0];
+  const subject1 = hash(90);
+  const subject2 = hash(91);
+  const observation1 = deriveProgramDataObservationPdaV1(controller, target, ProgramDataObservationPurposeV1.TargetHandoffBridge, subject1, 1n)[0];
+  const observation2 = deriveProgramDataObservationPdaV1(controller, target, ProgramDataObservationPurposeV1.TargetHandoffBridge, subject1, 2n)[0];
+  const activationObservation = deriveProgramDataObservationPdaV1(controller, target, ProgramDataObservationPurposeV1.BootstrapActivation, subject2, 1n)[0];
   const identities = [policy, handoff, rotatedHandoff, activation, rotatedActivation, observation1, observation2, activationObservation].map((entry) => entry.toBase58());
   assert.equal(new Set(identities).size, identities.length);
 });

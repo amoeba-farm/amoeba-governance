@@ -30,7 +30,7 @@ import {
   ProposalStateV2,
   StateCheckpointPhaseV1,
 } from "./release1.js";
-import { encodeApproveProposalV2 } from "./release1LifecycleInstructions.js";
+import { encodeApproveProposalV3 } from "./release1V3Instructions.js";
 import {
   FINALIZED_COMMITMENT,
   Release1PlanKindV1,
@@ -48,7 +48,10 @@ function approveAccounts() {
     { pubkey: key(21), isSigner: false, isWritable: false },
     { pubkey: key(18), isSigner: false, isWritable: false },
     { pubkey: key(7), isSigner: false, isWritable: false },
+    { pubkey: key(32), isSigner: false, isWritable: false },
+    { pubkey: key(33), isSigner: false, isWritable: false },
     { pubkey: key(9), isSigner: false, isWritable: true },
+    { pubkey: key(34), isSigner: false, isWritable: false },
     { pubkey: key(40), isSigner: true, isWritable: false },
   ] as const;
 }
@@ -74,12 +77,14 @@ function bindings(kind: Release1PlanKindV1 = Release1PlanKindV1.ApproveProposal)
   };
 }
 
-const approveData = encodeApproveProposalV2({
+const approveData = encodeApproveProposalV3({
   expected: {
-    expectedProposalDigest: bytes(10), expectedPolicyVersion: 1n, expectedPolicyHash: bytes(18), expectedCouncilVersion: 11n, expectedCouncilHash: bytes(12),
-    expectedGateStatus: GateStatusV1.Active, expectedGateEpoch: 8n, expectedTargetNonce: 13n, expectedState: ProposalStateV2.BufferVerified,
-    expectedReviewStartSlot: 20n, expectedReviewEndSlot: 30n, expectedNotBeforeSlot: 40n, expectedExpirySlot: 50n,
+    expectedProposalDigest: bytes(10), expectedState: ProposalStateV2.BufferVerified,
+    expectedGateStatus: GateStatusV1.Active, expectedGateEpoch: 8n, expectedTargetNonce: 13n,
+    expectedCapacityPolicyDigest: bytes(32), expectedCurrentDeploymentDigest: bytes(33), expectedCurrentDeploymentGeneration: 1n,
   },
+  expectedCreationCouncilVersion: 11n,
+  expectedCreationCouncilHash: bytes(12),
   expectedApprovalBitset: 0,
   expectedApprovalCount: 0,
 });
@@ -192,7 +197,64 @@ test("CLI exposes the complete required command set and marks Phase 7 commands r
   ]);
   assert.deepEqual(RELEASE1_PHASE7_READINESS_ONLY_COMMANDS_V1, ["plan-controller-immutability", "plan-authority-handoff", "verify-handoff"]);
   assert.equal(RELEASE1_PUBLIC_SCHEMA_V1.tokenGovernanceEnabled, false);
-  assert.deepEqual(RELEASE1_PUBLIC_SCHEMA_V1.rejectedInstructionTags, [0, 26]);
+  assert.deepEqual(RELEASE1_PUBLIC_SCHEMA_V1.instructionTags, {
+    CreateCandidateCouncilSetV1: 18,
+    CreateCouncilRotationV1: 19,
+    ApproveCouncilRotationV1: 20,
+    ActivateCouncilRotationV1: 21,
+    QueueCouncilRotationV1: 22,
+    CancelCouncilRotationV1: 24,
+    ExpireCouncilRotationV1: 25,
+    BeginProgramDataObservationV1: 39,
+    AppendProgramDataObservationChunkV1: 40,
+    VerifyObservedArtifactChunkV1: 41,
+    FinalizeProgramDataObservationV1: 42,
+    RecordControllerImmutabilityV1: 43,
+    CreateTargetAuthorityHandoffV1: 44,
+    ApproveTargetAuthorityHandoffV1: 45,
+    QueueTargetAuthorityHandoffV1: 46,
+    AcceptTargetAuthorityCheckedV1: 47,
+    CreateBootstrapActivationV1: 49,
+    ApproveBootstrapActivationV1: 50,
+    QueueBootstrapActivationV1: 51,
+    ExecuteBootstrapActivationV1: 52,
+    InitializeControllerV2: 53,
+    CreateProposalV3: 54,
+    ApproveProposalV3: 55,
+    FinalizeGovernanceV3: 56,
+    QueueProposalV3: 57,
+    FreezeProposalV3: 58,
+    CancelProposalV3: 59,
+    ExpireProposalV3: 60,
+    GuardianFreezeV2: 61,
+    CreateEmergencyResolutionV2: 62,
+    ApproveEmergencyResolutionV2: 63,
+    QueueEmergencyResolutionV2: 64,
+    ExecuteEmergencyResolutionV2: 65,
+    ExpireEmergencyResolutionV2: 66,
+    CreateCheckpointV2: 67,
+    RecastCheckpointV2: 68,
+    FinalizeCheckpointV2: 69,
+    BindProgramDataVerificationV2: 70,
+    FinalizeProgramDataVerificationV2: 71,
+    ObserveProgramDataFailureV2: 72,
+    ApproveUnfreezeV2: 73,
+    ExecuteUnfreezeV2: 74,
+    AdoptBufferV2: 75,
+    VerifyBufferChunkV2: 76,
+    FinalizeBufferVerificationV2: 77,
+    ExtendTargetV2: 78,
+    ExecuteUpgradeV2: 79,
+    CloseAbandonedBufferV2: 80,
+    ActivateRollbackV2: 81,
+  });
+  assert.deepEqual(RELEASE1_PUBLIC_SCHEMA_V1.executableInstructionTagRanges, [
+    [18, 22], [24, 25], [39, 47], [49, 52], [53, 81],
+  ]);
+  assert.deepEqual(RELEASE1_PUBLIC_SCHEMA_V1.rejectedInstructionTags, [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+    23, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 48,
+  ]);
 });
 
 test("installed executable requires one explicit local injected-adapter module", () => temporary(async (directory) => {

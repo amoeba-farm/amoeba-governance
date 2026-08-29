@@ -18,8 +18,8 @@ import {
   ProposalStateV2,
   StateCheckpointPhaseV1,
 } from "./release1.js";
-import { encodeApproveProposalV2 } from "./release1LifecycleInstructions.js";
-import { encodeExecuteUpgradeV1 } from "./release1LoaderInstructions.js";
+import { encodeApproveProposalV3 } from "./release1V3Instructions.js";
+import { encodeExecuteUpgradeV2 } from "./release1V3CustodyInstructions.js";
 import {
   COMPUTE_BUDGET_PROGRAM_ID_V1,
   ExclusiveOperatorLockV1,
@@ -55,18 +55,21 @@ function approveAccounts() {
     { pubkey: key(21), isSigner: false, isWritable: false },
     { pubkey: key(18), isSigner: false, isWritable: false },
     { pubkey: key(7), isSigner: false, isWritable: false },
+    { pubkey: key(30), isSigner: false, isWritable: false },
+    { pubkey: key(31), isSigner: false, isWritable: false },
     { pubkey: key(9), isSigner: false, isWritable: true },
+    { pubkey: key(32), isSigner: false, isWritable: false },
     { pubkey: key(20), isSigner: true, isWritable: false },
   ] as const;
 }
 
 test("operator exposes every typed emergency and rollback mutation route", () => {
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["create-emergency-resolution"], [10]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["approve-emergency-resolution"], [11]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["queue-emergency-resolution"], [12]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["execute-emergency-resolution"], [13]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["activate-rollback"], [37]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["observe-programdata-failure"], [38]);
+  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["create-emergency-resolution"], [62]);
+  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["approve-emergency-resolution"], [63]);
+  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["queue-emergency-resolution"], [64]);
+  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["execute-emergency-resolution"], [65]);
+  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["activate-rollback"], [81]);
+  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["observe-programdata-failure"], [72]);
   assert.equal(new Set(OPERATOR_MUTATION_COMMANDS_V1).size, OPERATOR_MUTATION_COMMANDS_V1.length);
   assert.deepEqual(
     Object.keys(OPERATOR_EXPECTED_TAGS_V1).sort(),
@@ -77,7 +80,7 @@ test("operator exposes every typed emergency and rollback mutation route", () =>
 test("emergency resolution operator envelope is canonical, bounded, and nonce-free", () => {
   const limit = Buffer.alloc(5); limit[0] = 2; limit.writeUInt32LE(1_200_000, 1);
   const price = Buffer.alloc(9); price[0] = 3; price.writeBigUInt64LE(17n, 1);
-  const controller = { kind: "controller" as const, programId: key(2), data: Buffer.from([13]), accounts: [] };
+  const controller = { kind: "controller" as const, programId: key(2), data: Buffer.from([65]), accounts: [] };
   const envelope = [
     { kind: "compute-unit-limit" as const, programId: COMPUTE_BUDGET_PROGRAM_ID_V1, data: limit, accounts: [] },
     { kind: "compute-unit-price" as const, programId: COMPUTE_BUDGET_PROGRAM_ID_V1, data: price, accounts: [] },
@@ -143,22 +146,19 @@ function bindings(): Release1ProposalPlanBindingsV1 {
   };
 }
 
-const approvalData = encodeApproveProposalV2({
+const approvalData = encodeApproveProposalV3({
   expected: {
     expectedProposalDigest: bytes(10),
-    expectedPolicyVersion: 1n,
-    expectedPolicyHash: bytes(18),
-    expectedCouncilVersion: 11n,
-    expectedCouncilHash: bytes(12),
+    expectedState: ProposalStateV2.BufferVerified,
     expectedGateStatus: GateStatusV1.Active,
     expectedGateEpoch: 8n,
     expectedTargetNonce: 13n,
-    expectedState: ProposalStateV2.BufferVerified,
-    expectedReviewStartSlot: 20n,
-    expectedReviewEndSlot: 30n,
-    expectedNotBeforeSlot: 40n,
-    expectedExpirySlot: 50n,
+    expectedCapacityPolicyDigest: bytes(30),
+    expectedCurrentDeploymentDigest: bytes(31),
+    expectedCurrentDeploymentGeneration: 1n,
   },
+  expectedCreationCouncilVersion: 11n,
+  expectedCreationCouncilHash: bytes(12),
   expectedApprovalBitset: 0,
   expectedApprovalCount: 0,
 });
@@ -299,8 +299,8 @@ test("typed non-envelope actions reject every sibling or raw instruction", () =>
 test("armed plans bind exact controller bytes, ordered accounts, privileges, and derived display", () => {
   const plan = planRelease1ProposalOperationV1(bindings());
   const action = validatePreparedGovernanceTransactionV1("approve", plan, prepared());
-  assert.equal(action.instructionName, "ApproveProposalV2");
-  assert.equal(action.instructionTag, 3);
+  assert.equal(action.instructionName, "ApproveProposalV3");
+  assert.equal(action.instructionTag, 55);
   assert.equal(action.instructionDataHex, approvalData.toString("hex"));
   assert.deepEqual(
     (action.accounts as readonly { pubkey: string }[]).map((account) => account.pubkey),
@@ -324,24 +324,24 @@ test("armed plans bind exact controller bytes, ordered accounts, privileges, and
   accountSwap.topLevelInstructions = [{
     ...accountSwap.topLevelInstructions[0]!,
     accounts: accountSwap.topLevelInstructions[0]!.accounts.map((account, index) => (
-      index === 4 ? { ...account, pubkey: key(99) } : account
+      index === 6 ? { ...account, pubkey: key(99) } : account
     )),
   }];
   assert.throws(
     () => validatePreparedGovernanceTransactionV1("approve", plan, accountSwap),
-    /controller\[4\] account metadata drifted/u,
+    /controller\[6\] account metadata drifted/u,
   );
 
   const privilegeSwap = prepared();
   privilegeSwap.topLevelInstructions = [{
     ...privilegeSwap.topLevelInstructions[0]!,
     accounts: privilegeSwap.topLevelInstructions[0]!.accounts.map((account, index) => (
-      index === 4 ? { ...account, isWritable: false } : account
+      index === 6 ? { ...account, isWritable: false } : account
     )),
   }];
   assert.throws(
     () => validatePreparedGovernanceTransactionV1("approve", plan, privilegeSwap),
-    /controller\[4\] account metadata drifted/u,
+    /controller\[6\] account metadata drifted/u,
   );
 });
 
@@ -565,14 +565,16 @@ test("typed loader action accepts only its exact nonce/compute/controller envelo
   const base = bindings();
   const nonce = key(40);
   const nonceAuthority = key(41);
-  const data = encodeExecuteUpgradeV1({
+  const data = encodeExecuteUpgradeV2({
     expected: {
-      expectedProposalDigest: bytes(10), expectedPolicyVersion: 1n, expectedPolicyHash: bytes(42), expectedCouncilVersion: 11n, expectedCouncilHash: bytes(12),
-      expectedGateStatus: GateStatusV1.FrozenForUpgrade, expectedGateEpoch: 8n, expectedTargetNonce: 13n, expectedState: ProposalStateV2.Frozen,
-      expectedReviewStartSlot: 20n, expectedReviewEndSlot: 30n, expectedNotBeforeSlot: 40n, expectedExpirySlot: 50n,
+      expectedProposalDigest: bytes(10), expectedState: ProposalStateV2.Frozen,
+      expectedGateStatus: GateStatusV1.FrozenForUpgrade, expectedGateEpoch: 8n, expectedTargetNonce: 13n,
+      expectedCapacityPolicyDigest: bytes(42), expectedCurrentDeploymentDigest: bytes(43), expectedCurrentDeploymentGeneration: 1n,
     },
-    expectedPrestateCheckpointDigest: bytes(17), expectedCurrentRawProgramdataHash: bytes(43), expectedSealedBufferHeaderHash: bytes(44),
-    expectedCounterpartProposalDigest: bytes(45), expectedProgramdataSlot: 46n, expectedCapacity: 47n, expectedVerifiedChunkCount: 1,
+    expectedPrestateCheckpointDigest: bytes(17), expectedPrestateCheckpointGeneration: 1n,
+    expectedObservationDigest: bytes(46), expectedObservationGeneration: 1n, expectedObservationRoot: bytes(47),
+    expectedObservationFinalizedSlot: 48n, expectedActualCapacity: 49n, expectedSealedBufferHeaderHash: bytes(44),
+    expectedVerifiedChunkCount: 1, expectedCounterpartProposalDigest: bytes(45),
     expectedBufferVerificationStatus: BufferVerificationStatusV1.Verified,
     expectedCounterpartBufferVerificationStatus: BufferVerificationStatusV1.Verified,
     envelope: {
