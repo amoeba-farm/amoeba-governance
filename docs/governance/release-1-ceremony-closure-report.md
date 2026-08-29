@@ -428,6 +428,7 @@ M clients/ts/upgradeGovernance/release1Planning.test.ts
 A clients/ts/upgradeGovernance/release1V3Builders.ts
 A clients/ts/upgradeGovernance/release1V3CustodyInstructions.ts
 A clients/ts/upgradeGovernance/release1V3Instructions.ts
+M clients/ts/upgradeGovernance/spreadGateBridgeV1.ts
 M docs/governance/evidence/release-1-packet-surface-v1.json
 A docs/governance/final-predeployment-audit-scope.md
 A docs/governance/release-1-capacity-liveness-audit.md
