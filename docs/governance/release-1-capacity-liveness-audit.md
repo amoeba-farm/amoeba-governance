@@ -236,10 +236,18 @@ frontier supports depth 10, sufficient for the runtime maximum even at the
 smallest benchmark candidate. `next_index` must equal the supplied index, so a
 duplicate or out-of-order append fails without a large bitmap.
 
-The benchmark lane measures 16, 32, 64, and 128 KiB under actual controller SBF
-v0 and v2. The production constant is frozen only after both engines show a
-conservative compute and stack margin. The account ABI is sized for the
+Host geometry and deterministic root tests cover the 16, 32, 64, and 128 KiB
+candidates. Actual controller-SBF measurement is presently complete only for
+the selected 16-KiB production constant. At the 10,485,760-byte raw-account
+maximum, observed append costs peaked at 64,674 compute units on SBPF v0 and
+71,121 compute units on SBPF v2, each below the conservative 200,000-unit test
+ceiling, with no runtime stack fault. The account ABI is sized for the
 worst-case 16-KiB depth so benchmark selection cannot shrink runtime support.
+
+The ceremony assignment separately required actual-SBF measurements for all
+four candidates. The 32, 64, and 128 KiB candidates have not been exercised by
+the actual-SBF compute-evidence lane. That is an explicit exit-criteria gap;
+host geometry is not being presented as an SBF benchmark substitute.
 
 ### Artifact and zero-tail binding
 
@@ -389,7 +397,8 @@ This removes the unsafe choice between two superficially similar lifecycles.
 The new loader execution tags stay unavailable until all of these pass:
 
 1. fixed schema lengths, discriminators, and Rust/TypeScript vectors;
-2. actual-SBF v0/v2 chunk benchmarks for all four candidates;
+2. actual-SBF v0/v2 chunk benchmarks for all four candidates (**open for 32,
+   64, and 128 KiB; selected 16 KiB is complete**);
 3. maximum raw length traversal and finalization;
 4. every extension timing point in the adversarial matrix;
 5. nonzero-tail, payload, header, authority, and linkage drift negatives;

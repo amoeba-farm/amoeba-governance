@@ -1,6 +1,6 @@
 # Final predeployment audit scope
 
-Status: review boundary for Release 1 ceremony closure
+Status: **NOT AUDIT-READY — REVIEW BOUNDARY DEFINED, ENGINEERING BLOCKERS OPEN**
 
 Engineering code candidate: `1ff442252907a017913d47591c1857c2e4df3f0b`
 
@@ -9,6 +9,37 @@ Production controller identity: intentionally unselected
 This document defines the independent review that remains necessary before a
 future assignment may select a production controller identity or perform any
 live ceremony. It is not a deployment authorization.
+
+## Current pre-audit blockers
+
+The branch must not be presented as an exit-complete audit candidate while any
+of these engineering gaps remains open:
+
+1. actual controller-SBF compute measurements exist for the selected 16-KiB
+   ProgramData observation chunk, but not for the required 32, 64, and 128 KiB
+   candidates on both SBPF engines;
+2. the V3 happy path uses the real Loader, but an actual controller-SBF V3
+   rollback execution has not been demonstrated; the retained ignored V1/V2
+   rollback fixtures fail their obsolete configuration preflight if forced and
+   are not V3 Loader evidence; and
+3. the Spread repository's exact Clippy `-D warnings` gate reports 86
+   pre-existing errors outside the governance bridge. The gate source is absent
+   from that error set, but the repository-wide gate still fails.
+
+Hosted CI also remains unavailable as evidence because the inspected baseline
+runs stopped before repository steps at the account billing/spending boundary.
+These gaps must be resolved and independently reproduced before production
+identity selection or a live ceremony can be proposed.
+
+The complete local happy-path ceremony is no longer a blocker. Controller SBF
+completed checked handoff, former-authority rejection, bootstrap activation,
+typed Loader upgrade, ProgramData verification, protected poststate, separate
+unfreeze, and the first gated Spread mutation on the sacrificial validator.
+Receipt v4 independently verified digest
+`faae42ced84225366d4ef5eb99bdfe69aaa1094e000756195382e08bd477cb11`,
+and two read-only CLI processes recovered one four-entry journal. That success
+does not substitute for the missing V3 rollback execution or chunk-candidate
+benchmarks listed above.
 
 ## In scope
 
