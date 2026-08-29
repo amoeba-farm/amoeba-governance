@@ -22,6 +22,7 @@ pub mod processor;
 pub mod programdata_observation_merkle;
 pub mod proposal;
 pub mod release1_account_io;
+pub mod release1_ceremony_digest;
 pub mod release1_ceremony_state;
 pub mod release1_digest;
 pub mod release1_loader_accounts;
