@@ -18,6 +18,15 @@ pub const COUNCIL_ROTATION_SEED: &[u8] = b"council-rotation";
 pub const EMERGENCY_FREEZE_OBSERVATION_SEED: &[u8] = b"emergency-observation";
 pub const PROGRAMDATA_FAILURE_OBSERVATION_SEED: &[u8] = b"programdata-failure";
 pub const CHECKPOINT_ATTESTATION_SEED: &[u8] = b"checkpoint-attestation";
+pub const CAPACITY_POLICY_SEED: &[u8] = b"capacity-policy";
+pub const CONTROLLER_RELEASE_SEED: &[u8] = b"controller-release";
+pub const PROGRAMDATA_OBSERVATION_SEED: &[u8] = b"programdata-observation";
+pub const DEPLOYMENT_STATE_SEED: &[u8] = b"deployment-state";
+pub const CONTROLLER_IMMUTABILITY_SEED: &[u8] = b"controller-immutability";
+pub const TARGET_HANDOFF_SEED: &[u8] = b"handoff";
+pub const TARGET_HANDOFF_RECEIPT_SEED: &[u8] = b"handoff-receipt";
+pub const BOOTSTRAP_ACTIVATION_SEED: &[u8] = b"bootstrap-activation";
+pub const BOOTSTRAP_ACTIVATION_RECEIPT_SEED: &[u8] = b"activation-receipt";
 pub const UPGRADEABLE_LOADER_ID: Pubkey = pubkey!("BPFLoaderUpgradeab1e11111111111111111111111");
 
 pub fn derive_upgradeable_programdata_address(target_program: &Pubkey) -> (Pubkey, u8) {
@@ -246,6 +255,138 @@ pub fn derive_checkpoint_attestation_pda(
     )
 }
 
+pub fn derive_capacity_policy_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            CAPACITY_POLICY_SEED,
+            target_program.as_ref(),
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_controller_release_commitment_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            CONTROLLER_RELEASE_SEED,
+            target_program.as_ref(),
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_programdata_observation_pda(
+    controller_program: &Pubkey,
+    observed_program: &Pubkey,
+    purpose: u8,
+    generation: u64,
+) -> (Pubkey, u8) {
+    let purpose = [purpose];
+    let generation = generation.to_le_bytes();
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            PROGRAMDATA_OBSERVATION_SEED,
+            observed_program.as_ref(),
+            &purpose,
+            &generation,
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_current_deployment_state_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            DEPLOYMENT_STATE_SEED,
+            target_program.as_ref(),
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_controller_immutability_receipt_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            CONTROLLER_IMMUTABILITY_SEED,
+            target_program.as_ref(),
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_target_handoff_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            TARGET_HANDOFF_SEED,
+            target_program.as_ref(),
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_target_handoff_receipt_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            TARGET_HANDOFF_RECEIPT_SEED,
+            target_program.as_ref(),
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_bootstrap_activation_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            BOOTSTRAP_ACTIVATION_SEED,
+            target_program.as_ref(),
+        ],
+        controller_program,
+    )
+}
+
+pub fn derive_bootstrap_activation_receipt_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            BOOTSTRAP_ACTIVATION_RECEIPT_SEED,
+            target_program.as_ref(),
+        ],
+        controller_program,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -273,6 +414,15 @@ mod tests {
             derive_emergency_freeze_observation_pda(&controller, &target, 7).0,
             derive_programdata_failure_observation_pda(&controller, &proposal, 7).0,
             derive_checkpoint_attestation_pda(&controller, &proposal, 7, 2).0,
+            derive_capacity_policy_pda(&controller, &target).0,
+            derive_controller_release_commitment_pda(&controller, &target).0,
+            derive_programdata_observation_pda(&controller, &target, 1, 7).0,
+            derive_current_deployment_state_pda(&controller, &target).0,
+            derive_controller_immutability_receipt_pda(&controller, &target).0,
+            derive_target_handoff_pda(&controller, &target).0,
+            derive_target_handoff_receipt_pda(&controller, &target).0,
+            derive_bootstrap_activation_pda(&controller, &target).0,
+            derive_bootstrap_activation_receipt_pda(&controller, &target).0,
         ];
         for (index, address) in addresses.iter().enumerate() {
             assert!(
@@ -398,6 +548,35 @@ mod tests {
         assert_ne!(
             attestation,
             derive_checkpoint_attestation_pda(&controller, &checkpoint, version.swap_bytes(), 3).0
+        );
+
+        let purpose = 5u8;
+        let (observation, bump) =
+            derive_programdata_observation_pda(&controller, &target, purpose, version);
+        let bump_seed = [bump];
+        let purpose_seed = [purpose];
+        let generation_seed = version.to_le_bytes();
+        let expected = Pubkey::create_program_address(
+            &[
+                UPGRADE_SEED_DOMAIN_V1,
+                PROGRAMDATA_OBSERVATION_SEED,
+                target.as_ref(),
+                &purpose_seed,
+                &generation_seed,
+                &bump_seed,
+            ],
+            &controller,
+        )
+        .unwrap();
+        assert_eq!(observation, expected);
+        assert_ne!(
+            observation,
+            derive_programdata_observation_pda(&controller, &target, purpose, version.swap_bytes())
+                .0
+        );
+        assert_ne!(
+            observation,
+            derive_programdata_observation_pda(&controller, &target, purpose + 1, version).0
         );
     }
 }

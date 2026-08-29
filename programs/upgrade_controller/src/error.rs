@@ -100,6 +100,20 @@ pub enum GovernanceError {
     InvalidMerkleProof = 10_044,
     #[error("Release 1 digest does not match its canonical commitments")]
     Release1DigestMismatch = 10_045,
+    #[error("ProgramData observation fields are not canonical")]
+    InvalidProgramDataObservation = 10_046,
+    #[error("ProgramData observation is stale")]
+    StaleProgramDataObservation = 10_047,
+    #[error("ProgramData observation is not mechanically complete")]
+    IncompleteProgramDataObservation = 10_048,
+    #[error("ProgramData capacity policy does not match the canonical policy")]
+    CapacityPolicyMismatch = 10_049,
+    #[error("controller immutability has not been proven")]
+    ControllerNotImmutable = 10_050,
+    #[error("Loader authority transition is not the exact admitted transition")]
+    InvalidAuthorityTransition = 10_051,
+    #[error("ceremony account is already terminal or finalized")]
+    CeremonyAlreadyFinalized = 10_052,
 }
 
 impl From<GovernanceError> for ProgramError {
@@ -163,6 +177,13 @@ mod tests {
             GovernanceError::InvalidMerkleParameters,
             GovernanceError::InvalidMerkleProof,
             GovernanceError::Release1DigestMismatch,
+            GovernanceError::InvalidProgramDataObservation,
+            GovernanceError::StaleProgramDataObservation,
+            GovernanceError::IncompleteProgramDataObservation,
+            GovernanceError::CapacityPolicyMismatch,
+            GovernanceError::ControllerNotImmutable,
+            GovernanceError::InvalidAuthorityTransition,
+            GovernanceError::CeremonyAlreadyFinalized,
         ];
         let codes = values.iter().map(|value| *value as u32).collect::<Vec<_>>();
         assert_eq!(codes.iter().collect::<BTreeSet<_>>().len(), codes.len());
