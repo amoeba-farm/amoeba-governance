@@ -944,14 +944,15 @@ fn run_local_ceremony_cli(validator: &StandaloneValidator, cluster_domain: [u8; 
     );
 }
 
-async fn create_durable_nonce(context: &mut CeremonyContext) -> (Pubkey, Hash) {
+async fn create_durable_nonce(context: &mut CeremonyContext) -> (Pubkey, Hash, Keypair) {
     let nonce_account = Keypair::new();
     let nonce_pubkey = nonce_account.pubkey();
+    let nonce_authority = Keypair::new();
     let rent = Rent::default().minimum_balance(NonceState::size());
     let create = system_instruction::create_nonce_account(
         &context.payer.pubkey(),
         &nonce_pubkey,
-        &context.payer.pubkey(),
+        &nonce_authority.pubkey(),
         rent,
     );
     submit(context, &create, &[&nonce_account])
@@ -965,7 +966,7 @@ async fn create_durable_nonce(context: &mut CeremonyContext) -> (Pubkey, Hash) {
     let NonceState::Initialized(data) = versions.state() else {
         panic!("durable nonce account remained uninitialized");
     };
-    (nonce_pubkey, data.blockhash())
+    (nonce_pubkey, data.blockhash(), nonce_authority)
 }
 
 async fn submit_with_durable_nonce(
@@ -3730,14 +3731,18 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         state(&mut context, harness.deployment).await;
     let execution_primary: UpgradeProposalV3 = state(&mut context, primary_key).await;
     let execution_rollback: UpgradeProposalV3 = state(&mut context, rollback_key).await;
-    let durable_nonce_authority = context.payer.pubkey();
     let durable_nonce = if standalone {
         Some(create_durable_nonce(&mut context).await)
     } else {
         None
     };
+    let durable_nonce_authority = durable_nonce.as_ref().map_or_else(
+        || context.payer.pubkey(),
+        |(_, _, authority)| authority.pubkey(),
+    );
     let execution_envelope = durable_nonce
-        .map(|(nonce, _)| envelope_with_nonce(nonce, durable_nonce_authority))
+        .as_ref()
+        .map(|(nonce, _, _)| envelope_with_nonce(*nonce, durable_nonce_authority))
         .unwrap_or_else(envelope);
     let execute_upgrade = execute_upgrade_v2_instruction(
         harness.controller,
@@ -3790,8 +3795,11 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
     .expect("execute upgrade instruction");
     let upgrade_submission_slot = current_slot(&mut context).await;
     let [limit, price] = envelope_prefix();
-    let upgrade_signature_hex = if let Some((durable_nonce_account, durable_nonce_blockhash)) =
-        durable_nonce
+    let upgrade_signature_hex = if let Some((
+        durable_nonce_account,
+        durable_nonce_blockhash,
+        durable_nonce_authority_signer,
+    )) = durable_nonce
     {
         let advance_nonce = system_instruction::advance_nonce_account(
             &durable_nonce_account,
@@ -3800,7 +3808,7 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         submit_with_durable_nonce(
             &mut context,
             &[advance_nonce, limit, price, execute_upgrade],
-            &[],
+            &[&durable_nonce_authority_signer],
             durable_nonce_blockhash,
         )
         .await
