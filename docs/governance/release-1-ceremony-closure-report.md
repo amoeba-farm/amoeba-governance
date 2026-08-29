@@ -1,8 +1,11 @@
 # Amoeba Governance Release 1 ceremony-closure report
 
-Status: **FINAL LOCAL EVIDENCE PENDING**  
-Branch: `codex/release1-ceremony-closure`  
-Executable-source candidate: `1ff442252907a017913d47591c1857c2e4df3f0b`  
+Status: **FINAL LOCAL EVIDENCE PENDING**
+
+Branch: `codex/release1-ceremony-closure`
+
+Executable-source candidate: `1ff442252907a017913d47591c1857c2e4df3f0b`
+
 Production controller identity: intentionally unselected
 
 This report closes the engineering and local-rehearsal scope defined by

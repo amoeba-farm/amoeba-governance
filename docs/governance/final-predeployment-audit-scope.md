@@ -1,7 +1,9 @@
 # Final predeployment audit scope
 
-Status: review boundary for Release 1 ceremony closure  
-Engineering code candidate: `1ff442252907a017913d47591c1857c2e4df3f0b`  
+Status: review boundary for Release 1 ceremony closure
+
+Engineering code candidate: `1ff442252907a017913d47591c1857c2e4df3f0b`
+
 Production controller identity: intentionally unselected
 
 This document defines the independent review that remains necessary before a
