@@ -11,6 +11,11 @@ crate-type = ["cdylib", "lib"]
 
 [features]
 no-entrypoint = []
+# Test-only resource-measurement build. This never changes the instruction or
+# account ABI; it permits the three nonselected ProgramData observation chunk
+# candidates only so the production append processor can be measured as actual
+# controller SBF. Release builds and checked artifacts do not enable it.
+programdata-observation-chunk-matrix = []
 
 [dependencies]
 borsh.workspace = true

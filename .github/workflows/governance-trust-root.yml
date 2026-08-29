@@ -232,3 +232,14 @@ jobs:
           cargo test --locked -p upgrade_controller --test max_artifact_chunk_sbf \
             actual_controller_sbf_max_artifact_buffer_chunk_compute \
             -- --ignored --exact --test-threads=1
+
+      # This builds isolated, explicitly test-only controller ELFs and invokes
+      # the production ProgramData append processor for the complete 16/32/64/
+      # 128 KiB candidate matrix under both SBPF engines. Normal checked
+      # controller artifacts above retain the consensus-selected 16 KiB schema.
+      - name: ProgramData observation chunk actual-controller-SBF matrix (v0 and v2)
+        shell: bash
+        run: |
+          export AMOEBA_BENCH_EVIDENCE_OUT="$RUNNER_TEMP/programdata-observation-chunk-matrix.json"
+          bash benchmarks/programdata_observation_chunk_controller_sbf/run-benchmark.sh
+          python3 -m json.tool "$AMOEBA_BENCH_EVIDENCE_OUT" >/dev/null

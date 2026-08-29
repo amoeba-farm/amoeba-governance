@@ -17,10 +17,11 @@ use crate::{
     council::VALID_APPROVAL_MASK,
     pda::UPGRADEABLE_LOADER_ID,
     programdata_observation_merkle::{
-        programdata_observation_chunk_count, MAX_PADDED_PROGRAMDATA_OBSERVATION_CHUNKS_V1,
-        MAX_PROGRAMDATA_OBSERVATION_CHUNKS_V1, MAX_PROGRAMDATA_OBSERVATION_TREE_DEPTH_V1,
-        MAX_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1, PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB,
-        PROGRAMDATA_OBSERVATION_FRONTIER_SLOTS_V1, PROGRAMDATA_OBSERVATION_MERKLE_SCHEME_ID_V1,
+        is_programdata_observation_chunk_size_candidate, programdata_observation_chunk_count,
+        MAX_PADDED_PROGRAMDATA_OBSERVATION_CHUNKS_V1, MAX_PROGRAMDATA_OBSERVATION_CHUNKS_V1,
+        MAX_PROGRAMDATA_OBSERVATION_TREE_DEPTH_V1, MAX_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1,
+        PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB, PROGRAMDATA_OBSERVATION_FRONTIER_SLOTS_V1,
+        PROGRAMDATA_OBSERVATION_MERKLE_SCHEME_ID_V1,
     },
     release1_loader_accounts::{
         parse_upgradeable_program, parse_upgradeable_programdata, LOADER_PROGRAMDATA_METADATA_LEN,
@@ -218,6 +219,10 @@ impl ProgramDataCapacityPolicyV1 {
             self.extend_program_checked_feature,
             self.set_authority_checked_feature,
         ])?;
+        let observation_chunk_size_is_admitted = self.observation_chunk_size
+            == PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB
+            || cfg!(feature = "programdata-observation-chunk-matrix")
+                && is_programdata_observation_chunk_size_candidate(self.observation_chunk_size);
         if self.upgradeable_loader != UPGRADEABLE_LOADER_ID
             || self.extend_program_checked_feature != EXTEND_PROGRAM_CHECKED_FEATURE_ID_V1
             || self.set_authority_checked_feature != SET_AUTHORITY_CHECKED_FEATURE_ID_V1
@@ -226,7 +231,7 @@ impl ProgramDataCapacityPolicyV1 {
             || self.maximum_payload_capacity != MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1
             || self.maximum_artifact_length != MAX_ARTIFACT_BYTES_V1
             || self.observation_scheme_id != PROGRAMDATA_OBSERVATION_MERKLE_SCHEME_ID_V1
-            || self.observation_chunk_size != PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB
+            || !observation_chunk_size_is_admitted
             || self.artifact_scheme_id != ARTIFACT_MERKLE_SCHEME_ID
             || self.artifact_chunk_size != ARTIFACT_BINDING_CHUNK_SIZE_V1
             || !self.zero_tail_required
@@ -1264,9 +1269,12 @@ fn require_nonzero_hashes(hashes: &[[u8; 32]]) -> GovernanceResult<()> {
 }
 
 fn observation_geometry(raw_length: u64, chunk_size: u32) -> GovernanceResult<(u32, u32, u8)> {
+    let chunk_size_is_admitted = chunk_size == PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB
+        || cfg!(feature = "programdata-observation-chunk-matrix")
+            && is_programdata_observation_chunk_size_candidate(chunk_size);
     if raw_length == 0
         || raw_length > MAX_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1
-        || chunk_size != PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB
+        || !chunk_size_is_admitted
     {
         return Err(GovernanceError::InvalidMerkleParameters);
     }
@@ -1591,6 +1599,7 @@ mod tests {
         pda::{derive_bootstrap_activation_pda, derive_target_handoff_pda},
         programdata_observation_merkle::{
             PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB,
+            PROGRAMDATA_OBSERVATION_CHUNK_SIZE_CANDIDATES_V1,
             PROGRAMDATA_OBSERVATION_MERKLE_SCHEME_MATERIAL_V1,
         },
         release1_ceremony_digest::{
@@ -2623,6 +2632,35 @@ mod tests {
             observation.validate_static(),
             Err(GovernanceError::InvalidRelease1Account)
         );
+    }
+
+    #[test]
+    fn comparative_chunk_candidates_cannot_change_normal_release_admission() {
+        for chunk_size in PROGRAMDATA_OBSERVATION_CHUNK_SIZE_CANDIDATES_V1 {
+            let mut policy = capacity_policy();
+            let count = programdata_observation_chunk_count(
+                policy.maximum_raw_programdata_length,
+                chunk_size,
+            )
+            .unwrap();
+            let padded = count.next_power_of_two();
+            let depth = padded.trailing_zeros() as u8;
+            policy.observation_chunk_size = chunk_size;
+            policy.observation_max_chunk_count = count;
+            policy.observation_padded_leaf_count = padded;
+            policy.observation_tree_depth = depth;
+
+            if cfg!(feature = "programdata-observation-chunk-matrix") {
+                policy.validate_static().unwrap();
+            } else if chunk_size == PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB {
+                policy.validate_static().unwrap();
+            } else {
+                assert_eq!(
+                    policy.validate_static(),
+                    Err(GovernanceError::InvalidRelease1Account)
+                );
+            }
+        }
     }
 
     #[test]
