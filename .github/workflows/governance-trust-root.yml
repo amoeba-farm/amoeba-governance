@@ -178,16 +178,18 @@ jobs:
           cargo test --locked -p upgrade_controller --test loader_program_test \
             actual_controller_sbf_ -- --ignored --test-threads=1
 
-      - name: Gate F model/processor differential through real Loader-v3 (v0)
+      - name: Gate F V3 witness-authorized sacrificial rollback (v0)
         shell: bash
         run: |
-          artifact="$RUNNER_TEMP/ameba-gov-sbpf/v0/deploy/upgrade_controller.so"
           export BPF_OUT_DIR="$RUNNER_TEMP/ameba-gov-sbpf/v0/deploy"
-          export AMOEBA_LOADER_TEST_ARTIFACT="$artifact"
-          export AMOEBA_LOADER_TEST_ARTIFACT_SHA256="$(sha256sum "$artifact" | cut -d ' ' -f 1)"
-          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-loader-differential-v0"
-          cargo test --locked -p upgrade_controller --test loader_program_test \
-            release1_model_differential_through_real_loader_and_separate_unfreeze \
+          export AMOEBA_SACRIFICIAL_TARGET_ARTIFACT="$(sed -n 's/^linked_artifact=//p' \
+            "$RUNNER_TEMP/ameba-gov-sbpf/v0/receipt.txt")"
+          test -f "$AMOEBA_SACRIFICIAL_TARGET_ARTIFACT"
+          export AMOEBA_V3_ROLLBACK_REHEARSAL=1
+          export AMOEBA_SBPF_TARGET=v0
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-v3-rollback-v0"
+          cargo test --locked -p upgrade_controller --test ceremony_closure_program_test \
+            actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation \
             -- --ignored --exact --test-threads=1
 
       - name: Maximum artifact chunk actual-controller-SBF benchmark (v0)
@@ -211,16 +213,18 @@ jobs:
           cargo test --locked -p upgrade_controller --test loader_program_test \
             actual_controller_sbf_ -- --ignored --test-threads=1
 
-      - name: Gate F model/processor differential through real Loader-v3 (v2)
+      - name: Gate F V3 witness-authorized sacrificial rollback (v2)
         shell: bash
         run: |
-          artifact="$RUNNER_TEMP/ameba-gov-sbpf/v2/deploy/upgrade_controller.so"
           export BPF_OUT_DIR="$RUNNER_TEMP/ameba-gov-sbpf/v2/deploy"
-          export AMOEBA_LOADER_TEST_ARTIFACT="$artifact"
-          export AMOEBA_LOADER_TEST_ARTIFACT_SHA256="$(sha256sum "$artifact" | cut -d ' ' -f 1)"
-          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-loader-differential-v2"
-          cargo test --locked -p upgrade_controller --test loader_program_test \
-            release1_model_differential_through_real_loader_and_separate_unfreeze \
+          export AMOEBA_SACRIFICIAL_TARGET_ARTIFACT="$(sed -n 's/^linked_artifact=//p' \
+            "$RUNNER_TEMP/ameba-gov-sbpf/v2/receipt.txt")"
+          test -f "$AMOEBA_SACRIFICIAL_TARGET_ARTIFACT"
+          export AMOEBA_V3_ROLLBACK_REHEARSAL=1
+          export AMOEBA_SBPF_TARGET=v2
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-v3-rollback-v2"
+          cargo test --locked -p upgrade_controller --test ceremony_closure_program_test \
+            actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation \
             -- --ignored --exact --test-threads=1
 
       - name: Maximum artifact chunk actual-controller-SBF benchmark (v2)
