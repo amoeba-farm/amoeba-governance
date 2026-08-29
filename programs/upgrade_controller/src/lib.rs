@@ -18,6 +18,7 @@ pub mod gate_abi;
 pub mod instruction;
 pub mod pda;
 pub mod policy;
+pub mod programdata_observation_merkle;
 pub mod processor;
 pub mod proposal;
 pub mod release1_account_io;
