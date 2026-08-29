@@ -289,6 +289,11 @@ test("installed executable requires one explicit local injected-adapter module",
   await assert.rejects(runUpgradeGovernanceExecutableV1([
     "--adapter-module", "https://example.invalid/adapter.mjs", "schema",
   ], { stdout() {}, stderr() {} }), /local file path/u);
+  assert.equal(await runUpgradeGovernanceExecutableV1([
+    "--adapter-module", "C:\\ceremony\\operator-adapter.mjs", "schema",
+  ], { stdout() {}, stderr() {} }, async () => ({
+    createUpgradeGovernanceCliAdaptersV1: () => a,
+  })), 0);
 }));
 
 test("schema and finalized observe paths never construct execution dependencies", () => temporary(async (directory) => {

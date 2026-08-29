@@ -19,7 +19,10 @@ import {
   RELEASE1_APPROVAL_THRESHOLD,
   type OptionalPublicKeyV1,
 } from "./release1.js";
-import { SYNTHETIC_CONTROLLER_PROGRAM_V1 } from "./spreadGateBridgeV1.js";
+import {
+  LOCAL_CEREMONY_CONTROLLER_PROGRAM_V1,
+  SYNTHETIC_CONTROLLER_PROGRAM_V1,
+} from "./spreadGateBridgeV1.js";
 import {
   BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
   UPGRADE_SEED_DOMAIN_V1,
@@ -938,6 +941,28 @@ function loaderProgramdataHeader(slot: bigint, authority: OptionalPublicKeyV1): 
   return out;
 }
 
+function loaderProgramdataHeaderMatches(
+  snapshot: Uint8Array,
+  slot: bigint,
+  authority: OptionalPublicKeyV1,
+): boolean {
+  const header = requireBytes(
+    snapshot,
+    Number(LOADER_V3_PROGRAMDATA_METADATA_LEN_V1),
+    "programdataHeaderSnapshot",
+  );
+  if (header.readUInt32LE(0) !== 3 || header.readBigUInt64LE(4) !== slot) return false;
+  const optionTag = header[12];
+  if (!authority.present) {
+    // Loader v3 serializes None as only the option tag. It does not clear the
+    // former authority bytes in the rest of the fixed metadata region. Those
+    // bytes stay bound by the raw observation and account digest but have no
+    // authority semantics.
+    return optionTag === 0;
+  }
+  return optionTag === 1 && header.subarray(13).equals(authority.value.toBuffer());
+}
+
 export function validateProgramDataObservationV1(value: ProgramDataObservationV1): void {
   requireHeader(value, PROGRAMDATA_OBSERVATION_V1_DISCRIMINATOR, PROGRAMDATA_OBSERVATION_V1_RESERVED_LEN, "ProgramDataObservationV1");
   requireEnum(value.purpose, Object.values(ProgramDataObservationPurposeV1), "ProgramDataObservationPurposeV1");
@@ -947,7 +972,7 @@ export function validateProgramDataObservationV1(value: ProgramDataObservationV1
   for (const [field, entry] of Object.entries({ capacityPolicyDigest: value.capacityPolicyDigest, subjectDigest: value.subjectDigest, expectedArtifactSha256: value.expectedArtifactSha256, expectedArtifactMerkleRoot: value.expectedArtifactMerkleRoot, expectedArtifactSchemeId: value.expectedArtifactSchemeId, rawObservationSchemeId: value.rawObservationSchemeId })) requireHash(entry, field);
   validateLoaderGraph(value.upgradeableLoader);
   const authority = requireOptionalKey(value.upgradeAuthority, "upgradeAuthority");
-  if (!value.programOwner.equals(value.upgradeableLoader) || !value.programdataOwner.equals(value.upgradeableLoader) || !value.programExecutable || value.programdataExecutable || !value.programHeaderPresent || !value.programdataHeaderPresent || value.programDataLength !== BigInt(LOADER_V3_PROGRAM_ACCOUNT_LEN_V1) || !value.linkedProgramdata.equals(value.targetProgramdata) || !requireBytes(value.programHeaderSnapshot, LOADER_V3_PROGRAM_ACCOUNT_LEN_V1, "programHeaderSnapshot").equals(loaderProgramHeader(value.targetProgramdata)) || !requireBytes(value.programdataHeaderSnapshot, Number(LOADER_V3_PROGRAMDATA_METADATA_LEN_V1), "programdataHeaderSnapshot").equals(loaderProgramdataHeader(value.deployedSlot, authority))) throw new Error("ProgramData observation Loader graph or header snapshot mismatch");
+  if (!value.programOwner.equals(value.upgradeableLoader) || !value.programdataOwner.equals(value.upgradeableLoader) || !value.programExecutable || value.programdataExecutable || !value.programHeaderPresent || !value.programdataHeaderPresent || value.programDataLength !== BigInt(LOADER_V3_PROGRAM_ACCOUNT_LEN_V1) || !value.linkedProgramdata.equals(value.targetProgramdata) || !requireBytes(value.programHeaderSnapshot, LOADER_V3_PROGRAM_ACCOUNT_LEN_V1, "programHeaderSnapshot").equals(loaderProgramHeader(value.targetProgramdata)) || !loaderProgramdataHeaderMatches(value.programdataHeaderSnapshot, value.deployedSlot, authority)) throw new Error("ProgramData observation Loader graph or header snapshot mismatch");
   if (value.generation === 0n || value.gateEpoch === 0n || value.payloadOffset !== Number(LOADER_V3_PROGRAMDATA_METADATA_LEN_V1) || value.rawDataLength !== value.actualCapacity + LOADER_V3_PROGRAMDATA_METADATA_LEN_V1 || value.rawDataLength > BigInt(MAX_PROGRAMDATA_ACCOUNT_BYTES_V1) || value.actualCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.minimumRequiredCapacity < value.expectedArtifactLength || value.minimumRequiredCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.actualCapacity < value.minimumRequiredCapacity || value.deployedSlot === 0n || value.startSlot === 0n || value.lastObservedSlot < value.startSlot) throw new Error("ProgramData observation numeric binding mismatch");
   const activeGate = value.gateActiveProposal.equals(PublicKey.default) && value.gateFreezeSlot === 0n && value.gateFreezeReasonCode === 0;
   const upgradeFrozenGate = value.gateActiveProposal.equals(value.subject) && value.gateFreezeSlot !== 0n && value.gateFreezeReasonCode !== 0 && value.gateFreezeReasonCode !== BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1;
@@ -1292,7 +1317,11 @@ export function validateRelease1CeremonyPlanV1(value: Release1CeremonyPlanV1): v
   requireBoolean(value.production, "production");
   for (const [field, entry] of Object.entries({ controllerProgram: value.controllerProgram, controllerConfig: value.controllerConfig, targetProgram: value.targetProgram, targetProgramdata: value.targetProgramdata, controllerAuthority: value.controllerAuthority, capacityPolicy: value.capacityPolicy, controllerRelease: value.controllerRelease, controllerImmutabilityReceipt: value.controllerImmutabilityReceipt, programdataObservation: value.programdataObservation, handoffProposal: value.handoffProposal, handoffReceipt: value.handoffReceipt, legacyAuthority: value.legacyAuthority, activationProposal: value.activationProposal, activationReceipt: value.activationReceipt, currentDeploymentState: value.currentDeploymentState })) requireNondefaultKey(entry, field);
   for (const [field, entry] of Object.entries({ clusterDomain: value.clusterDomain, capacityPolicyDigest: value.capacityPolicyDigest, controllerReleaseDigest: value.controllerReleaseDigest, observationDigest: value.observationDigest, bridgeArtifactSha256: value.bridgeArtifactSha256, bridgeArtifactMerkleRoot: value.bridgeArtifactMerkleRoot, councilHash: value.councilHash })) requireHash(entry, field);
-  if (value.production && value.controllerProgram.equals(SYNTHETIC_CONTROLLER_PROGRAM_V1)) throw new Error("synthetic controller identity cannot be planned as production");
+  if (
+    value.production &&
+    (value.controllerProgram.equals(SYNTHETIC_CONTROLLER_PROGRAM_V1) ||
+      value.controllerProgram.equals(LOCAL_CEREMONY_CONTROLLER_PROGRAM_V1))
+  ) throw new Error("synthetic controller identity cannot be planned as production");
   if (value.controllerAuthority.equals(value.legacyAuthority)) throw new Error("legacy and controller authorities must differ");
   if (value.observationGeneration === 0n || value.actualCapacity < value.bridgeArtifactLength || value.actualCapacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 || value.gateEpoch === 0n || value.targetNonce === 0n || value.councilVersion === 0n || value.plannedAtSlot === 0n || value.expiresAtSlot <= value.plannedAtSlot) throw new Error("ceremony plan numeric binding is invalid");
   validateArtifactIdentity(value.bridgeArtifactLength, value.bridgeArtifactSha256, value.bridgeArtifactMerkleRoot, ARTIFACT_MERKLE_SCHEME_ID);

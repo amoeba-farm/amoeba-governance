@@ -53,7 +53,10 @@ import {
   type TargetAuthorityHandoffReceiptV1,
 } from "./release1Ceremony.js";
 import { GateStatusV1, RELEASE1_APPROVAL_THRESHOLD } from "./release1.js";
-import { SYNTHETIC_CONTROLLER_PROGRAM_V1 } from "./spreadGateBridgeV1.js";
+import {
+  LOCAL_CEREMONY_CONTROLLER_PROGRAM_V1,
+  SYNTHETIC_CONTROLLER_PROGRAM_V1,
+} from "./spreadGateBridgeV1.js";
 import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from "./v1.js";
 
 export const GOVERNED_RELEASE1_CEREMONY_RECEIPT_V4_SCHEMA =
@@ -515,7 +518,7 @@ function validateOldAuthorityRejection(
   handoffSlot: bigint,
 ): void {
   assertExactKeys(evidence, ["attemptedSlot", "signatureHex", "status", "errorSha256", "authorityAfter", "targetRawRootBefore", "targetRawRootAfter"], "formerAuthorityRejection");
-  if (u64(evidence.attemptedSlot, "formerAuthorityRejection.attemptedSlot") <= handoffSlot) fail("formerAuthorityRejection.attemptedSlot", "must occur after checked handoff");
+  if (u64(evidence.attemptedSlot, "formerAuthorityRejection.attemptedSlot") < handoffSlot) fail("formerAuthorityRejection.attemptedSlot", "must not predate checked handoff");
   if (typeof evidence.signatureHex !== "string" || !/^[0-9a-f]{128}$/u.test(evidence.signatureHex)) fail("formerAuthorityRejection.signatureHex", "must bind one canonical signature");
   if (evidence.status !== "failed" || !publicKey(evidence.authorityAfter, "formerAuthorityRejection.authorityAfter").equals(controllerAuthority)) fail("formerAuthorityRejection", "former-authority attempt did not fail closed with the controller still authoritative");
   hash32(evidence.errorSha256, "formerAuthorityRejection.errorSha256");
@@ -584,7 +587,7 @@ function validateUpgradeEvents(
     const path = `postHandoffUpgradeEvents[${index}]`;
     assertExactKeys(event, ["slot", "authorityKind", "authority", "status", "artifactSha256", "programdataObservationDigest"], path);
     const slot = u64(event.slot, `${path}.slot`);
-    if (slot <= handoffSlot || slot < priorSlot) fail(`${path}.slot`, "event is before handoff or out of order");
+    if (slot < handoffSlot || slot < priorSlot) fail(`${path}.slot`, "event is before handoff or out of order");
     priorSlot = slot;
     const authority = publicKey(event.authority, `${path}.authority`);
     hash32(event.artifactSha256, `${path}.artifactSha256`);
@@ -618,8 +621,12 @@ export function verifyGovernedRelease1CeremonyReceiptV4(
   if (receipt.identityKind !== "synthetic-local" && receipt.identityKind !== "production") fail("identityKind", "unknown identity class");
   if (receipt.production !== (receipt.identityKind === "production")) fail("identityKind", "production flag and identity class disagree");
   const controller = publicKey(receipt.controllerProgram, "controllerProgram");
-  if (receipt.production && controller.equals(SYNTHETIC_CONTROLLER_PROGRAM_V1)) fail("controllerProgram", "synthetic controller identity cannot be presented as production");
-  if (!receipt.production && !controller.equals(SYNTHETIC_CONTROLLER_PROGRAM_V1)) fail("controllerProgram", "local ceremony receipts must use the declared synthetic controller identity");
+  if (
+    receipt.production &&
+    (controller.equals(SYNTHETIC_CONTROLLER_PROGRAM_V1) ||
+      controller.equals(LOCAL_CEREMONY_CONTROLLER_PROGRAM_V1))
+  ) fail("controllerProgram", "synthetic controller identity cannot be presented as production");
+  if (!receipt.production && !controller.equals(LOCAL_CEREMONY_CONTROLLER_PROGRAM_V1)) fail("controllerProgram", "local ceremony receipts must use the declared local ceremony controller identity");
   const controllerProgramdata = publicKey(receipt.controllerProgramdata, "controllerProgramdata");
   const controllerConfig = publicKey(receipt.controllerConfig, "controllerConfig");
   const controllerAuthority = publicKey(receipt.controllerAuthority, "controllerAuthority");

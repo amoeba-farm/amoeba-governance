@@ -58,7 +58,8 @@ function parseExecutableArguments(argv: readonly string[]): {
       if (value === undefined || value.length === 0 || value.startsWith("--")) {
         throw new Error("--adapter-module requires a local file path");
       }
-      if (/^[a-z][a-z0-9+.-]*:/iu.test(value) || value.includes("\0")) {
+      const windowsAbsolutePath = /^[a-z]:[\\/]/iu.test(value);
+      if ((!windowsAbsolutePath && /^[a-z][a-z0-9+.-]*:/iu.test(value)) || value.includes("\0")) {
         throw new Error("--adapter-module accepts only a local file path");
       }
       if (!/\.(?:mjs|js)$/iu.test(value)) {

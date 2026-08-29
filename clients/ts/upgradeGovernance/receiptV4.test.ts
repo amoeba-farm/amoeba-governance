@@ -82,7 +82,7 @@ import {
   BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1,
   GateStatusV1,
 } from "./release1.js";
-import { SYNTHETIC_CONTROLLER_PROGRAM_V1 } from "./spreadGateBridgeV1.js";
+import { LOCAL_CEREMONY_CONTROLLER_PROGRAM_V1 } from "./spreadGateBridgeV1.js";
 import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from "./v1.js";
 
 const key = (seed: number): PublicKey => new PublicKey(Buffer.alloc(32, seed));
@@ -91,7 +91,7 @@ const hashHex = (seed: number): string => hash(seed).toString("hex");
 const present = (value: PublicKey) => ({ present: true, value }) as const;
 const absent = { present: false, value: PublicKey.default } as const;
 
-const controller = SYNTHETIC_CONTROLLER_PROGRAM_V1;
+const controller = LOCAL_CEREMONY_CONTROLLER_PROGRAM_V1;
 const controllerConfig = key(2);
 const target = key(3);
 const targetProgramdata = key(4);
@@ -809,6 +809,16 @@ test("receipt v4 independently verifies the complete synthetic ceremony evidence
     finalGateEpoch: "2",
   });
   assert.equal(receipt.receiptDigest, fixture().receiptDigest);
+});
+
+test("receipt v4 accepts a post-handoff rejection finalized in the handoff slot", () => {
+  const receipt = rematerialize(fixture(), (material) => {
+    material.formerAuthorityRejection.attemptedSlot = material.checkedHandoff.acceptedSlot;
+    material.postHandoffUpgradeEvents = material.postHandoffUpgradeEvents.map((event, index) => (
+      index === 0 ? { ...event, slot: material.checkedHandoff.acceptedSlot } : event
+    ));
+  });
+  assert.equal(verifyGovernedRelease1CeremonyReceiptV4(receipt).valid, true);
 });
 
 test("receipt v4 rejects missing or reordered mechanical evidence", () => {

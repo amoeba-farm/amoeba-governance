@@ -429,6 +429,32 @@ test("finalized observation strictly binds headers, frontier, zero tail, purpose
   assert.throws(() => deserializeProgramDataObservationV1(encoded.subarray(0, -1)), /1280 bytes/u);
 });
 
+test("immutable ProgramData observations retain but semantically ignore Loader stale authority bytes", () => {
+  const value = observation(
+    ProgramDataObservationPurposeV1.ControllerImmutability,
+    2n,
+    absent,
+    62,
+  );
+  const retainedHeader = Buffer.from(value.programdataHeaderSnapshot);
+  legacyAuthority.toBuffer().copy(retainedHeader, 13);
+  const retained = {
+    ...value,
+    programdataHeaderSnapshot: retainedHeader,
+  };
+  retained.observationDigest = programDataObservationDigestV1(retained);
+  const encoded = serializeProgramDataObservationV1(retained);
+  assert.deepEqual(deserializeProgramDataObservationV1(encoded), retained);
+  validateProgramDataObservationDigestV1(retained);
+
+  const invalidTag = Buffer.from(retainedHeader);
+  invalidTag[12] = 2;
+  assert.throws(
+    () => serializeProgramDataObservationV1({ ...retained, programdataHeaderSnapshot: invalidTag }),
+    /header/u,
+  );
+});
+
 test("observation subject digest and PDA bind artifact length and scheme", () => {
   const value = observation(ProgramDataObservationPurposeV1.ProposalPrestate, 1n, present(legacyAuthority), 61);
   const baseSubject = programDataObservationSubjectDigestV1(value);

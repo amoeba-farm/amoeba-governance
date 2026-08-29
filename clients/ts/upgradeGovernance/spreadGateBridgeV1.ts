@@ -16,6 +16,9 @@ import {
 export const SYNTHETIC_CONTROLLER_PROGRAM_V1 = new PublicKey(
   "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi",
 );
+export const LOCAL_CEREMONY_CONTROLLER_PROGRAM_V1 = new PublicKey(
+  "8qbHbw2BbbTHBW1sbeqakYXVKRQM8Ne7pLK7m6CVfeR",
+);
 export const AMEBA_SPREAD_PROGRAM_V1 = new PublicKey(
   "9ipkBCjEfeJDMF6AFrezRmDDHmbnmeyv45cfXNqAnWsH",
 );
