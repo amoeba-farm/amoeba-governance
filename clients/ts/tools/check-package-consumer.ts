@@ -62,12 +62,15 @@ try {
            "release1LifecycleInstructions" in root ||
            "release1LoaderInstructions" in root ||
            root.artifactMerkleV1.RELEASE1_ARTIFACT_CHUNK_SIZE_V1 !== 16 * 1024 ||
-           root.UPGRADE_GOVERNANCE_CLI_COMMANDS_V1.length !== 35 ||
+           root.UPGRADE_GOVERNANCE_CLI_COMMANDS_V1.length !== 49 ||
+           !root.UPGRADE_GOVERNANCE_CLI_COMMANDS_V1.includes("verify-local-ceremony") ||
            !root.OPERATOR_MUTATION_COMMANDS_V1.includes("execute-upgrade") ||
            !root.OPERATOR_MUTATION_COMMANDS_V1.includes("execute-emergency-resolution") ||
            !root.OPERATOR_MUTATION_COMMANDS_V1.includes("activate-rollback") ||
            root.GOVERNED_UPGRADE_RECEIPT_V3_VERSION !== 3 ||
-           typeof root.verifyGovernedUpgradeReceiptV3 !== "function") {
+           typeof root.verifyGovernedUpgradeReceiptV3 !== "function" ||
+           root.GOVERNED_RELEASE1_CEREMONY_RECEIPT_V4_VERSION !== 4 ||
+           typeof root.verifyGovernedRelease1CeremonyReceiptV4 !== "function") {
          throw new Error("installed package exports drifted");
        }`,
     ],
