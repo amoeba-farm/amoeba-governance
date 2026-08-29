@@ -65,7 +65,7 @@ pub const PROGRAMDATA_OBSERVATION_V1_RESERVED_LEN: usize = 98;
 pub const CURRENT_DEPLOYMENT_STATE_V1_RESERVED_LEN: usize = 187;
 pub const CONTROLLER_IMMUTABILITY_RECEIPT_V1_RESERVED_LEN: usize = 218;
 pub const TARGET_AUTHORITY_HANDOFF_PROPOSAL_V1_RESERVED_LEN: usize = 212;
-pub const TARGET_AUTHORITY_HANDOFF_RECEIPT_V1_RESERVED_LEN: usize = 98;
+pub const TARGET_AUTHORITY_HANDOFF_RECEIPT_V1_RESERVED_LEN: usize = 112;
 pub const BOOTSTRAP_ACTIVATION_PROPOSAL_V1_RESERVED_LEN: usize = 180;
 pub const BOOTSTRAP_ACTIVATION_RECEIPT_V1_RESERVED_LEN: usize = 56;
 
@@ -860,10 +860,8 @@ pub struct TargetAuthorityHandoffReceiptV1 {
     pub pre_observation_root: [u8; 32],
     pub pre_observation_digest: [u8; 32],
     pub pre_upgrade_authority: OptionalPubkeyV1,
-    pub post_observation: Pubkey,
-    pub post_observation_generation: u64,
-    pub post_observation_root: [u8; 32],
-    pub post_observation_digest: [u8; 32],
+    pub pre_programdata_header_snapshot: [u8; LOADER_PROGRAMDATA_METADATA_LEN],
+    pub post_programdata_header_snapshot: [u8; LOADER_PROGRAMDATA_METADATA_LEN],
     pub post_upgrade_authority: OptionalPubkeyV1,
     pub deployed_slot: u64,
     pub raw_programdata_length: u64,
@@ -904,7 +902,6 @@ impl TargetAuthorityHandoffReceiptV1 {
             self.target_programdata,
             self.upgradeable_loader,
             self.pre_observation,
-            self.post_observation,
         ])?;
         self.pre_upgrade_authority.validate()?;
         self.post_upgrade_authority.validate()?;
@@ -919,29 +916,30 @@ impl TargetAuthorityHandoffReceiptV1 {
             self.controller_immutability_digest,
             self.pre_observation_root,
             self.pre_observation_digest,
-            self.post_observation_root,
-            self.post_observation_digest,
             self.bridge_source_commitment,
             self.bridge_build_inputs_commitment,
             self.bridge_package_commitment,
             self.bridge_release_manifest_commitment,
             self.receipt_digest,
         ])?;
-        validate_authority_change_observations(
-            self.pre_observation,
-            self.pre_observation_generation,
-            &self.pre_observation_root,
-            &self.pre_observation_digest,
-            self.post_observation,
-            self.post_observation_generation,
-            &self.post_observation_root,
-            &self.post_observation_digest,
-        )?;
+        let pre_header = parse_upgradeable_programdata(&self.pre_programdata_header_snapshot)?;
+        let post_header = parse_upgradeable_programdata(&self.post_programdata_header_snapshot)?;
         if self.upgradeable_loader != UPGRADEABLE_LOADER_ID
             || !self.pre_upgrade_authority.present
             || !self.post_upgrade_authority.present
             || self.pre_upgrade_authority.value == self.controller_authority
             || self.post_upgrade_authority.value != self.controller_authority
+            || self.pre_observation_generation == 0
+            || pre_header.deployed_slot != self.deployed_slot
+            || post_header.deployed_slot != self.deployed_slot
+            || !optional_pubkey_matches_option(
+                &self.pre_upgrade_authority,
+                pre_header.upgrade_authority,
+            )
+            || !optional_pubkey_matches_option(
+                &self.post_upgrade_authority,
+                post_header.upgrade_authority,
+            )
             || self.raw_programdata_length
                 != self
                     .programdata_capacity
@@ -1876,10 +1874,8 @@ mod tests {
             pre_observation_root: digest(11),
             pre_observation_digest: digest(12),
             pre_upgrade_authority: some(13),
-            post_observation: key(14),
-            post_observation_generation: 2,
-            post_observation_root: digest(15),
-            post_observation_digest: digest(16),
+            pre_programdata_header_snapshot: programdata_header(17, some(13)),
+            post_programdata_header_snapshot: programdata_header(17, some(5)),
             post_upgrade_authority: some(5),
             deployed_slot: 17,
             raw_programdata_length: 32_768 + u64::from(PROGRAMDATA_PAYLOAD_OFFSET_V1),

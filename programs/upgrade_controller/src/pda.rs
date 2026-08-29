@@ -334,12 +334,15 @@ pub fn derive_controller_immutability_receipt_pda(
 pub fn derive_target_handoff_pda(
     controller_program: &Pubkey,
     target_program: &Pubkey,
+    council_version: u64,
 ) -> (Pubkey, u8) {
+    let council_version_seed = council_version.to_le_bytes();
     Pubkey::find_program_address(
         &[
             UPGRADE_SEED_DOMAIN_V1,
             TARGET_HANDOFF_SEED,
             target_program.as_ref(),
+            &council_version_seed,
         ],
         controller_program,
     )
@@ -362,12 +365,15 @@ pub fn derive_target_handoff_receipt_pda(
 pub fn derive_bootstrap_activation_pda(
     controller_program: &Pubkey,
     target_program: &Pubkey,
+    council_version: u64,
 ) -> (Pubkey, u8) {
+    let council_version_seed = council_version.to_le_bytes();
     Pubkey::find_program_address(
         &[
             UPGRADE_SEED_DOMAIN_V1,
             BOOTSTRAP_ACTIVATION_SEED,
             target_program.as_ref(),
+            &council_version_seed,
         ],
         controller_program,
     )
@@ -419,9 +425,9 @@ mod tests {
             derive_programdata_observation_pda(&controller, &target, 1, 7).0,
             derive_current_deployment_state_pda(&controller, &target).0,
             derive_controller_immutability_receipt_pda(&controller, &target).0,
-            derive_target_handoff_pda(&controller, &target).0,
+            derive_target_handoff_pda(&controller, &target, 7).0,
             derive_target_handoff_receipt_pda(&controller, &target).0,
-            derive_bootstrap_activation_pda(&controller, &target).0,
+            derive_bootstrap_activation_pda(&controller, &target, 7).0,
             derive_bootstrap_activation_receipt_pda(&controller, &target).0,
         ];
         for (index, address) in addresses.iter().enumerate() {
