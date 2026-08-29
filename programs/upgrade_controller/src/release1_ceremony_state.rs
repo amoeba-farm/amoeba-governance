@@ -2650,9 +2650,9 @@ mod tests {
             policy.observation_padded_leaf_count = padded;
             policy.observation_tree_depth = depth;
 
-            if cfg!(feature = "programdata-observation-chunk-matrix") {
-                policy.validate_static().unwrap();
-            } else if chunk_size == PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB {
+            if cfg!(feature = "programdata-observation-chunk-matrix")
+                || chunk_size == PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB
+            {
                 policy.validate_static().unwrap();
             } else {
                 assert_eq!(
