@@ -36,7 +36,7 @@ use std::{
 use upgrade_controller::{
     artifact_merkle::{
         artifact_chunk_count, artifact_merkle_proof, artifact_merkle_root,
-        ARTIFACT_MERKLE_SCHEME_ID, MAX_ARTIFACT_PROOF_DEPTH_V1,
+        ARTIFACT_MERKLE_SCHEME_ID, MAX_ARTIFACT_BYTES_V1, MAX_ARTIFACT_PROOF_DEPTH_V1,
     },
     council::compute_council_set_hash,
     pda::{
@@ -154,7 +154,7 @@ const TERMINAL_DELAY: u64 = 30;
 // It leaves enough naturally advancing slot runway to seal both the primary
 // and precommitted rollback artifacts before council approval begins.
 const REVIEW_SLOTS: u64 = 1_024;
-const MAX_REHEARSED_ARTIFACT_LENGTH: u64 = 1_300_000;
+const MAX_REHEARSED_ARTIFACT_LENGTH: u64 = MAX_ARTIFACT_BYTES_V1;
 const BUFFER_REVIEW_FIXED_RUNWAY_SLOTS: u64 = 64;
 // The standalone validator submits hundreds of exact chunk transactions. Keep
 // the synthetic rehearsal expiry well beyond that real-RPC runway while the
@@ -3059,8 +3059,21 @@ fn standalone_review_profile_covers_two_verified_artifacts() {
 #[ignore = "requires exact controller and synthetic identity-bound Spread SBF artifacts"]
 async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation() {
     let standalone = std::env::var("AMOEBA_STANDALONE_VALIDATOR").as_deref() == Ok("1");
+    let maximum_geometry = std::env::var("AMOEBA_MAXIMUM_GEOMETRY").as_deref() == Ok("1");
+    assert!(
+        !(standalone && maximum_geometry),
+        "maximum geometry is an actual-SBF ProgramTest proof; standalone evidence uses the real Spread artifact"
+    );
     let controller_artifact = read_controller_sbf();
-    let spread_artifact = read_spread_sbf();
+    let mut spread_artifact = read_spread_sbf();
+    if maximum_geometry {
+        spread_artifact.resize(MAX_ARTIFACT_BYTES_V1 as usize, 0);
+    }
+    let target_programdata_capacity = if maximum_geometry {
+        MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1 as usize
+    } else {
+        spread_artifact.len()
+    };
     let controller = Pubkey::from_str("8qbHbw2BbbTHBW1sbeqakYXVKRQM8Ne7pLK7m6CVfeR")
         .expect("synthetic local ceremony controller id");
     let controller_programdata = derive_upgradeable_programdata_address(&controller).0;
@@ -3150,7 +3163,7 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
                 GENESIS_PROGRAMDATA_SLOT,
                 harness.legacy_authority.pubkey(),
                 &spread_artifact,
-                spread_artifact.len(),
+                target_programdata_capacity,
             ),
             false,
         ),
@@ -3724,7 +3737,7 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         );
         submit_with_durable_nonce(
             &mut context,
-            &[limit, price, advance_nonce, execute_upgrade],
+            &[advance_nonce, limit, price, execute_upgrade],
             &[],
             durable_nonce_blockhash,
         )
@@ -3966,6 +3979,54 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         )
         .expect("write standalone transaction evidence");
         run_local_ceremony_cli(validator, context.cluster_domain);
+    }
+
+    if maximum_geometry {
+        let raw_chunk_count = programdata_observation_chunk_count(
+            deployed_bytes.len() as u64,
+            PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB,
+        )
+        .expect("maximum ProgramData raw chunk count");
+        let artifact_chunk_count =
+            artifact_chunk_count(spread_artifact.len() as u64, ARTIFACT_BINDING_CHUNK_SIZE_V1)
+                .expect("maximum artifact chunk count");
+        assert_eq!(spread_artifact.len() as u64, MAX_ARTIFACT_BYTES_V1);
+        assert_eq!(
+            deployed_bytes.len() as u64,
+            MAX_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1
+        );
+        assert_eq!(raw_chunk_count, 640);
+        assert_eq!(artifact_chunk_count, 96);
+        let maximum_evidence = json!({
+            "schema": "amoeba-release1-maximum-geometry-actual-sbf-v1",
+            "sbpfTarget": std::env::var("AMOEBA_SBPF_TARGET").unwrap_or_else(|_| "unspecified".into()),
+            "controllerElfLength": controller_artifact.len(),
+            "controllerElfSha256": lower_hex(hashv(&[&controller_artifact]).as_ref()),
+            "artifactLength": spread_artifact.len(),
+            "artifactSha256": lower_hex(hashv(&[&spread_artifact]).as_ref()),
+            "programdataPayloadCapacity": target_programdata_capacity,
+            "rawProgramdataLength": deployed_bytes.len(),
+            "rawObservationChunkSize": PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB,
+            "rawObservationChunkCount": raw_chunk_count,
+            "artifactChunkSize": ARTIFACT_BINDING_CHUNK_SIZE_V1,
+            "artifactChunkCount": artifact_chunk_count,
+            "fullV3LoaderLifecycle": true,
+            "rollbackPreparedAndRetired": true,
+            "firstSpreadMutation": true,
+            "finalGateEpoch": final_gate.epoch,
+            "liveRpcWrite": false,
+        });
+        if let Some(evidence_dir) = std::env::var_os("AMOEBA_MAXIMUM_EVIDENCE_DIR") {
+            let evidence_dir = PathBuf::from(evidence_dir);
+            fs::create_dir_all(&evidence_dir).expect("create maximum-geometry evidence directory");
+            fs::write(
+                evidence_dir.join("maximum-geometry-actual-sbf.json"),
+                serde_json::to_vec_pretty(&maximum_evidence)
+                    .expect("serialize maximum-geometry evidence"),
+            )
+            .expect("write maximum-geometry evidence");
+        }
+        println!("AMOEBA_MAXIMUM_GEOMETRY_EVIDENCE={maximum_evidence}");
     }
 
     println!(
