@@ -7,7 +7,7 @@
 use std::io::{Error, ErrorKind, Read, Write};
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use solana_program::pubkey::Pubkey;
+use solana_program::{pubkey, pubkey::Pubkey};
 
 use crate::{
     artifact_merkle::{
@@ -17,9 +17,9 @@ use crate::{
     council::VALID_APPROVAL_MASK,
     pda::UPGRADEABLE_LOADER_ID,
     programdata_observation_merkle::{
-        is_programdata_observation_chunk_size_candidate, programdata_observation_chunk_count,
-        MAX_PADDED_PROGRAMDATA_OBSERVATION_CHUNKS_V1, MAX_PROGRAMDATA_OBSERVATION_CHUNKS_V1,
-        MAX_PROGRAMDATA_OBSERVATION_TREE_DEPTH_V1, MAX_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1,
+        programdata_observation_chunk_count, MAX_PADDED_PROGRAMDATA_OBSERVATION_CHUNKS_V1,
+        MAX_PROGRAMDATA_OBSERVATION_CHUNKS_V1, MAX_PROGRAMDATA_OBSERVATION_TREE_DEPTH_V1,
+        MAX_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1, PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB,
         PROGRAMDATA_OBSERVATION_FRONTIER_SLOTS_V1, PROGRAMDATA_OBSERVATION_MERKLE_SCHEME_ID_V1,
     },
     release1_loader_accounts::{
@@ -47,6 +47,10 @@ pub const MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1: u64 =
     MAX_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1 - LOADER_PROGRAMDATA_METADATA_LEN as u64;
 pub const PROGRAMDATA_PAYLOAD_OFFSET_V1: u32 = LOADER_PROGRAMDATA_METADATA_LEN as u32;
 pub const ARTIFACT_BINDING_CHUNK_SIZE_V1: u32 = RELEASE1_ARTIFACT_CHUNK_SIZE_V1;
+pub const EXTEND_PROGRAM_CHECKED_FEATURE_ID_V1: Pubkey =
+    pubkey!("2oMRZEDWT2tqtYMofhmmfQ8SsjqUFzT6sYXppQDavxwz");
+pub const SET_AUTHORITY_CHECKED_FEATURE_ID_V1: Pubkey =
+    pubkey!("5x3825XS7M2A3Ekbn5VGGkvFoAg5qrRWkTrY4bARP1GL");
 
 pub const PROGRAMDATA_OBSERVATION_FRONTIER_HASHES_V1: usize =
     PROGRAMDATA_OBSERVATION_FRONTIER_SLOTS_V1;
@@ -61,7 +65,7 @@ pub const CEREMONY_PROPOSAL_EXPIRED_REASON_V1: u16 = 2;
 
 pub const PROGRAMDATA_CAPACITY_POLICY_V1_RESERVED_LEN: usize = 122;
 pub const CONTROLLER_RELEASE_COMMITMENT_V1_RESERVED_LEN: usize = 59;
-pub const PROGRAMDATA_OBSERVATION_V1_RESERVED_LEN: usize = 98;
+pub const PROGRAMDATA_OBSERVATION_V1_RESERVED_LEN: usize = 15;
 pub const CURRENT_DEPLOYMENT_STATE_V1_RESERVED_LEN: usize = 187;
 pub const CONTROLLER_IMMUTABILITY_RECEIPT_V1_RESERVED_LEN: usize = 218;
 pub const TARGET_AUTHORITY_HANDOFF_PROPOSAL_V1_RESERVED_LEN: usize = 212;
@@ -98,6 +102,7 @@ macro_rules! impl_strict_account {
         impl $name {
             pub const LEN: usize = $len;
 
+            #[cfg(not(target_os = "solana"))]
             pub fn from_bytes_strict(data: &[u8]) -> GovernanceResult<Self> {
                 if data.len() != Self::LEN {
                     return Err(GovernanceError::InvalidAccountSize);
@@ -214,12 +219,14 @@ impl ProgramDataCapacityPolicyV1 {
             self.set_authority_checked_feature,
         ])?;
         if self.upgradeable_loader != UPGRADEABLE_LOADER_ID
-            || self.extend_program_checked_feature == self.set_authority_checked_feature
+            || self.extend_program_checked_feature != EXTEND_PROGRAM_CHECKED_FEATURE_ID_V1
+            || self.set_authority_checked_feature != SET_AUTHORITY_CHECKED_FEATURE_ID_V1
             || self.loader_programdata_metadata_len != LOADER_PROGRAMDATA_METADATA_LEN as u64
             || self.maximum_raw_programdata_length != MAX_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1
             || self.maximum_payload_capacity != MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1
             || self.maximum_artifact_length != MAX_ARTIFACT_BYTES_V1
             || self.observation_scheme_id != PROGRAMDATA_OBSERVATION_MERKLE_SCHEME_ID_V1
+            || self.observation_chunk_size != PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB
             || self.artifact_scheme_id != ARTIFACT_MERKLE_SCHEME_ID
             || self.artifact_chunk_size != ARTIFACT_BINDING_CHUNK_SIZE_V1
             || !self.zero_tail_required
@@ -268,7 +275,7 @@ pub struct ControllerReleaseCommitmentV1 {
     pub release_manifest_commitment: [u8; 32],
     pub abi_commitment: [u8; 32],
     pub pre_immutability_authority: OptionalPubkeyV1,
-    pub expected_programdata_capacity: u64,
+    pub minimum_programdata_capacity: u64,
     pub release_digest: [u8; 32],
     pub creation_slot: u64,
     pub finalized: bool,
@@ -310,8 +317,8 @@ impl ControllerReleaseCommitmentV1 {
         ])?;
         if self.upgradeable_loader != UPGRADEABLE_LOADER_ID
             || !self.pre_immutability_authority.present
-            || self.expected_programdata_capacity < self.artifact_length
-            || self.expected_programdata_capacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1
+            || self.minimum_programdata_capacity < self.artifact_length
+            || self.minimum_programdata_capacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1
             || self.creation_slot == 0
             || !self.finalized
         {
@@ -336,6 +343,12 @@ pub struct ProgramDataObservationV1 {
     pub subject: Pubkey,
     pub subject_digest: [u8; 32],
     pub generation: u64,
+    pub protocol_gate: Pubkey,
+    pub gate_status: GateStatusV1,
+    pub gate_epoch: u64,
+    pub gate_active_proposal: Pubkey,
+    pub gate_freeze_slot: u64,
+    pub gate_freeze_reason_code: u16,
     pub target_program: Pubkey,
     pub target_programdata: Pubkey,
     pub upgradeable_loader: Pubkey,
@@ -403,6 +416,7 @@ impl ProgramDataObservationV1 {
             self.controller_config,
             self.capacity_policy,
             self.subject,
+            self.protocol_gate,
             self.target_program,
             self.target_programdata,
             self.upgradeable_loader,
@@ -420,6 +434,7 @@ impl ProgramDataObservationV1 {
         ])?;
         self.upgrade_authority.validate()?;
         if self.generation == 0
+            || self.gate_epoch == 0
             || self.upgradeable_loader != UPGRADEABLE_LOADER_ID
             || self.program_owner != self.upgradeable_loader
             || self.programdata_owner != self.upgradeable_loader
@@ -446,15 +461,47 @@ impl ProgramDataObservationV1 {
         {
             return Err(GovernanceError::InvalidRelease1Account);
         }
+        let active_gate = self.gate_active_proposal == Pubkey::default()
+            && self.gate_freeze_slot == 0
+            && self.gate_freeze_reason_code == 0;
+        let upgrade_frozen_gate = self.gate_active_proposal == self.subject
+            && self.gate_freeze_slot != 0
+            && self.gate_freeze_reason_code != 0
+            && self.gate_freeze_reason_code != BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1;
+        let emergency_frozen_gate = self.gate_active_proposal == Pubkey::default()
+            && self.gate_freeze_slot != 0
+            && self.gate_freeze_reason_code != 0;
+        let gate_matches_purpose = match self.purpose {
+            ProgramDataObservationPurposeV1::ControllerImmutability
+            | ProgramDataObservationPurposeV1::TargetHandoffBridge
+            | ProgramDataObservationPurposeV1::BootstrapActivation => {
+                self.gate_status == GateStatusV1::EmergencyFrozen
+                    && emergency_frozen_gate
+                    && self.gate_freeze_reason_code == BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1
+            }
+            ProgramDataObservationPurposeV1::ProposalPrestate
+            | ProgramDataObservationPurposeV1::PostUpgrade
+            | ProgramDataObservationPurposeV1::Rollback => {
+                self.gate_status == GateStatusV1::FrozenForUpgrade && upgrade_frozen_gate
+            }
+            ProgramDataObservationPurposeV1::EmergencyResolution => {
+                self.gate_status == GateStatusV1::EmergencyFrozen
+                    && emergency_frozen_gate
+                    && self.gate_freeze_reason_code != BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1
+            }
+        };
+        if active_gate || !gate_matches_purpose {
+            return Err(GovernanceError::InvalidRelease1Account);
+        }
 
         let program_header = parse_upgradeable_program(&self.program_header_snapshot)?;
         let programdata_header = parse_upgradeable_programdata(&self.programdata_header_snapshot)?;
         if program_header.programdata_address != self.target_programdata
             || programdata_header.deployed_slot != self.deployed_slot
-            || optional_pubkey_matches_option(
+            || !optional_pubkey_matches_option(
                 &self.upgrade_authority,
                 programdata_header.upgrade_authority,
-            ) == false
+            )
         {
             return Err(GovernanceError::InvalidRelease1Account);
         }
@@ -780,9 +827,9 @@ pub struct TargetAuthorityHandoffProposalV1 {
     pub bridge_observation_generation: u64,
     pub bridge_observation_root: [u8; 32],
     pub bridge_observation_digest: [u8; 32],
-    pub expected_target_deployed_slot: u64,
-    pub expected_target_capacity: u64,
-    pub expected_target_raw_length: u64,
+    pub minimum_target_deployed_slot: u64,
+    pub minimum_target_capacity: u64,
+    pub minimum_target_raw_length: u64,
     pub bootstrap_gate_status: GateStatusV1,
     pub bootstrap_gate_epoch: u64,
     pub bootstrap_freeze_reason_code: u16,
@@ -997,9 +1044,9 @@ pub struct BootstrapActivationProposalV1 {
     pub bridge_observation_generation: u64,
     pub bridge_observation_root: [u8; 32],
     pub bridge_observation_digest: [u8; 32],
-    pub expected_target_deployed_slot: u64,
-    pub expected_target_capacity: u64,
-    pub expected_target_raw_length: u64,
+    pub minimum_target_deployed_slot: u64,
+    pub minimum_target_capacity: u64,
+    pub minimum_target_raw_length: u64,
     pub bootstrap_gate_status: GateStatusV1,
     pub bootstrap_gate_epoch: u64,
     pub bootstrap_freeze_reason_code: u16,
@@ -1209,7 +1256,7 @@ fn require_nondefault_keys(keys: &[Pubkey]) -> GovernanceResult<()> {
 }
 
 fn require_nonzero_hashes(hashes: &[[u8; 32]]) -> GovernanceResult<()> {
-    if hashes.iter().any(|hash| *hash == [0; 32]) {
+    if hashes.contains(&[0; 32]) {
         Err(GovernanceError::InvalidRelease1Account)
     } else {
         Ok(())
@@ -1219,7 +1266,7 @@ fn require_nonzero_hashes(hashes: &[[u8; 32]]) -> GovernanceResult<()> {
 fn observation_geometry(raw_length: u64, chunk_size: u32) -> GovernanceResult<(u32, u32, u8)> {
     if raw_length == 0
         || raw_length > MAX_RAW_PROGRAMDATA_ACCOUNT_BYTES_V1
-        || !is_programdata_observation_chunk_size_candidate(chunk_size)
+        || chunk_size != PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB
     {
         return Err(GovernanceError::InvalidMerkleParameters);
     }
@@ -1342,12 +1389,12 @@ fn validate_handoff_common(value: &TargetAuthorityHandoffProposalV1) -> Governan
     if value.upgradeable_loader != UPGRADEABLE_LOADER_ID
         || value.legacy_target_authority == value.controller_authority
         || value.bridge_observation_generation == 0
-        || value.expected_target_deployed_slot == 0
-        || value.expected_target_capacity < value.bridge_artifact_length
-        || value.expected_target_capacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1
-        || value.expected_target_raw_length
+        || value.minimum_target_deployed_slot == 0
+        || value.minimum_target_capacity < value.bridge_artifact_length
+        || value.minimum_target_capacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1
+        || value.minimum_target_raw_length
             != value
-                .expected_target_capacity
+                .minimum_target_capacity
                 .checked_add(PROGRAMDATA_PAYLOAD_OFFSET_V1.into())
                 .ok_or(GovernanceError::ArithmeticOverflow)?
         || value.bootstrap_gate_status != GateStatusV1::EmergencyFrozen
@@ -1401,12 +1448,12 @@ fn validate_activation_common(value: &BootstrapActivationProposalV1) -> Governan
     )?;
     if value.upgradeable_loader != UPGRADEABLE_LOADER_ID
         || value.bridge_observation_generation == 0
-        || value.expected_target_deployed_slot == 0
-        || value.expected_target_capacity < value.bridge_artifact_length
-        || value.expected_target_capacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1
-        || value.expected_target_raw_length
+        || value.minimum_target_deployed_slot == 0
+        || value.minimum_target_capacity < value.bridge_artifact_length
+        || value.minimum_target_capacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1
+        || value.minimum_target_raw_length
             != value
-                .expected_target_capacity
+                .minimum_target_capacity
                 .checked_add(PROGRAMDATA_PAYLOAD_OFFSET_V1.into())
                 .ok_or(GovernanceError::ArithmeticOverflow)?
         || value.bootstrap_gate_status != GateStatusV1::EmergencyFrozen
@@ -1534,14 +1581,27 @@ fn validate_approval_pair(bitset: u8, count: u8) -> GovernanceResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::{collections::BTreeSet, fs, path::PathBuf};
 
+    use serde_json::{json, Value};
     use solana_program::hash::hash;
 
     use super::*;
-    use crate::programdata_observation_merkle::{
-        PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB,
-        PROGRAMDATA_OBSERVATION_MERKLE_SCHEME_MATERIAL_V1,
+    use crate::{
+        pda::{derive_bootstrap_activation_pda, derive_target_handoff_pda},
+        programdata_observation_merkle::{
+            PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB,
+            PROGRAMDATA_OBSERVATION_MERKLE_SCHEME_MATERIAL_V1,
+        },
+        release1_ceremony_digest::{
+            compute_bootstrap_activation_proposal_digest_v1,
+            compute_bootstrap_activation_receipt_digest_v1, compute_capacity_policy_digest_v1,
+            compute_controller_immutability_receipt_digest_v1,
+            compute_controller_release_digest_v1, compute_current_deployment_digest_v1,
+            compute_programdata_observation_digest_v1,
+            compute_programdata_observation_subject_digest_v1,
+            compute_target_handoff_proposal_digest_v1, compute_target_handoff_receipt_digest_v1,
+        },
     };
 
     fn key(byte: u8) -> Pubkey {
@@ -1601,8 +1661,8 @@ mod tests {
             artifact_scheme_id: ARTIFACT_MERKLE_SCHEME_ID,
             artifact_chunk_size: ARTIFACT_BINDING_CHUNK_SIZE_V1,
             zero_tail_required: true,
-            extend_program_checked_feature: key(5),
-            set_authority_checked_feature: key(6),
+            extend_program_checked_feature: EXTEND_PROGRAM_CHECKED_FEATURE_ID_V1,
+            set_authority_checked_feature: SET_AUTHORITY_CHECKED_FEATURE_ID_V1,
             policy_digest: digest(7),
             creation_slot: 8,
             reserved: [0; PROGRAMDATA_CAPACITY_POLICY_V1_RESERVED_LEN],
@@ -1632,7 +1692,7 @@ mod tests {
             release_manifest_commitment: digest(12),
             abi_commitment: digest(13),
             pre_immutability_authority: some(14),
-            expected_programdata_capacity: 32_768,
+            minimum_programdata_capacity: 32_768,
             release_digest: digest(15),
             creation_slot: 16,
             finalized: true,
@@ -1662,6 +1722,12 @@ mod tests {
             subject: key(5),
             subject_digest: digest(6),
             generation: 1,
+            protocol_gate: key(8),
+            gate_status: GateStatusV1::FrozenForUpgrade,
+            gate_epoch: 2,
+            gate_active_proposal: key(5),
+            gate_freeze_slot: 6,
+            gate_freeze_reason_code: 7,
             target_program: key(10),
             target_programdata,
             upgradeable_loader: UPGRADEABLE_LOADER_ID,
@@ -1824,9 +1890,9 @@ mod tests {
             bridge_observation_generation: 1,
             bridge_observation_root: digest(23),
             bridge_observation_digest: digest(24),
-            expected_target_deployed_slot: 25,
-            expected_target_capacity: 32_768,
-            expected_target_raw_length: 32_768 + u64::from(PROGRAMDATA_PAYLOAD_OFFSET_V1),
+            minimum_target_deployed_slot: 25,
+            minimum_target_capacity: 32_768,
+            minimum_target_raw_length: 32_768 + u64::from(PROGRAMDATA_PAYLOAD_OFFSET_V1),
             bootstrap_gate_status: GateStatusV1::EmergencyFrozen,
             bootstrap_gate_epoch: 1,
             bootstrap_freeze_reason_code: BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1,
@@ -1934,9 +2000,9 @@ mod tests {
             bridge_observation_generation: 1,
             bridge_observation_root: digest(24),
             bridge_observation_digest: digest(25),
-            expected_target_deployed_slot: 26,
-            expected_target_capacity: 32_768,
-            expected_target_raw_length: 32_768 + u64::from(PROGRAMDATA_PAYLOAD_OFFSET_V1),
+            minimum_target_deployed_slot: 26,
+            minimum_target_capacity: 32_768,
+            minimum_target_raw_length: 32_768 + u64::from(PROGRAMDATA_PAYLOAD_OFFSET_V1),
             bootstrap_gate_status: GateStatusV1::EmergencyFrozen,
             bootstrap_gate_epoch: 1,
             bootstrap_freeze_reason_code: BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1,
@@ -2013,6 +2079,256 @@ mod tests {
             finalized: true,
             reserved: [0; BOOTSTRAP_ACTIVATION_RECEIPT_V1_RESERVED_LEN],
         }
+    }
+
+    fn encode_base64(bytes: &[u8]) -> String {
+        const ALPHABET: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+        for chunk in bytes.chunks(3) {
+            let first = chunk[0];
+            let second = chunk.get(1).copied().unwrap_or(0);
+            let third = chunk.get(2).copied().unwrap_or(0);
+            encoded.push(ALPHABET[usize::from(first >> 2)] as char);
+            encoded.push(ALPHABET[usize::from(((first & 0x03) << 4) | (second >> 4))] as char);
+            encoded.push(if chunk.len() > 1 {
+                ALPHABET[usize::from(((second & 0x0f) << 2) | (third >> 6))] as char
+            } else {
+                '='
+            });
+            encoded.push(if chunk.len() > 2 {
+                ALPHABET[usize::from(third & 0x3f)] as char
+            } else {
+                '='
+            });
+        }
+        encoded
+    }
+
+    fn encode_hex(bytes: &[u8]) -> String {
+        const DIGITS: &[u8; 16] = b"0123456789abcdef";
+        let mut encoded = String::with_capacity(bytes.len() * 2);
+        for byte in bytes {
+            encoded.push(DIGITS[usize::from(byte >> 4)] as char);
+            encoded.push(DIGITS[usize::from(byte & 0x0f)] as char);
+        }
+        encoded
+    }
+
+    fn fixture_entry<T: BorshSerialize>(
+        account_type: &str,
+        length: usize,
+        discriminator: [u8; 8],
+        reserved_length: usize,
+        digest: [u8; 32],
+        value: &T,
+    ) -> Value {
+        let bytes = value.try_to_vec().expect("fixture account must encode");
+        assert_eq!(bytes.len(), length, "{account_type} fixture length drifted");
+        assert_eq!(&bytes[..8], &discriminator);
+        assert!(bytes[length - reserved_length..]
+            .iter()
+            .all(|byte| *byte == 0));
+        json!({
+            "account_type": account_type,
+            "length": length,
+            "discriminator_ascii": std::str::from_utf8(&discriminator)
+                .expect("fixture discriminator must be ASCII"),
+            "reserved_length": reserved_length,
+            "digest_hex": encode_hex(&digest),
+            "data_base64": encode_base64(&bytes),
+        })
+    }
+
+    /// Rust-authoritative regeneration entrypoint for the shared ceremony ABI
+    /// fixture. Run the exact command documented in `fixtures/README.md`.
+    #[test]
+    #[ignore = "writes the tracked cross-language ceremony fixture"]
+    fn regenerate_release1_ceremony_fixture() {
+        let controller_program = key(1);
+        let target_program = key(3);
+        let council_version = 1;
+        let target_handoff =
+            derive_target_handoff_pda(&controller_program, &target_program, council_version);
+        let bootstrap_activation =
+            derive_bootstrap_activation_pda(&controller_program, &target_program, council_version);
+
+        let mut capacity = capacity_policy();
+        capacity.policy_digest =
+            compute_capacity_policy_digest_v1(&capacity).expect("capacity digest must compute");
+
+        let mut release = release_commitment();
+        release.release_digest =
+            compute_controller_release_digest_v1(&release).expect("release digest must compute");
+
+        let mut observation =
+            observation_with(ProgramDataObservationPurposeV1::ProposalPrestate, some(30));
+        observation.subject_digest = compute_programdata_observation_subject_digest_v1(
+            &observation.controller_program,
+            &observation.controller_config,
+            &observation.target_program,
+            &observation.target_programdata,
+            observation.purpose,
+            &observation.subject,
+            observation.generation,
+            &observation.protocol_gate,
+            observation.gate_status,
+            observation.gate_epoch,
+            &observation.gate_active_proposal,
+            observation.gate_freeze_slot,
+            observation.gate_freeze_reason_code,
+            &observation.capacity_policy_digest,
+            observation.expected_artifact_length,
+            &observation.expected_artifact_sha256,
+            &observation.expected_artifact_merkle_root,
+            &observation.expected_artifact_scheme_id,
+            observation.minimum_required_capacity,
+        )
+        .expect("observation subject digest must compute");
+        observation.observation_digest = compute_programdata_observation_digest_v1(&observation)
+            .expect("observation digest must compute");
+
+        let mut deployment = current_deployment();
+        deployment.deployment_digest = compute_current_deployment_digest_v1(&deployment)
+            .expect("deployment digest must compute");
+
+        let mut immutability = immutability_receipt();
+        immutability.receipt_digest =
+            compute_controller_immutability_receipt_digest_v1(&immutability)
+                .expect("immutability receipt digest must compute");
+
+        let mut handoff = handoff_proposal();
+        handoff.controller_program = controller_program;
+        handoff.target_program = target_program;
+        handoff.bump = target_handoff.1;
+        handoff.proposal_digest = compute_target_handoff_proposal_digest_v1(&handoff)
+            .expect("handoff proposal digest must compute");
+
+        let mut handoff_receipt = handoff_receipt();
+        handoff_receipt.proposal = target_handoff.0;
+        handoff_receipt.proposal_digest = handoff.proposal_digest;
+        handoff_receipt.controller_program = controller_program;
+        handoff_receipt.target_program = target_program;
+        handoff_receipt.receipt_digest = compute_target_handoff_receipt_digest_v1(&handoff_receipt)
+            .expect("handoff receipt digest must compute");
+
+        let mut activation = activation_proposal();
+        activation.controller_program = controller_program;
+        activation.target_program = target_program;
+        activation.bump = bootstrap_activation.1;
+        activation.proposal_digest = compute_bootstrap_activation_proposal_digest_v1(&activation)
+            .expect("activation proposal digest must compute");
+
+        let mut activation_receipt = activation_receipt();
+        activation_receipt.proposal = bootstrap_activation.0;
+        activation_receipt.proposal_digest = activation.proposal_digest;
+        activation_receipt.controller_program = controller_program;
+        activation_receipt.target_program = target_program;
+        activation_receipt.receipt_digest =
+            compute_bootstrap_activation_receipt_digest_v1(&activation_receipt)
+                .expect("activation receipt digest must compute");
+
+        let entries = vec![
+            fixture_entry(
+                "ProgramDataCapacityPolicyV1",
+                ProgramDataCapacityPolicyV1::LEN,
+                PROGRAMDATA_CAPACITY_POLICY_V1_DISCRIMINATOR,
+                PROGRAMDATA_CAPACITY_POLICY_V1_RESERVED_LEN,
+                capacity.policy_digest,
+                &capacity,
+            ),
+            fixture_entry(
+                "ControllerReleaseCommitmentV1",
+                ControllerReleaseCommitmentV1::LEN,
+                CONTROLLER_RELEASE_COMMITMENT_V1_DISCRIMINATOR,
+                CONTROLLER_RELEASE_COMMITMENT_V1_RESERVED_LEN,
+                release.release_digest,
+                &release,
+            ),
+            fixture_entry(
+                "ProgramDataObservationV1",
+                ProgramDataObservationV1::LEN,
+                PROGRAMDATA_OBSERVATION_V1_DISCRIMINATOR,
+                PROGRAMDATA_OBSERVATION_V1_RESERVED_LEN,
+                observation.observation_digest,
+                &observation,
+            ),
+            fixture_entry(
+                "CurrentDeploymentStateV1",
+                CurrentDeploymentStateV1::LEN,
+                CURRENT_DEPLOYMENT_STATE_V1_DISCRIMINATOR,
+                CURRENT_DEPLOYMENT_STATE_V1_RESERVED_LEN,
+                deployment.deployment_digest,
+                &deployment,
+            ),
+            fixture_entry(
+                "ControllerImmutabilityReceiptV1",
+                ControllerImmutabilityReceiptV1::LEN,
+                CONTROLLER_IMMUTABILITY_RECEIPT_V1_DISCRIMINATOR,
+                CONTROLLER_IMMUTABILITY_RECEIPT_V1_RESERVED_LEN,
+                immutability.receipt_digest,
+                &immutability,
+            ),
+            fixture_entry(
+                "TargetAuthorityHandoffProposalV1",
+                TargetAuthorityHandoffProposalV1::LEN,
+                TARGET_AUTHORITY_HANDOFF_PROPOSAL_V1_DISCRIMINATOR,
+                TARGET_AUTHORITY_HANDOFF_PROPOSAL_V1_RESERVED_LEN,
+                handoff.proposal_digest,
+                &handoff,
+            ),
+            fixture_entry(
+                "TargetAuthorityHandoffReceiptV1",
+                TargetAuthorityHandoffReceiptV1::LEN,
+                TARGET_AUTHORITY_HANDOFF_RECEIPT_V1_DISCRIMINATOR,
+                TARGET_AUTHORITY_HANDOFF_RECEIPT_V1_RESERVED_LEN,
+                handoff_receipt.receipt_digest,
+                &handoff_receipt,
+            ),
+            fixture_entry(
+                "BootstrapActivationProposalV1",
+                BootstrapActivationProposalV1::LEN,
+                BOOTSTRAP_ACTIVATION_PROPOSAL_V1_DISCRIMINATOR,
+                BOOTSTRAP_ACTIVATION_PROPOSAL_V1_RESERVED_LEN,
+                activation.proposal_digest,
+                &activation,
+            ),
+            fixture_entry(
+                "BootstrapActivationReceiptV1",
+                BootstrapActivationReceiptV1::LEN,
+                BOOTSTRAP_ACTIVATION_RECEIPT_V1_DISCRIMINATOR,
+                BOOTSTRAP_ACTIVATION_RECEIPT_V1_RESERVED_LEN,
+                activation_receipt.receipt_digest,
+                &activation_receipt,
+            ),
+        ];
+        let fixture = json!({
+            "fixture_version": 1,
+            "proposal_pdas": {
+                "controller_program": controller_program.to_string(),
+                "target_program": target_program.to_string(),
+                "council_version": council_version,
+                "target_authority_handoff_proposal": {
+                    "address": target_handoff.0.to_string(),
+                    "bump": target_handoff.1,
+                },
+                "bootstrap_activation_proposal": {
+                    "address": bootstrap_activation.0.to_string(),
+                    "bump": bootstrap_activation.1,
+                },
+            },
+            "entries": entries,
+        });
+        let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/release1_ceremony_accounts_v1.json");
+        fs::write(
+            fixture_path,
+            format!(
+                "{}\n",
+                serde_json::to_string_pretty(&fixture).expect("fixture JSON must encode")
+            ),
+        )
+        .expect("shared fixture must be writable");
     }
 
     macro_rules! assert_strict_account {
@@ -2272,7 +2588,24 @@ mod tests {
         let bindings = purposes
             .into_iter()
             .map(|purpose| {
-                let observation = observation_with(purpose, some(30));
+                let mut observation = observation_with(purpose, some(30));
+                match purpose {
+                    ProgramDataObservationPurposeV1::ControllerImmutability
+                    | ProgramDataObservationPurposeV1::TargetHandoffBridge
+                    | ProgramDataObservationPurposeV1::BootstrapActivation => {
+                        observation.gate_status = GateStatusV1::EmergencyFrozen;
+                        observation.gate_active_proposal = Pubkey::default();
+                        observation.gate_freeze_reason_code =
+                            BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1;
+                    }
+                    ProgramDataObservationPurposeV1::EmergencyResolution => {
+                        observation.gate_status = GateStatusV1::EmergencyFrozen;
+                        observation.gate_active_proposal = Pubkey::default();
+                    }
+                    ProgramDataObservationPurposeV1::ProposalPrestate
+                    | ProgramDataObservationPurposeV1::PostUpgrade
+                    | ProgramDataObservationPurposeV1::Rollback => {}
+                }
                 observation.validate_static().unwrap();
                 let encoded = observation.try_to_vec().unwrap();
                 assert_eq!(encoded[139], purpose as u8);

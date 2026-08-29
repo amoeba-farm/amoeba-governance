@@ -14,6 +14,8 @@ pub const BUFFER_CHECK_SEED: &[u8] = b"buffer-check";
 pub const PROGRAMDATA_CHECK_SEED: &[u8] = b"programdata-check";
 pub const EMERGENCY_RESOLUTION_SEED: &[u8] = b"emergency-resolution";
 pub const EMERGENCY_CHECKPOINT_SEED: &[u8] = b"emergency-checkpoint";
+pub const EMERGENCY_RESOLUTION_V2_SEED: &[u8] = b"emergency-resolution-v2";
+pub const EMERGENCY_CHECKPOINT_V2_SEED: &[u8] = b"emergency-checkpoint-v2";
 pub const COUNCIL_ROTATION_SEED: &[u8] = b"council-rotation";
 pub const EMERGENCY_FREEZE_OBSERVATION_SEED: &[u8] = b"emergency-observation";
 pub const PROGRAMDATA_FAILURE_OBSERVATION_SEED: &[u8] = b"programdata-failure";
@@ -184,6 +186,46 @@ pub fn derive_emergency_checkpoint_pda(
     )
 }
 
+/// Capacity-safe emergency resolutions are council-versioned so a council
+/// rotation cannot strand the protocol in a frozen epoch. The prior V1 PDA
+/// derivation remains unchanged for regression decoding.
+pub fn derive_emergency_resolution_v2_pda(
+    controller_program: &Pubkey,
+    target_program: &Pubkey,
+    frozen_epoch: u64,
+    council_version: u64,
+) -> (Pubkey, u8) {
+    let epoch = frozen_epoch.to_le_bytes();
+    let council = council_version.to_le_bytes();
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            EMERGENCY_RESOLUTION_V2_SEED,
+            target_program.as_ref(),
+            &epoch,
+            &council,
+        ],
+        controller_program,
+    )
+}
+
+/// Each council-versioned resolution receives its own checkpoint PDA. A stale
+/// resolution and its approvals remain immutable historical evidence while a
+/// newly rotated council can start a fresh resolution for the same gate epoch.
+pub fn derive_emergency_checkpoint_v2_pda(
+    controller_program: &Pubkey,
+    emergency_resolution: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            UPGRADE_SEED_DOMAIN_V1,
+            EMERGENCY_CHECKPOINT_V2_SEED,
+            emergency_resolution.as_ref(),
+        ],
+        controller_program,
+    )
+}
+
 pub fn derive_council_rotation_pda(
     controller_program: &Pubkey,
     target_program: &Pubkey,
@@ -287,6 +329,7 @@ pub fn derive_programdata_observation_pda(
     controller_program: &Pubkey,
     observed_program: &Pubkey,
     purpose: u8,
+    subject_digest: &[u8; 32],
     generation: u64,
 ) -> (Pubkey, u8) {
     let purpose = [purpose];
@@ -297,6 +340,7 @@ pub fn derive_programdata_observation_pda(
             PROGRAMDATA_OBSERVATION_SEED,
             observed_program.as_ref(),
             &purpose,
+            subject_digest,
             &generation,
         ],
         controller_program,
@@ -416,13 +460,19 @@ mod tests {
             derive_programdata_check_pda(&controller, &proposal).0,
             derive_emergency_resolution_pda(&controller, &target, 7).0,
             derive_emergency_checkpoint_pda(&controller, &target, 7).0,
+            derive_emergency_resolution_v2_pda(&controller, &target, 7, 1).0,
+            derive_emergency_checkpoint_v2_pda(
+                &controller,
+                &derive_emergency_resolution_v2_pda(&controller, &target, 7, 1).0,
+            )
+            .0,
             derive_council_rotation_pda(&controller, &target, 8).0,
             derive_emergency_freeze_observation_pda(&controller, &target, 7).0,
             derive_programdata_failure_observation_pda(&controller, &proposal, 7).0,
             derive_checkpoint_attestation_pda(&controller, &proposal, 7, 2).0,
             derive_capacity_policy_pda(&controller, &target).0,
             derive_controller_release_commitment_pda(&controller, &target).0,
-            derive_programdata_observation_pda(&controller, &target, 1, 7).0,
+            derive_programdata_observation_pda(&controller, &target, 1, &[91; 32], 7).0,
             derive_current_deployment_state_pda(&controller, &target).0,
             derive_controller_immutability_receipt_pda(&controller, &target).0,
             derive_target_handoff_pda(&controller, &target, 7).0,
@@ -557,8 +607,14 @@ mod tests {
         );
 
         let purpose = 5u8;
-        let (observation, bump) =
-            derive_programdata_observation_pda(&controller, &target, purpose, version);
+        let subject_digest = [53; 32];
+        let (observation, bump) = derive_programdata_observation_pda(
+            &controller,
+            &target,
+            purpose,
+            &subject_digest,
+            version,
+        );
         let bump_seed = [bump];
         let purpose_seed = [purpose];
         let generation_seed = version.to_le_bytes();
@@ -568,6 +624,7 @@ mod tests {
                 PROGRAMDATA_OBSERVATION_SEED,
                 target.as_ref(),
                 &purpose_seed,
+                &subject_digest,
                 &generation_seed,
                 &bump_seed,
             ],
@@ -577,12 +634,48 @@ mod tests {
         assert_eq!(observation, expected);
         assert_ne!(
             observation,
-            derive_programdata_observation_pda(&controller, &target, purpose, version.swap_bytes())
-                .0
+            derive_programdata_observation_pda(
+                &controller,
+                &target,
+                purpose,
+                &subject_digest,
+                version.swap_bytes(),
+            )
+            .0
         );
         assert_ne!(
             observation,
-            derive_programdata_observation_pda(&controller, &target, purpose + 1, version).0
+            derive_programdata_observation_pda(
+                &controller,
+                &target,
+                purpose + 1,
+                &subject_digest,
+                version,
+            )
+            .0
+        );
+        assert_ne!(
+            observation,
+            derive_programdata_observation_pda(&controller, &target, purpose, &[54; 32], version,)
+                .0
+        );
+    }
+
+    #[test]
+    fn emergency_v2_rotation_gets_a_fresh_resolution_and_checkpoint() {
+        let controller = Pubkey::new_from_array([41; 32]);
+        let target = Pubkey::new_from_array([43; 32]);
+        let epoch = 9;
+        let first = derive_emergency_resolution_v2_pda(&controller, &target, epoch, 1).0;
+        let rotated = derive_emergency_resolution_v2_pda(&controller, &target, epoch, 2).0;
+        assert_ne!(first, rotated);
+        assert_ne!(
+            derive_emergency_checkpoint_v2_pda(&controller, &first).0,
+            derive_emergency_checkpoint_v2_pda(&controller, &rotated).0
+        );
+        assert_ne!(
+            first,
+            derive_emergency_resolution_pda(&controller, &target, epoch).0
         );
     }
 }

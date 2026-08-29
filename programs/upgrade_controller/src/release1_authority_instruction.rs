@@ -101,7 +101,7 @@ fixed_instruction!(
 fixed_instruction!(
     CreateTargetAuthorityHandoffV1,
     CREATE_TARGET_AUTHORITY_HANDOFF_V1_TAG,
-    216,
+    160,
     {
         expected_gate_epoch: u64,
         expected_target_nonce: u64,
@@ -110,11 +110,7 @@ fixed_instruction!(
         bridge_build_inputs_commitment: [u8; 32],
         bridge_package_commitment: [u8; 32],
         bridge_release_manifest_commitment: [u8; 32],
-        review_start_slot: u64,
-        review_end_slot: u64,
-        not_before_slot: u64,
-        expiry_slot: u64,
-        expected_proposal_digest: [u8; 32]
+        plan_valid_until_slot: u64
     }
 );
 
@@ -158,7 +154,7 @@ fixed_instruction!(
 fixed_instruction!(
     CreateBootstrapActivationV1,
     CREATE_BOOTSTRAP_ACTIVATION_V1_TAG,
-    184,
+    128,
     {
         expected_controller_immutability_digest: [u8; 32],
         expected_handoff_receipt_digest: [u8; 32],
@@ -166,11 +162,7 @@ fixed_instruction!(
         expected_gate_epoch: u64,
         expected_target_nonce: u64,
         expected_council_version: u64,
-        review_start_slot: u64,
-        review_end_slot: u64,
-        not_before_slot: u64,
-        expiry_slot: u64,
-        expected_proposal_digest: [u8; 32]
+        plan_valid_until_slot: u64
     }
 );
 

@@ -370,6 +370,8 @@ pub fn process_create_target_authority_handoff_v1(
     if *system_program_info.key != system_program::ID
         || *legacy_authority.key == Pubkey::default()
         || *legacy_authority.key == context.config.guardian
+        || instruction.plan_valid_until_slot == 0
+        || slot > instruction.plan_valid_until_slot
         || instruction.expected_gate_epoch != context.gate.epoch
         || instruction.expected_target_nonce != context.config.target_nonce
         || instruction.expected_council_version != context.council.version
@@ -377,16 +379,6 @@ pub fn process_create_target_authority_handoff_v1(
         return Err(GovernanceError::CrossAccountMismatch.into());
     }
     let timing = derive_major_timing(&context.config, slot)?;
-    if timing
-        != (
-            instruction.review_start_slot,
-            instruction.review_end_slot,
-            instruction.not_before_slot,
-            instruction.expiry_slot,
-        )
-    {
-        return Err(GovernanceError::InvalidProposalTiming.into());
-    }
     let (expected_proposal, proposal_bump) = derive_target_authority_handoff_pda(
         program_id,
         &context.config.target_program,
@@ -429,9 +421,9 @@ pub fn process_create_target_authority_handoff_v1(
         bridge_observation_generation: observation.generation,
         bridge_observation_root: observation.final_raw_merkle_root,
         bridge_observation_digest: observation.observation_digest,
-        expected_target_deployed_slot: observation.deployed_slot,
-        expected_target_capacity: observation.actual_capacity,
-        expected_target_raw_length: observation.raw_data_length,
+        minimum_target_deployed_slot: observation.deployed_slot,
+        minimum_target_capacity: observation.actual_capacity,
+        minimum_target_raw_length: observation.raw_data_length,
         bootstrap_gate_status: context.gate.status,
         bootstrap_gate_epoch: context.gate.epoch,
         bootstrap_freeze_reason_code: context.gate.freeze_reason_code,
@@ -452,14 +444,12 @@ pub fn process_create_target_authority_handoff_v1(
         executed_slot: 0,
         terminal_slot: 0,
         terminal_reason_code: 0,
-        proposal_digest: instruction.expected_proposal_digest,
+        proposal_digest: [0; 32],
         creation_slot: slot,
         reserved: [0; TARGET_AUTHORITY_HANDOFF_PROPOSAL_V1_RESERVED_LEN],
     };
-    if compute_target_handoff_proposal_digest_v1(&proposal)? != instruction.expected_proposal_digest
-    {
-        return Err(GovernanceError::Release1DigestMismatch.into());
-    }
+    let mut proposal = proposal;
+    proposal.proposal_digest = compute_target_handoff_proposal_digest_v1(&proposal)?;
     validate_target_handoff_proposal_digest_v1(&proposal)?;
     let proposal_bytes = encode_fixed_account(&proposal, TargetAuthorityHandoffProposalV1::LEN)?;
     let bump_seed = [proposal_bump];
@@ -983,20 +973,12 @@ pub fn process_create_bootstrap_activation_v1(
         || instruction.expected_gate_epoch != validated.context.gate.epoch
         || instruction.expected_target_nonce != validated.context.config.target_nonce
         || instruction.expected_council_version != validated.context.council.version
+        || instruction.plan_valid_until_slot == 0
+        || slot > instruction.plan_valid_until_slot
     {
         return Err(GovernanceError::CrossAccountMismatch.into());
     }
     let timing = derive_major_timing(&validated.context.config, slot)?;
-    if timing
-        != (
-            instruction.review_start_slot,
-            instruction.review_end_slot,
-            instruction.not_before_slot,
-            instruction.expiry_slot,
-        )
-    {
-        return Err(GovernanceError::InvalidProposalTiming.into());
-    }
     let (expected_proposal, proposal_bump) = derive_bootstrap_activation_pda(
         program_id,
         &validated.context.config.target_program,
@@ -1049,9 +1031,9 @@ pub fn process_create_bootstrap_activation_v1(
         bridge_observation_generation: validated.observation.generation,
         bridge_observation_root: validated.observation.final_raw_merkle_root,
         bridge_observation_digest: validated.observation.observation_digest,
-        expected_target_deployed_slot: validated.observation.deployed_slot,
-        expected_target_capacity: validated.observation.actual_capacity,
-        expected_target_raw_length: validated.observation.raw_data_length,
+        minimum_target_deployed_slot: validated.observation.deployed_slot,
+        minimum_target_capacity: validated.observation.actual_capacity,
+        minimum_target_raw_length: validated.observation.raw_data_length,
         bootstrap_gate_status: validated.context.gate.status,
         bootstrap_gate_epoch: validated.context.gate.epoch,
         bootstrap_freeze_reason_code: validated.context.gate.freeze_reason_code,
@@ -1072,15 +1054,12 @@ pub fn process_create_bootstrap_activation_v1(
         executed_slot: 0,
         terminal_slot: 0,
         terminal_reason_code: 0,
-        proposal_digest: instruction.expected_proposal_digest,
+        proposal_digest: [0; 32],
         creation_slot: slot,
         reserved: [0; BOOTSTRAP_ACTIVATION_PROPOSAL_V1_RESERVED_LEN],
     };
-    if compute_bootstrap_activation_proposal_digest_v1(&proposal)?
-        != instruction.expected_proposal_digest
-    {
-        return Err(GovernanceError::Release1DigestMismatch.into());
-    }
+    let mut proposal = proposal;
+    proposal.proposal_digest = compute_bootstrap_activation_proposal_digest_v1(&proposal)?;
     validate_bootstrap_activation_proposal_digest_v1(&proposal)?;
     let proposal_bytes = encode_fixed_account(&proposal, BootstrapActivationProposalV1::LEN)?;
     let rent = Rent::get()?;
@@ -1796,12 +1775,6 @@ fn load_observation(
         ProgramDataObservationV1::LEN,
     )?;
     validate_programdata_observation_digest_v1(&observation)?;
-    let expected = derive_programdata_observation_pda(
-        program_id,
-        observed_program,
-        purpose as u8,
-        observation.generation,
-    );
     let expected_subject_digest = compute_programdata_observation_subject_digest_v1(
         program_id,
         config_info.key,
@@ -1810,11 +1783,26 @@ fn load_observation(
         purpose,
         subject,
         observation.generation,
+        &observation.protocol_gate,
+        observation.gate_status,
+        observation.gate_epoch,
+        &observation.gate_active_proposal,
+        observation.gate_freeze_slot,
+        observation.gate_freeze_reason_code,
         &capacity.policy_digest,
+        observation.expected_artifact_length,
         &observation.expected_artifact_sha256,
         &observation.expected_artifact_merkle_root,
+        &observation.expected_artifact_scheme_id,
         observation.minimum_required_capacity,
     )?;
+    let expected = derive_programdata_observation_pda(
+        program_id,
+        observed_program,
+        purpose as u8,
+        &expected_subject_digest,
+        observation.generation,
+    );
     if expected.0 != *info.key
         || expected.1 != observation.bump
         || observation.controller_program != *program_id
@@ -2031,9 +2019,9 @@ fn validate_controller_immutability_transition(
         || pre.target_programdata != *controller_programdata.key
         || post.target_programdata != *controller_programdata.key
         || pre.program_header_snapshot != post.program_header_snapshot
-        || pre.deployed_slot != post.deployed_slot
-        || pre.raw_data_length != post.raw_data_length
-        || pre.actual_capacity != post.actual_capacity
+        || pre.deployed_slot > post.deployed_slot
+        || pre.raw_data_length > post.raw_data_length
+        || pre.actual_capacity > post.actual_capacity
         || pre.expected_artifact_length != post.expected_artifact_length
         || pre.expected_artifact_sha256 != post.expected_artifact_sha256
         || pre.expected_artifact_merkle_root != post.expected_artifact_merkle_root
@@ -2042,11 +2030,12 @@ fn validate_controller_immutability_transition(
         || pre.observation_digest == post.observation_digest
         || pre.upgrade_authority != release.pre_immutability_authority
         || post.upgrade_authority != OptionalPubkeyV1::none()
+        || release.minimum_programdata_capacity > pre.actual_capacity
+        || release.minimum_programdata_capacity > post.actual_capacity
         || release.artifact_length != post.expected_artifact_length
         || release.artifact_sha256 != post.expected_artifact_sha256
         || release.artifact_merkle_root != post.expected_artifact_merkle_root
         || release.artifact_scheme_id != post.expected_artifact_scheme_id
-        || release.expected_programdata_capacity != post.actual_capacity
     {
         return Err(GovernanceError::ControllerNotImmutable.into());
     }
@@ -2149,19 +2138,22 @@ fn validate_handoff_proposal_evidence(
     observation: &ProgramDataObservationV1,
     legacy_authority: &Pubkey,
 ) -> ProgramResult {
+    let same_observation_generation =
+        proposal.bridge_observation_generation == observation.generation;
     if proposal.controller_immutability_digest != immutable.receipt_digest
-        || proposal.bridge_observation != *observation_info.key
-        || proposal.bridge_observation_generation != observation.generation
-        || proposal.bridge_observation_root != observation.final_raw_merkle_root
-        || proposal.bridge_observation_digest != observation.observation_digest
+        || observation.generation < proposal.bridge_observation_generation
+        || (same_observation_generation
+            && (proposal.bridge_observation != *observation_info.key
+                || proposal.bridge_observation_root != observation.final_raw_merkle_root
+                || proposal.bridge_observation_digest != observation.observation_digest))
         || proposal.legacy_target_authority != *legacy_authority
         || proposal.bridge_artifact_length != observation.expected_artifact_length
         || proposal.bridge_artifact_sha256 != observation.expected_artifact_sha256
         || proposal.bridge_artifact_merkle_root != observation.expected_artifact_merkle_root
         || proposal.bridge_artifact_scheme_id != observation.expected_artifact_scheme_id
-        || proposal.expected_target_deployed_slot != observation.deployed_slot
-        || proposal.expected_target_capacity != observation.actual_capacity
-        || proposal.expected_target_raw_length != observation.raw_data_length
+        || proposal.minimum_target_deployed_slot > observation.deployed_slot
+        || proposal.minimum_target_capacity > observation.actual_capacity
+        || proposal.minimum_target_raw_length > observation.raw_data_length
         || proposal.bootstrap_gate_status != context.gate.status
         || proposal.bootstrap_freeze_reason_code != context.gate.freeze_reason_code
         || proposal.bootstrap_freeze_slot != context.gate.freeze_slot
@@ -2341,9 +2333,9 @@ fn validate_activation_evidence(
         || observation.expected_artifact_sha256 != handoff.artifact_sha256
         || observation.expected_artifact_merkle_root != handoff.artifact_merkle_root
         || observation.expected_artifact_scheme_id != handoff.artifact_scheme_id
-        || observation.deployed_slot != handoff.deployed_slot
-        || observation.actual_capacity != handoff.programdata_capacity
-        || observation.raw_data_length != handoff.raw_programdata_length
+        || observation.deployed_slot < handoff.deployed_slot
+        || observation.actual_capacity < handoff.programdata_capacity
+        || observation.raw_data_length < handoff.raw_programdata_length
         || *authority_info.key != handoff.controller_authority
     {
         return Err(GovernanceError::CrossAccountMismatch.into());
@@ -2363,14 +2355,17 @@ fn validate_activation_proposal_evidence(
     immutability_info: &AccountInfo<'_>,
     handoff_receipt_info: &AccountInfo<'_>,
 ) -> ProgramResult {
+    let same_observation_generation =
+        proposal.bridge_observation_generation == evidence.observation.generation;
     if proposal.controller_immutability_receipt != *immutability_info.key
         || proposal.controller_immutability_digest != evidence.immutable.receipt_digest
         || proposal.target_handoff_receipt != *handoff_receipt_info.key
         || proposal.target_handoff_digest != evidence.handoff.receipt_digest
-        || proposal.bridge_observation != *observation_info.key
-        || proposal.bridge_observation_generation != evidence.observation.generation
-        || proposal.bridge_observation_root != evidence.observation.final_raw_merkle_root
-        || proposal.bridge_observation_digest != evidence.observation.observation_digest
+        || evidence.observation.generation < proposal.bridge_observation_generation
+        || (same_observation_generation
+            && (proposal.bridge_observation != *observation_info.key
+                || proposal.bridge_observation_root != evidence.observation.final_raw_merkle_root
+                || proposal.bridge_observation_digest != evidence.observation.observation_digest))
         || proposal.bridge_artifact_length != evidence.handoff.artifact_length
         || proposal.bridge_artifact_sha256 != evidence.handoff.artifact_sha256
         || proposal.bridge_artifact_merkle_root != evidence.handoff.artifact_merkle_root
@@ -2381,9 +2376,9 @@ fn validate_activation_proposal_evidence(
         || proposal.bridge_package_commitment != evidence.handoff.bridge_package_commitment
         || proposal.bridge_release_manifest_commitment
             != evidence.handoff.bridge_release_manifest_commitment
-        || proposal.expected_target_deployed_slot != evidence.observation.deployed_slot
-        || proposal.expected_target_capacity != evidence.observation.actual_capacity
-        || proposal.expected_target_raw_length != evidence.observation.raw_data_length
+        || proposal.minimum_target_deployed_slot > evidence.observation.deployed_slot
+        || proposal.minimum_target_capacity > evidence.observation.actual_capacity
+        || proposal.minimum_target_raw_length > evidence.observation.raw_data_length
         || proposal.bootstrap_gate_status != evidence.context.gate.status
         || proposal.bootstrap_freeze_reason_code != evidence.context.gate.freeze_reason_code
         || proposal.bootstrap_freeze_slot != evidence.context.gate.freeze_slot
@@ -2610,13 +2605,18 @@ fn validate_some_to_none_header_delta(
 ) -> ProgramResult {
     let pre_parsed = parse_upgradeable_programdata(pre)?;
     let post_parsed = parse_upgradeable_programdata(post)?;
-    if pre_parsed.deployed_slot != post_parsed.deployed_slot
+    if pre_parsed.deployed_slot > post_parsed.deployed_slot
         || pre_parsed.upgrade_authority != Some(authority)
         || post_parsed.upgrade_authority.is_some()
-        || pre[..12] != post[..12]
+        || pre[..4] != post[..4]
         || pre[12] != 1
         || post[12] != 0
-        || pre[13..] != post[13..]
+        || pre[13..45] != authority.to_bytes()
+        // Loader-v3 serializes `None` into the existing fixed ProgramData
+        // account without clearing the now-inactive authority payload bytes.
+        // Require that tail to remain byte-identical to the prestate so the
+        // verifier admits only the exact real Loader transition.
+        || post[13..45] != pre[13..45]
     {
         return Err(GovernanceError::InvalidAuthorityTransition.into());
     }

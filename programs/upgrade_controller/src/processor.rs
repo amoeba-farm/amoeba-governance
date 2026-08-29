@@ -1,10 +1,10 @@
 //! Release 1 instruction dispatcher.
 //!
 //! The historical tag-0 approval codec remains decodable for regression
-//! vectors, but it is deliberately non-executable. Tags 1-25 dispatch only to
-//! typed non-custodial lifecycle processors. Reserved tag 26 remains closed.
-//! Tags 27-38 atomically expose the typed, rehearsed buffer, Loader-v3,
-//! verification, rollback, and terminal custody lifecycle.
+//! vectors, but it is deliberately non-executable. The capacity-fragile
+//! historical lifecycle and custody tags 1-17, 23, and 27-38 are likewise
+//! decode-only scaffolds. Only the immutable council-rotation tags 18-22 and
+//! 24-25 remain executable from the published range; tag 26 stays reserved.
 
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, program_error::ProgramError,
@@ -13,36 +13,43 @@ use solana_program::{
 
 use crate::{
     instruction::{self, MAX_CONTROLLER_INSTRUCTION_DATA_LEN},
-    release1_processor_buffer::{
-        process_adopt_buffer_v1, process_finalize_buffer_verification_v1,
-        process_verify_buffer_chunk_v1,
+    release1_authority_instruction, release1_ceremony_instruction,
+    release1_processor_authority::{
+        process_accept_target_authority_checked_v1, process_approve_bootstrap_activation_v1,
+        process_approve_target_authority_handoff_v1, process_create_bootstrap_activation_v1,
+        process_create_target_authority_handoff_v1, process_execute_bootstrap_activation_v1,
+        process_queue_bootstrap_activation_v1, process_queue_target_authority_handoff_v1,
+        process_record_controller_immutability_v1,
     },
     release1_processor_checkpoint::{
         process_activate_council_rotation_v1, process_approve_council_rotation_v1,
         process_cancel_council_rotation_v1, process_create_candidate_council_set_v1,
-        process_create_checkpoint_attestation_v1, process_create_council_rotation_v1,
-        process_expire_council_rotation_v1, process_expire_emergency_resolution_v1,
-        process_finalize_checkpoint_v1, process_queue_council_rotation_v1,
-        process_recast_checkpoint_attestation_v1,
+        process_create_council_rotation_v1, process_expire_council_rotation_v1,
+        process_queue_council_rotation_v1,
     },
-    release1_processor_initialize::process_initialize_controller_v1,
-    release1_processor_loader::{
-        process_execute_upgrade_v1, process_extend_target_v1,
-        process_finalize_programdata_verification_v1, process_verify_programdata_chunk_v1,
+    release1_processor_initialize_v2::process_initialize_controller_v2,
+    release1_processor_observation::{
+        process_append_programdata_observation_chunk_v1, process_begin_programdata_observation_v1,
+        process_finalize_programdata_observation_v1, process_verify_observed_artifact_chunk_v1,
     },
-    release1_processor_proposal::{
-        process_approve_emergency_resolution_v1, process_approve_proposal_v2,
-        process_cancel_proposal_v2, process_convert_emergency_freeze_v2,
-        process_create_emergency_resolution_v1, process_create_proposal_v2,
-        process_execute_emergency_resolution_v1, process_expire_proposal_v2,
-        process_finalize_governance_v2, process_freeze_proposal_v2, process_guardian_freeze_v1,
-        process_queue_emergency_resolution_v1, process_queue_proposal_v2,
+    release1_processor_v3_custody::{
+        process_activate_rollback_v2, process_adopt_buffer_v2,
+        process_bind_programdata_verification_v2, process_close_abandoned_buffer_v2,
+        process_execute_upgrade_v2, process_extend_target_v2,
+        process_finalize_buffer_verification_v2, process_finalize_programdata_verification_v2,
+        process_observe_programdata_failure_witness_v2, process_verify_buffer_chunk_v2,
     },
-    release1_processor_terminal::{
-        process_activate_rollback_v1, process_approve_unfreeze_v1,
-        process_close_abandoned_buffer_v1, process_execute_unfreeze_v1,
-        process_observe_programdata_failure_v1,
+    release1_processor_v3_lifecycle::{
+        process_approve_emergency_resolution_v2, process_approve_proposal_v3,
+        process_approve_unfreeze_v2, process_cancel_proposal_v3, process_create_checkpoint_v2,
+        process_create_emergency_resolution_v2, process_create_proposal_v3,
+        process_execute_emergency_resolution_v2, process_execute_unfreeze_v2,
+        process_expire_emergency_resolution_v2, process_expire_proposal_v3,
+        process_finalize_checkpoint_v2, process_finalize_governance_v3, process_freeze_proposal_v3,
+        process_guardian_freeze_v2, process_queue_emergency_resolution_v2,
+        process_queue_proposal_v3, process_recast_checkpoint_v2,
     },
+    release1_v3_custody_instruction, release1_v3_instruction,
 };
 
 pub use crate::pda::UPGRADEABLE_LOADER_ID;
@@ -66,91 +73,84 @@ macro_rules! typed_dispatch {
     };
 }
 
-typed_dispatch!(
-    dispatch_initialize_controller_v1,
-    InitializeControllerV1,
-    process_initialize_controller_v1
-);
-typed_dispatch!(
-    dispatch_create_proposal_v2,
-    CreateProposalV2,
-    process_create_proposal_v2
-);
-typed_dispatch!(
-    dispatch_approve_proposal_v2,
-    ApproveProposalV2,
-    process_approve_proposal_v2
-);
-typed_dispatch!(
-    dispatch_finalize_governance_v2,
-    FinalizeGovernanceV2,
-    process_finalize_governance_v2
-);
-typed_dispatch!(
-    dispatch_queue_proposal_v2,
-    QueueProposalV2,
-    process_queue_proposal_v2
-);
-typed_dispatch!(
-    dispatch_freeze_proposal_v2,
-    FreezeProposalV2,
-    process_freeze_proposal_v2
-);
-typed_dispatch!(
-    dispatch_cancel_proposal_v2,
-    CancelProposalV2,
-    process_cancel_proposal_v2
-);
-typed_dispatch!(
-    dispatch_expire_proposal_v2,
-    ExpireProposalV2,
-    process_expire_proposal_v2
-);
-typed_dispatch!(
-    dispatch_guardian_freeze_v1,
-    GuardianFreezeV1,
-    process_guardian_freeze_v1
-);
-typed_dispatch!(
-    dispatch_create_emergency_resolution_v1,
-    CreateEmergencyResolutionV1,
-    process_create_emergency_resolution_v1
-);
-typed_dispatch!(
-    dispatch_approve_emergency_resolution_v1,
-    ApproveEmergencyResolutionV1,
-    process_approve_emergency_resolution_v1
-);
-typed_dispatch!(
-    dispatch_queue_emergency_resolution_v1,
-    QueueEmergencyResolutionV1,
-    process_queue_emergency_resolution_v1
-);
-typed_dispatch!(
-    dispatch_execute_emergency_resolution_v1,
-    ExecuteEmergencyResolutionV1,
-    process_execute_emergency_resolution_v1
-);
-typed_dispatch!(
-    dispatch_convert_emergency_freeze_v2,
-    ConvertEmergencyFreezeV2,
-    process_convert_emergency_freeze_v2
-);
-typed_dispatch!(
-    dispatch_create_checkpoint_attestation_v1,
-    CreateCheckpointAttestationV1,
-    process_create_checkpoint_attestation_v1
-);
-typed_dispatch!(
-    dispatch_recast_checkpoint_attestation_v1,
-    RecastCheckpointAttestationV1,
-    process_recast_checkpoint_attestation_v1
-);
-typed_dispatch!(
-    dispatch_finalize_checkpoint_v1,
-    FinalizeCheckpointV1,
-    process_finalize_checkpoint_v1
-);
+macro_rules! ceremony_dispatch {
+    ($name:ident, $instruction:ident, $processor:ident) => {
+        #[inline(never)]
+        fn $name(
+            program_id: &Pubkey,
+            accounts: &[AccountInfo<'_>],
+            instruction_data: &[u8],
+        ) -> ProgramResult {
+            let instruction =
+                release1_ceremony_instruction::$instruction::unpack(instruction_data)?;
+            $processor(program_id, accounts, instruction)
+        }
+    };
+}
+
+macro_rules! authority_dispatch {
+    ($name:ident, $instruction:ident, $processor:ident) => {
+        #[inline(never)]
+        fn $name(
+            program_id: &Pubkey,
+            accounts: &[AccountInfo<'_>],
+            instruction_data: &[u8],
+        ) -> ProgramResult {
+            let instruction =
+                release1_authority_instruction::$instruction::unpack(instruction_data)?;
+            $processor(program_id, accounts, instruction)
+        }
+    };
+}
+
+macro_rules! v3_dispatch {
+    ($name:ident, $instruction:ident, $processor:ident) => {
+        #[inline(never)]
+        fn $name(
+            program_id: &Pubkey,
+            accounts: &[AccountInfo<'_>],
+            instruction_data: &[u8],
+        ) -> ProgramResult {
+            let instruction = release1_v3_instruction::$instruction::unpack(instruction_data)?;
+            $processor(program_id, accounts, instruction)
+        }
+    };
+}
+
+macro_rules! v3_boxed_dispatch {
+    ($name:ident, $instruction:ident, $processor:ident) => {
+        #[inline(never)]
+        fn $name(
+            program_id: &Pubkey,
+            accounts: &[AccountInfo<'_>],
+            instruction_data: &[u8],
+        ) -> ProgramResult {
+            // These instructions carry large, fixed manifests. Hand ownership
+            // to the processor so the decoded value does not remain live in
+            // both dispatcher and processor stack frames.
+            let instruction = Box::new(release1_v3_instruction::$instruction::unpack(
+                instruction_data,
+            )?);
+            $processor(program_id, accounts, instruction)
+        }
+    };
+}
+
+macro_rules! custody_v2_dispatch {
+    ($name:ident, $instruction:ident, $processor:ident) => {
+        #[inline(never)]
+        fn $name(
+            program_id: &Pubkey,
+            accounts: &[AccountInfo<'_>],
+            instruction_data: &[u8],
+        ) -> ProgramResult {
+            let instruction =
+                release1_v3_custody_instruction::$instruction::unpack(instruction_data)?;
+            $processor(program_id, accounts, instruction)
+        }
+    };
+}
+
 typed_dispatch!(
     dispatch_create_candidate_council_set_v1,
     CreateCandidateCouncilSetV1,
@@ -177,11 +177,6 @@ typed_dispatch!(
     process_queue_council_rotation_v1
 );
 typed_dispatch!(
-    dispatch_expire_emergency_resolution_v1,
-    ExpireEmergencyResolutionV1,
-    process_expire_emergency_resolution_v1
-);
-typed_dispatch!(
     dispatch_cancel_council_rotation_v1,
     CancelCouncilRotationV1,
     process_cancel_council_rotation_v1
@@ -191,65 +186,215 @@ typed_dispatch!(
     ExpireCouncilRotationV1,
     process_expire_council_rotation_v1
 );
-typed_dispatch!(
-    dispatch_adopt_buffer_v1,
-    AdoptBufferV1,
-    process_adopt_buffer_v1
+ceremony_dispatch!(
+    dispatch_begin_programdata_observation_v1,
+    BeginProgramDataObservationV1,
+    process_begin_programdata_observation_v1
 );
-typed_dispatch!(
-    dispatch_verify_buffer_chunk_v1,
-    VerifyBufferChunkV1,
-    process_verify_buffer_chunk_v1
+ceremony_dispatch!(
+    dispatch_append_programdata_observation_chunk_v1,
+    AppendProgramDataObservationChunkV1,
+    process_append_programdata_observation_chunk_v1
 );
-typed_dispatch!(
-    dispatch_finalize_buffer_verification_v1,
-    FinalizeBufferVerificationV1,
-    process_finalize_buffer_verification_v1
+ceremony_dispatch!(
+    dispatch_verify_observed_artifact_chunk_v1,
+    VerifyObservedArtifactChunkV1,
+    process_verify_observed_artifact_chunk_v1
 );
-typed_dispatch!(
-    dispatch_extend_target_v1,
-    ExtendTargetV1,
-    process_extend_target_v1
+ceremony_dispatch!(
+    dispatch_finalize_programdata_observation_v1,
+    FinalizeProgramDataObservationV1,
+    process_finalize_programdata_observation_v1
 );
-typed_dispatch!(
-    dispatch_execute_upgrade_v1,
-    ExecuteUpgradeV1,
-    process_execute_upgrade_v1
+authority_dispatch!(
+    dispatch_record_controller_immutability_v1,
+    RecordControllerImmutabilityV1,
+    process_record_controller_immutability_v1
 );
-typed_dispatch!(
-    dispatch_verify_programdata_chunk_v1,
-    VerifyProgramDataChunkV1,
-    process_verify_programdata_chunk_v1
+authority_dispatch!(
+    dispatch_create_target_authority_handoff_v1,
+    CreateTargetAuthorityHandoffV1,
+    process_create_target_authority_handoff_v1
 );
-typed_dispatch!(
-    dispatch_finalize_programdata_verification_v1,
-    FinalizeProgramDataVerificationV1,
-    process_finalize_programdata_verification_v1
+authority_dispatch!(
+    dispatch_approve_target_authority_handoff_v1,
+    ApproveTargetAuthorityHandoffV1,
+    process_approve_target_authority_handoff_v1
 );
-typed_dispatch!(
-    dispatch_approve_unfreeze_v1,
-    ApproveUnfreezeV1,
-    process_approve_unfreeze_v1
+authority_dispatch!(
+    dispatch_queue_target_authority_handoff_v1,
+    QueueTargetAuthorityHandoffV1,
+    process_queue_target_authority_handoff_v1
 );
-typed_dispatch!(
-    dispatch_execute_unfreeze_v1,
-    ExecuteUnfreezeV1,
-    process_execute_unfreeze_v1
+authority_dispatch!(
+    dispatch_accept_target_authority_checked_v1,
+    AcceptTargetAuthorityCheckedV1,
+    process_accept_target_authority_checked_v1
 );
-typed_dispatch!(
-    dispatch_close_abandoned_buffer_v1,
-    CloseAbandonedBufferV1,
-    process_close_abandoned_buffer_v1
+authority_dispatch!(
+    dispatch_create_bootstrap_activation_v1,
+    CreateBootstrapActivationV1,
+    process_create_bootstrap_activation_v1
 );
-typed_dispatch!(
-    dispatch_activate_rollback_v1,
-    ActivateRollbackV1,
-    process_activate_rollback_v1
+authority_dispatch!(
+    dispatch_approve_bootstrap_activation_v1,
+    ApproveBootstrapActivationV1,
+    process_approve_bootstrap_activation_v1
 );
-typed_dispatch!(
-    dispatch_observe_programdata_failure_v1,
-    ObserveProgramDataFailureV1,
-    process_observe_programdata_failure_v1
+authority_dispatch!(
+    dispatch_queue_bootstrap_activation_v1,
+    QueueBootstrapActivationV1,
+    process_queue_bootstrap_activation_v1
+);
+authority_dispatch!(
+    dispatch_execute_bootstrap_activation_v1,
+    ExecuteBootstrapActivationV1,
+    process_execute_bootstrap_activation_v1
+);
+v3_boxed_dispatch!(
+    dispatch_initialize_controller_v2,
+    InitializeControllerV2,
+    process_initialize_controller_v2
+);
+v3_dispatch!(
+    dispatch_create_proposal_v3,
+    CreateProposalV3,
+    process_create_proposal_v3
+);
+v3_dispatch!(
+    dispatch_approve_proposal_v3,
+    ApproveProposalV3,
+    process_approve_proposal_v3
+);
+v3_dispatch!(
+    dispatch_finalize_governance_v3,
+    FinalizeGovernanceV3,
+    process_finalize_governance_v3
+);
+v3_dispatch!(
+    dispatch_queue_proposal_v3,
+    QueueProposalV3,
+    process_queue_proposal_v3
+);
+v3_dispatch!(
+    dispatch_freeze_proposal_v3,
+    FreezeProposalV3,
+    process_freeze_proposal_v3
+);
+v3_dispatch!(
+    dispatch_cancel_proposal_v3,
+    CancelProposalV3,
+    process_cancel_proposal_v3
+);
+v3_dispatch!(
+    dispatch_expire_proposal_v3,
+    ExpireProposalV3,
+    process_expire_proposal_v3
+);
+v3_dispatch!(
+    dispatch_guardian_freeze_v2,
+    GuardianFreezeV2,
+    process_guardian_freeze_v2
+);
+v3_dispatch!(
+    dispatch_create_emergency_resolution_v2,
+    CreateEmergencyResolutionV2,
+    process_create_emergency_resolution_v2
+);
+v3_dispatch!(
+    dispatch_approve_emergency_resolution_v2,
+    ApproveEmergencyResolutionV2,
+    process_approve_emergency_resolution_v2
+);
+v3_dispatch!(
+    dispatch_queue_emergency_resolution_v2,
+    QueueEmergencyResolutionV2,
+    process_queue_emergency_resolution_v2
+);
+v3_dispatch!(
+    dispatch_execute_emergency_resolution_v2,
+    ExecuteEmergencyResolutionV2,
+    process_execute_emergency_resolution_v2
+);
+v3_dispatch!(
+    dispatch_expire_emergency_resolution_v2,
+    ExpireEmergencyResolutionV2,
+    process_expire_emergency_resolution_v2
+);
+v3_boxed_dispatch!(
+    dispatch_create_checkpoint_v2,
+    CreateCheckpointV2,
+    process_create_checkpoint_v2
+);
+v3_boxed_dispatch!(
+    dispatch_recast_checkpoint_v2,
+    RecastCheckpointV2,
+    process_recast_checkpoint_v2
+);
+v3_boxed_dispatch!(
+    dispatch_finalize_checkpoint_v2,
+    FinalizeCheckpointV2,
+    process_finalize_checkpoint_v2
+);
+v3_dispatch!(
+    dispatch_bind_programdata_verification_v2,
+    BindProgramDataVerificationV2,
+    process_bind_programdata_verification_v2
+);
+v3_dispatch!(
+    dispatch_finalize_programdata_verification_v2,
+    FinalizeProgramDataVerificationV2,
+    process_finalize_programdata_verification_v2
+);
+v3_dispatch!(
+    dispatch_observe_programdata_failure_v2,
+    ObserveProgramDataFailureV2,
+    process_observe_programdata_failure_witness_v2
+);
+v3_dispatch!(
+    dispatch_approve_unfreeze_v2,
+    ApproveUnfreezeV2,
+    process_approve_unfreeze_v2
+);
+v3_dispatch!(
+    dispatch_execute_unfreeze_v2,
+    ExecuteUnfreezeV2,
+    process_execute_unfreeze_v2
+);
+custody_v2_dispatch!(
+    dispatch_adopt_buffer_v2,
+    AdoptBufferV2,
+    process_adopt_buffer_v2
+);
+custody_v2_dispatch!(
+    dispatch_verify_buffer_chunk_v2,
+    VerifyBufferChunkV2,
+    process_verify_buffer_chunk_v2
+);
+custody_v2_dispatch!(
+    dispatch_finalize_buffer_verification_v2,
+    FinalizeBufferVerificationV2,
+    process_finalize_buffer_verification_v2
+);
+custody_v2_dispatch!(
+    dispatch_extend_target_v2,
+    ExtendTargetV2,
+    process_extend_target_v2
+);
+custody_v2_dispatch!(
+    dispatch_execute_upgrade_v2,
+    ExecuteUpgradeV2,
+    process_execute_upgrade_v2
+);
+custody_v2_dispatch!(
+    dispatch_close_abandoned_buffer_v2,
+    CloseAbandonedBufferV2,
+    process_close_abandoned_buffer_v2
+);
+custody_v2_dispatch!(
+    dispatch_activate_rollback_v2,
+    ActivateRollbackV2,
+    process_activate_rollback_v2
 );
 
 pub fn process_instruction(
@@ -261,60 +406,10 @@ pub fn process_instruction(
         return Err(ProgramError::InvalidInstructionData);
     }
     match instruction_data[0] {
-        // Frozen historical scaffold: Release 1 must never expose the timeless
-        // V1 approval kernel as an executable path.
-        instruction::RECORD_PROPOSAL_APPROVAL_V1_TAG => Err(ProgramError::InvalidInstructionData),
-        instruction::INITIALIZE_CONTROLLER_V1_TAG => {
-            dispatch_initialize_controller_v1(program_id, accounts, instruction_data)
-        }
-        instruction::CREATE_PROPOSAL_V2_TAG => {
-            dispatch_create_proposal_v2(program_id, accounts, instruction_data)
-        }
-        instruction::APPROVE_PROPOSAL_V2_TAG => {
-            dispatch_approve_proposal_v2(program_id, accounts, instruction_data)
-        }
-        instruction::FINALIZE_GOVERNANCE_V2_TAG => {
-            dispatch_finalize_governance_v2(program_id, accounts, instruction_data)
-        }
-        instruction::QUEUE_PROPOSAL_V2_TAG => {
-            dispatch_queue_proposal_v2(program_id, accounts, instruction_data)
-        }
-        instruction::FREEZE_PROPOSAL_V2_TAG => {
-            dispatch_freeze_proposal_v2(program_id, accounts, instruction_data)
-        }
-        instruction::CANCEL_PROPOSAL_V2_TAG => {
-            dispatch_cancel_proposal_v2(program_id, accounts, instruction_data)
-        }
-        instruction::EXPIRE_PROPOSAL_V2_TAG => {
-            dispatch_expire_proposal_v2(program_id, accounts, instruction_data)
-        }
-        instruction::GUARDIAN_FREEZE_V1_TAG => {
-            dispatch_guardian_freeze_v1(program_id, accounts, instruction_data)
-        }
-        instruction::CREATE_EMERGENCY_RESOLUTION_V1_TAG => {
-            dispatch_create_emergency_resolution_v1(program_id, accounts, instruction_data)
-        }
-        instruction::APPROVE_EMERGENCY_RESOLUTION_V1_TAG => {
-            dispatch_approve_emergency_resolution_v1(program_id, accounts, instruction_data)
-        }
-        instruction::QUEUE_EMERGENCY_RESOLUTION_V1_TAG => {
-            dispatch_queue_emergency_resolution_v1(program_id, accounts, instruction_data)
-        }
-        instruction::EXECUTE_EMERGENCY_RESOLUTION_V1_TAG => {
-            dispatch_execute_emergency_resolution_v1(program_id, accounts, instruction_data)
-        }
-        instruction::CONVERT_EMERGENCY_FREEZE_V2_TAG => {
-            dispatch_convert_emergency_freeze_v2(program_id, accounts, instruction_data)
-        }
-        instruction::CREATE_CHECKPOINT_ATTESTATION_V1_TAG => {
-            dispatch_create_checkpoint_attestation_v1(program_id, accounts, instruction_data)
-        }
-        instruction::RECAST_CHECKPOINT_ATTESTATION_V1_TAG => {
-            dispatch_recast_checkpoint_attestation_v1(program_id, accounts, instruction_data)
-        }
-        instruction::FINALIZE_CHECKPOINT_V1_TAG => {
-            dispatch_finalize_checkpoint_v1(program_id, accounts, instruction_data)
-        }
+        // Historical capacity-fragile schemas stay regression-decodable in
+        // their defining modules, but production dispatch rejects them before
+        // payload decoding or account access. This also keeps tag 26 reserved.
+        0..=17 | 23 | 26..=38 => Err(ProgramError::InvalidInstructionData),
         instruction::CREATE_CANDIDATE_COUNCIL_SET_V1_TAG => {
             dispatch_create_candidate_council_set_v1(program_id, accounts, instruction_data)
         }
@@ -330,50 +425,137 @@ pub fn process_instruction(
         instruction::QUEUE_COUNCIL_ROTATION_V1_TAG => {
             dispatch_queue_council_rotation_v1(program_id, accounts, instruction_data)
         }
-        instruction::EXPIRE_EMERGENCY_RESOLUTION_V1_TAG => {
-            dispatch_expire_emergency_resolution_v1(program_id, accounts, instruction_data)
-        }
         instruction::CANCEL_COUNCIL_ROTATION_V1_TAG => {
             dispatch_cancel_council_rotation_v1(program_id, accounts, instruction_data)
         }
         instruction::EXPIRE_COUNCIL_ROTATION_V1_TAG => {
             dispatch_expire_council_rotation_v1(program_id, accounts, instruction_data)
         }
-        instruction::ADOPT_BUFFER_V1_TAG => {
-            dispatch_adopt_buffer_v1(program_id, accounts, instruction_data)
+        release1_ceremony_instruction::BEGIN_PROGRAMDATA_OBSERVATION_V1_TAG => {
+            dispatch_begin_programdata_observation_v1(program_id, accounts, instruction_data)
         }
-        instruction::VERIFY_BUFFER_CHUNK_V1_TAG => {
-            dispatch_verify_buffer_chunk_v1(program_id, accounts, instruction_data)
+        release1_ceremony_instruction::APPEND_PROGRAMDATA_OBSERVATION_CHUNK_V1_TAG => {
+            dispatch_append_programdata_observation_chunk_v1(program_id, accounts, instruction_data)
         }
-        instruction::FINALIZE_BUFFER_VERIFICATION_V1_TAG => {
-            dispatch_finalize_buffer_verification_v1(program_id, accounts, instruction_data)
+        release1_ceremony_instruction::VERIFY_OBSERVED_ARTIFACT_CHUNK_V1_TAG => {
+            dispatch_verify_observed_artifact_chunk_v1(program_id, accounts, instruction_data)
         }
-        instruction::EXTEND_TARGET_V1_TAG => {
-            dispatch_extend_target_v1(program_id, accounts, instruction_data)
+        release1_ceremony_instruction::FINALIZE_PROGRAMDATA_OBSERVATION_V1_TAG => {
+            dispatch_finalize_programdata_observation_v1(program_id, accounts, instruction_data)
         }
-        instruction::EXECUTE_UPGRADE_V1_TAG => {
-            dispatch_execute_upgrade_v1(program_id, accounts, instruction_data)
+        release1_authority_instruction::RECORD_CONTROLLER_IMMUTABILITY_V1_TAG => {
+            dispatch_record_controller_immutability_v1(program_id, accounts, instruction_data)
         }
-        instruction::VERIFY_PROGRAMDATA_CHUNK_V1_TAG => {
-            dispatch_verify_programdata_chunk_v1(program_id, accounts, instruction_data)
+        release1_authority_instruction::CREATE_TARGET_AUTHORITY_HANDOFF_V1_TAG => {
+            dispatch_create_target_authority_handoff_v1(program_id, accounts, instruction_data)
         }
-        instruction::FINALIZE_PROGRAMDATA_VERIFICATION_V1_TAG => {
-            dispatch_finalize_programdata_verification_v1(program_id, accounts, instruction_data)
+        release1_authority_instruction::APPROVE_TARGET_AUTHORITY_HANDOFF_V1_TAG => {
+            dispatch_approve_target_authority_handoff_v1(program_id, accounts, instruction_data)
         }
-        instruction::APPROVE_UNFREEZE_V1_TAG => {
-            dispatch_approve_unfreeze_v1(program_id, accounts, instruction_data)
+        release1_authority_instruction::QUEUE_TARGET_AUTHORITY_HANDOFF_V1_TAG => {
+            dispatch_queue_target_authority_handoff_v1(program_id, accounts, instruction_data)
         }
-        instruction::EXECUTE_UNFREEZE_V1_TAG => {
-            dispatch_execute_unfreeze_v1(program_id, accounts, instruction_data)
+        release1_authority_instruction::ACCEPT_TARGET_AUTHORITY_CHECKED_V1_TAG => {
+            dispatch_accept_target_authority_checked_v1(program_id, accounts, instruction_data)
         }
-        instruction::CLOSE_ABANDONED_BUFFER_V1_TAG => {
-            dispatch_close_abandoned_buffer_v1(program_id, accounts, instruction_data)
+        release1_authority_instruction::CREATE_BOOTSTRAP_ACTIVATION_V1_TAG => {
+            dispatch_create_bootstrap_activation_v1(program_id, accounts, instruction_data)
         }
-        instruction::ACTIVATE_ROLLBACK_V1_TAG => {
-            dispatch_activate_rollback_v1(program_id, accounts, instruction_data)
+        release1_authority_instruction::APPROVE_BOOTSTRAP_ACTIVATION_V1_TAG => {
+            dispatch_approve_bootstrap_activation_v1(program_id, accounts, instruction_data)
         }
-        instruction::OBSERVE_PROGRAMDATA_FAILURE_V1_TAG => {
-            dispatch_observe_programdata_failure_v1(program_id, accounts, instruction_data)
+        release1_authority_instruction::QUEUE_BOOTSTRAP_ACTIVATION_V1_TAG => {
+            dispatch_queue_bootstrap_activation_v1(program_id, accounts, instruction_data)
+        }
+        release1_authority_instruction::EXECUTE_BOOTSTRAP_ACTIVATION_V1_TAG => {
+            dispatch_execute_bootstrap_activation_v1(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::INITIALIZE_CONTROLLER_V2_TAG => {
+            dispatch_initialize_controller_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::CREATE_PROPOSAL_V3_TAG => {
+            dispatch_create_proposal_v3(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::APPROVE_PROPOSAL_V3_TAG => {
+            dispatch_approve_proposal_v3(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::FINALIZE_GOVERNANCE_V3_TAG => {
+            dispatch_finalize_governance_v3(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::QUEUE_PROPOSAL_V3_TAG => {
+            dispatch_queue_proposal_v3(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::FREEZE_PROPOSAL_V3_TAG => {
+            dispatch_freeze_proposal_v3(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::CANCEL_PROPOSAL_V3_TAG => {
+            dispatch_cancel_proposal_v3(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::EXPIRE_PROPOSAL_V3_TAG => {
+            dispatch_expire_proposal_v3(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::GUARDIAN_FREEZE_V2_TAG => {
+            dispatch_guardian_freeze_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::CREATE_EMERGENCY_RESOLUTION_V2_TAG => {
+            dispatch_create_emergency_resolution_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::APPROVE_EMERGENCY_RESOLUTION_V2_TAG => {
+            dispatch_approve_emergency_resolution_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::QUEUE_EMERGENCY_RESOLUTION_V2_TAG => {
+            dispatch_queue_emergency_resolution_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::EXECUTE_EMERGENCY_RESOLUTION_V2_TAG => {
+            dispatch_execute_emergency_resolution_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::EXPIRE_EMERGENCY_RESOLUTION_V2_TAG => {
+            dispatch_expire_emergency_resolution_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::CREATE_CHECKPOINT_V2_TAG => {
+            dispatch_create_checkpoint_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::RECAST_CHECKPOINT_V2_TAG => {
+            dispatch_recast_checkpoint_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::FINALIZE_CHECKPOINT_V2_TAG => {
+            dispatch_finalize_checkpoint_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::BIND_PROGRAMDATA_VERIFICATION_V2_TAG => {
+            dispatch_bind_programdata_verification_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::FINALIZE_PROGRAMDATA_VERIFICATION_V2_TAG => {
+            dispatch_finalize_programdata_verification_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::OBSERVE_PROGRAMDATA_FAILURE_V2_TAG => {
+            dispatch_observe_programdata_failure_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::APPROVE_UNFREEZE_V2_TAG => {
+            dispatch_approve_unfreeze_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_instruction::EXECUTE_UNFREEZE_V2_TAG => {
+            dispatch_execute_unfreeze_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_custody_instruction::ADOPT_BUFFER_V2_TAG => {
+            dispatch_adopt_buffer_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_custody_instruction::VERIFY_BUFFER_CHUNK_V2_TAG => {
+            dispatch_verify_buffer_chunk_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_custody_instruction::FINALIZE_BUFFER_VERIFICATION_V2_TAG => {
+            dispatch_finalize_buffer_verification_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_custody_instruction::EXTEND_TARGET_V2_TAG => {
+            dispatch_extend_target_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_custody_instruction::EXECUTE_UPGRADE_V2_TAG => {
+            dispatch_execute_upgrade_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_custody_instruction::CLOSE_ABANDONED_BUFFER_V2_TAG => {
+            dispatch_close_abandoned_buffer_v2(program_id, accounts, instruction_data)
+        }
+        release1_v3_custody_instruction::ACTIVATE_ROLLBACK_V2_TAG => {
+            dispatch_activate_rollback_v2(program_id, accounts, instruction_data)
         }
         _ => Err(ProgramError::InvalidInstructionData),
     }
@@ -395,7 +577,6 @@ mod tests {
         ProposalStateV2, VERIFICATION_BITMAP_BYTES_V1,
     };
     use crate::state::GateStatusV1;
-    use crate::GovernanceError;
 
     const fn bytes(value: u8) -> [u8; 32] {
         [value; 32]
@@ -618,7 +799,7 @@ mod tests {
     }
 
     #[test]
-    fn complete_custody_surface_routes_all_known_typed_codecs() {
+    fn deprecated_capacity_fragile_custody_surface_is_non_executable() {
         let program_id = Pubkey::new_unique();
         let packets = custody_instruction_packets();
         assert_eq!(packets.len(), 12);
@@ -627,8 +808,19 @@ mod tests {
             assert_eq!(packet[0], expected_tag);
             assert_eq!(
                 process_instruction(&program_id, &[], packet),
-                Err(GovernanceError::InvalidAccountCount.into()),
-                "tag {expected_tag} did not route through its typed processor"
+                Err(ProgramError::InvalidInstructionData),
+                "deprecated tag {expected_tag} remained executable"
+            );
+        }
+    }
+
+    #[test]
+    fn every_deprecated_lifecycle_tag_rejects_before_payload_decode() {
+        for tag in (0..=17).chain([23]).chain(26..=38) {
+            assert_eq!(
+                process_instruction(&Pubkey::new_unique(), &[], &[tag]),
+                Err(ProgramError::InvalidInstructionData),
+                "deprecated tag {tag} did not retain generic early rejection"
             );
         }
     }

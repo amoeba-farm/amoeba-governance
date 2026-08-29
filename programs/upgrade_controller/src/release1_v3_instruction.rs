@@ -13,29 +13,22 @@ use solana_program::{
 };
 
 use crate::{
+    artifact_merkle::{MAX_ARTIFACT_BYTES_V1, MAX_ARTIFACT_PROOF_DEPTH_V1},
     council::VALID_APPROVAL_MASK,
     release1_authority_instruction::CeremonyEnvelopeV1,
-    release1_ceremony_digest::{
-        validate_capacity_policy_digest_v1, validate_controller_release_digest_v1,
-    },
-    release1_ceremony_state::{ControllerReleaseCommitmentV1, ProgramDataCapacityPolicyV1},
+    release1_ceremony_state::MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1,
     release1_state::{
-        EmergencyFreezeResolutionStateV1, ProposalStateV2, StateCheckpointPhaseV1,
-        RELEASE1_APPROVAL_THRESHOLD,
+        EmergencyFreezeResolutionKindV1, EmergencyFreezeResolutionStateV1, ProposalStateV2,
+        StateCheckpointPhaseV1, BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1,
+        NO_FAILING_CHUNK_INDEX_V1, RELEASE1_APPROVAL_THRESHOLD,
     },
-    release1_v3_digest::{
-        validate_emergency_freeze_observation_digest_v2,
-        validate_emergency_freeze_resolution_digest_v2,
-        validate_programdata_failure_observation_digest_v2,
-        validate_programdata_verification_digest_v2, validate_state_checkpoint_digest_v2,
-        validate_upgrade_proposal_digest_v3,
+    release1_v3_state::{ProgramDataMismatchClassV2, ProgramDataVerificationStatusV2},
+    state::{
+        GateStatusV1, OptionalPubkeyV1, ProposalClassV1, RELEASE1_MIN_COUNCIL_REVIEW_SLOTS,
+        RELEASE1_MIN_MAJOR_DELAY_SLOTS, RELEASE1_MIN_PROPOSAL_EXPIRY_SLOTS,
+        RELEASE1_MIN_ROLLBACK_DELAY_SLOTS, RELEASE1_MIN_ROUTINE_DELAY_SLOTS,
+        RELEASE1_MIN_TERMINAL_DELAY_SLOTS,
     },
-    release1_v3_state::{
-        EmergencyFreezeObservationV2, EmergencyFreezeResolutionV2, ProgramDataFailureObservationV2,
-        ProgramDataVerificationStatusV2, ProgramDataVerificationV2, StateCheckpointV2,
-        UpgradeProposalV3,
-    },
-    state::GateStatusV1,
 };
 
 pub const INITIALIZE_CONTROLLER_V2_TAG: u8 = 53;
@@ -63,6 +56,7 @@ pub const EXECUTE_UNFREEZE_V2_TAG: u8 = 74;
 
 pub const MAX_RELEASE1_V3_INSTRUCTION_DATA_LEN: usize = 16_384;
 pub const INITIALIZE_CONTROLLER_V2_ACCOUNT_COUNT: usize = 22;
+pub const BOOTSTRAP_INITIAL_SEAT_TERM_END_V2: u64 = u64::MAX;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct SeatTermV2 {
@@ -74,8 +68,498 @@ impl SeatTermV2 {
     pub const LEN: usize = 16;
 
     fn validate(&self) -> Result<(), ProgramError> {
-        if self.term_end_slot <= self.term_start_slot {
+        if self.term_end_slot != BOOTSTRAP_INITIAL_SEAT_TERM_END_V2
+            || self.term_end_slot <= self.term_start_slot
+        {
             return Err(ProgramError::InvalidInstructionData);
+        }
+        Ok(())
+    }
+}
+
+/// Signer-visible inputs needed to derive the full immutable capacity-policy
+/// account during initialization. Every identity, fixed geometry value, and
+/// creation field omitted here is derived by the controller.
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct CapacityPolicyInputV1 {
+    pub expected_policy_digest: [u8; 32],
+}
+
+impl CapacityPolicyInputV1 {
+    pub const LEN: usize = 32;
+
+    fn validate(&self) -> Result<(), ProgramError> {
+        require_hashes(&[self.expected_policy_digest])
+    }
+}
+
+/// Compact immutable release manifest. The processor derives controller,
+/// ProgramData, loader, capacity, authority, scheme, finalized, and creation
+/// fields, then requires the resulting account digest to match the commitment
+/// carried here.
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct ControllerReleaseInputV1 {
+    pub artifact_length: u64,
+    pub artifact_sha256: [u8; 32],
+    pub artifact_merkle_root: [u8; 32],
+    pub source_commitment: [u8; 32],
+    pub source_tree_commitment: [u8; 32],
+    pub build_inputs_commitment: [u8; 32],
+    pub toolchain_commitment: [u8; 32],
+    pub package_commitment: [u8; 32],
+    pub release_manifest_commitment: [u8; 32],
+    pub abi_commitment: [u8; 32],
+    pub expected_release_digest: [u8; 32],
+}
+
+impl ControllerReleaseInputV1 {
+    pub const LEN: usize = 328;
+
+    fn validate(&self) -> Result<(), ProgramError> {
+        require_hashes(&[
+            self.artifact_sha256,
+            self.artifact_merkle_root,
+            self.source_commitment,
+            self.source_tree_commitment,
+            self.build_inputs_commitment,
+            self.toolchain_commitment,
+            self.package_commitment,
+            self.release_manifest_commitment,
+            self.abi_commitment,
+            self.expected_release_digest,
+        ])?;
+        if self.artifact_length == 0 || self.artifact_length > MAX_ARTIFACT_BYTES_V1 {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        Ok(())
+    }
+}
+
+/// Compact proposal creation manifest. Runtime identities, canonical PDAs,
+/// current slot/timing, fixed schemes, disabled vote fields, and all lifecycle
+/// fields are derived by the controller. The transaction accounts themselves
+/// bind the buffer and uploader identities.
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct ProposalManifestV3 {
+    pub proposal_class: ProposalClassV1,
+    pub expected_proposal_id: u64,
+    pub expected_target_nonce: u64,
+    pub expected_gate_status: GateStatusV1,
+    pub expected_gate_epoch: u64,
+    pub expected_capacity_policy_digest: [u8; 32],
+    pub expected_current_deployment_digest: [u8; 32],
+    pub expected_current_deployment_generation: u64,
+    pub expected_policy_version: u64,
+    pub expected_policy_hash: [u8; 32],
+    pub expected_council_version: u64,
+    pub expected_council_hash: [u8; 32],
+    pub artifact_length: u64,
+    pub artifact_sha256: [u8; 32],
+    pub artifact_chunk_merkle_root: [u8; 32],
+    pub source_commit_hash: [u8; 32],
+    pub source_tree_hash: [u8; 32],
+    pub build_input_inventory_hash: [u8; 32],
+    pub reproducible_build_receipt_hash: [u8; 32],
+    pub package_receipt_hash: [u8; 32],
+    pub release_intent_hash: [u8; 32],
+    pub minimum_required_capacity: u64,
+    pub checkpoint_schema_id: [u8; 32],
+    pub checkpoint_policy_hash: [u8; 32],
+    pub primary_proposal: OptionalPubkeyV1,
+    pub rollback_proposal: OptionalPubkeyV1,
+    pub rollback_buffer: OptionalPubkeyV1,
+    pub rollback_artifact_length: u64,
+    pub rollback_artifact_sha256: [u8; 32],
+    pub rollback_artifact_chunk_root: [u8; 32],
+    pub plan_valid_until_slot: u64,
+}
+
+impl ProposalManifestV3 {
+    pub const LEN: usize = 693;
+
+    fn validate(&self) -> Result<(), ProgramError> {
+        require_hashes(&[
+            self.expected_capacity_policy_digest,
+            self.expected_current_deployment_digest,
+            self.expected_policy_hash,
+            self.expected_council_hash,
+            self.artifact_sha256,
+            self.artifact_chunk_merkle_root,
+            self.source_commit_hash,
+            self.source_tree_hash,
+            self.build_input_inventory_hash,
+            self.reproducible_build_receipt_hash,
+            self.package_receipt_hash,
+            self.release_intent_hash,
+            self.checkpoint_schema_id,
+            self.checkpoint_policy_hash,
+        ])?;
+        self.primary_proposal
+            .validate()
+            .map_err(ProgramError::from)?;
+        self.rollback_proposal
+            .validate()
+            .map_err(ProgramError::from)?;
+        self.rollback_buffer
+            .validate()
+            .map_err(ProgramError::from)?;
+        if self.expected_proposal_id == 0
+            || self.expected_proposal_id == u64::MAX
+            || self.expected_target_nonce == 0
+            || self.expected_target_nonce == u64::MAX
+            || !matches!(
+                self.expected_gate_status,
+                GateStatusV1::Active | GateStatusV1::EmergencyFrozen
+            )
+            || self.expected_gate_epoch == 0
+            || self.expected_current_deployment_generation == 0
+            || self.expected_policy_version == 0
+            || self.expected_council_version == 0
+            || self.artifact_length == 0
+            || self.artifact_length > MAX_ARTIFACT_BYTES_V1
+            || self.minimum_required_capacity < self.artifact_length
+            || self.minimum_required_capacity > MAX_PROGRAMDATA_PAYLOAD_CAPACITY_V1
+            || self.plan_valid_until_slot == 0
+        {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        let rollback_present = self.rollback_proposal.present;
+        let rollback_shape = rollback_present == self.rollback_buffer.present
+            && rollback_present == (self.rollback_artifact_length != 0)
+            && rollback_present == (self.rollback_artifact_sha256 != [0; 32])
+            && rollback_present == (self.rollback_artifact_chunk_root != [0; 32]);
+        if !rollback_shape
+            || (rollback_present && self.rollback_artifact_length > MAX_ARTIFACT_BYTES_V1)
+        {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        match self.proposal_class {
+            ProposalClassV1::EmergencyRollback => {
+                if !self.primary_proposal.present || rollback_present {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+            }
+            ProposalClassV1::RoutineUpgrade
+            | ProposalClassV1::EconomicChange
+            | ProposalClassV1::ConstitutionalChange => {
+                if self.primary_proposal.present || !rollback_present {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+            }
+            ProposalClassV1::CouncilSetRotation | ProposalClassV1::TargetImmutability => {
+                return Err(ProgramError::InvalidInstructionData);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Bounded guardian freeze guard. The controller derives the full emergency
+/// observation from the live Loader graph in the same transaction as freezing.
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct GuardianFreezeManifestV2 {
+    pub expected_gate_epoch: u64,
+    pub expected_target_nonce: u64,
+    pub expected_capacity_policy_digest: [u8; 32],
+    pub expected_current_deployment_digest: [u8; 32],
+    pub expected_current_deployment_generation: u64,
+    pub freeze_reason_code: u16,
+    pub plan_valid_until_slot: u64,
+}
+
+impl GuardianFreezeManifestV2 {
+    pub const LEN: usize = 98;
+
+    fn validate(&self) -> Result<(), ProgramError> {
+        require_hashes(&[
+            self.expected_capacity_policy_digest,
+            self.expected_current_deployment_digest,
+        ])?;
+        if self.expected_gate_epoch == 0
+            || self.expected_target_nonce == 0
+            || self.expected_current_deployment_generation == 0
+            || self.freeze_reason_code == 0
+            || self.freeze_reason_code == BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1
+            || self.plan_valid_until_slot == 0
+        {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        Ok(())
+    }
+}
+
+/// Compact emergency-resume creation manifest. The full resolution, immutable
+/// delay window, trusted deployment identity, and observation fields are
+/// reconstructed from current canonical accounts.
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct EmergencyResolutionManifestV2 {
+    pub resolution_kind: EmergencyFreezeResolutionKindV1,
+    pub expected_gate_epoch: u64,
+    pub expected_target_nonce: u64,
+    pub expected_capacity_policy_digest: [u8; 32],
+    pub expected_current_deployment_digest: [u8; 32],
+    pub expected_current_deployment_generation: u64,
+    pub expected_freeze_observation_digest: [u8; 32],
+    pub expected_programdata_observation_digest: [u8; 32],
+    pub expected_programdata_observation_generation: u64,
+    pub expected_policy_version: u64,
+    pub expected_policy_hash: [u8; 32],
+    pub expected_council_version: u64,
+    pub expected_council_hash: [u8; 32],
+    pub plan_valid_until_slot: u64,
+}
+
+impl EmergencyResolutionManifestV2 {
+    pub const LEN: usize = 249;
+
+    fn validate(&self) -> Result<(), ProgramError> {
+        require_hashes(&[
+            self.expected_capacity_policy_digest,
+            self.expected_current_deployment_digest,
+            self.expected_freeze_observation_digest,
+            self.expected_programdata_observation_digest,
+            self.expected_policy_hash,
+            self.expected_council_hash,
+        ])?;
+        if self.resolution_kind != EmergencyFreezeResolutionKindV1::ResumeWithoutUpgrade
+            || self.expected_gate_epoch == 0
+            || self.expected_target_nonce == 0
+            || self.expected_current_deployment_generation == 0
+            || self.expected_programdata_observation_generation == 0
+            || self.expected_policy_version == 0
+            || self.expected_council_version == 0
+            || self.plan_valid_until_slot == 0
+        {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        Ok(())
+    }
+}
+
+/// Candidate fields that cannot be derived from the protected on-chain state.
+/// Three independent CheckpointAttestationV1 accounts bind the resulting exact
+/// checkpoint digest before the canonical StateCheckpointV2 is created.
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct CheckpointManifestV2 {
+    pub phase: StateCheckpointPhaseV1,
+    pub checkpoint_generation: u64,
+    pub previous_checkpoint_digest: [u8; 32],
+    pub expected_subject_digest: [u8; 32],
+    pub expected_gate_epoch: u64,
+    pub expected_capacity_policy_digest: [u8; 32],
+    pub expected_current_deployment_digest: [u8; 32],
+    pub expected_current_deployment_generation: u64,
+    pub expected_observation_digest: [u8; 32],
+    pub expected_observation_generation: u64,
+    pub program_owned_state_root: [u8; 32],
+    pub program_owned_state_count: u64,
+    pub logical_compressed_state_root: [u8; 32],
+    pub logical_compressed_state_count: u64,
+    pub semantic_custody_accounting_root: [u8; 32],
+    pub hard_combined_root: [u8; 32],
+    pub external_metadata_observation_root: [u8; 32],
+    pub external_raw_balance_observation_root: [u8; 32],
+    pub schema_identifier: [u8; 32],
+    pub admitted_positive_donation_root: [u8; 32],
+    pub admitted_positive_donation_count: u64,
+    pub forbidden_drift_count: u32,
+    pub expected_council_version: u64,
+    pub expected_council_hash: [u8; 32],
+    pub expected_checkpoint_digest: [u8; 32],
+    pub plan_valid_until_slot: u64,
+}
+
+impl CheckpointManifestV2 {
+    pub const LEN: usize = 557;
+
+    fn validate(&self) -> Result<(), ProgramError> {
+        require_hashes(&[
+            self.expected_subject_digest,
+            self.expected_capacity_policy_digest,
+            self.expected_current_deployment_digest,
+            self.expected_observation_digest,
+            self.program_owned_state_root,
+            self.logical_compressed_state_root,
+            self.semantic_custody_accounting_root,
+            self.hard_combined_root,
+            self.external_metadata_observation_root,
+            self.external_raw_balance_observation_root,
+            self.schema_identifier,
+            self.expected_council_hash,
+            self.expected_checkpoint_digest,
+        ])?;
+        if self.checkpoint_generation == 0
+            || (self.checkpoint_generation == 1 && self.previous_checkpoint_digest != [0; 32])
+            || (self.checkpoint_generation > 1 && self.previous_checkpoint_digest == [0; 32])
+            || self.expected_gate_epoch == 0
+            || self.expected_current_deployment_generation == 0
+            || self.expected_observation_generation == 0
+            || self.expected_council_version == 0
+            || self.forbidden_drift_count != 0
+            || self.plan_valid_until_slot == 0
+            || (self.admitted_positive_donation_count == 0
+                && self.admitted_positive_donation_root != [0; 32])
+            || (self.admitted_positive_donation_count != 0
+                && self.admitted_positive_donation_root == [0; 32])
+        {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct CheckpointAttestationGuardV2 {
+    pub manifest: CheckpointManifestV2,
+    pub seat_index: u8,
+    pub expected_previous_attestation_digest: [u8; 32],
+}
+
+impl CheckpointAttestationGuardV2 {
+    pub const LEN: usize = CheckpointManifestV2::LEN + 1 + 32;
+
+    fn validate_create(&self) -> Result<(), ProgramError> {
+        self.manifest.validate()?;
+        if self.seat_index >= 5 || self.expected_previous_attestation_digest != [0; 32] {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        Ok(())
+    }
+
+    fn validate_recast(&self) -> Result<(), ProgramError> {
+        self.manifest.validate()?;
+        if self.seat_index >= 5 || self.expected_previous_attestation_digest == [0; 32] {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct ProgramDataVerificationManifestV2 {
+    pub expected: ProposalGuardV3,
+    pub expected_observation_digest: [u8; 32],
+    pub expected_observation_generation: u64,
+    pub expected_observation_root: [u8; 32],
+    pub expected_observation_finalized_slot: u64,
+    pub verification_generation: u64,
+    pub previous_verification_digest: [u8; 32],
+    pub plan_valid_until_slot: u64,
+}
+
+impl ProgramDataVerificationManifestV2 {
+    pub const LEN: usize = ProposalGuardV3::LEN + 128;
+
+    fn validate(&self) -> Result<(), ProgramError> {
+        self.expected.validate()?;
+        require_hashes(&[
+            self.expected_observation_digest,
+            self.expected_observation_root,
+        ])?;
+        if self.expected.expected_state != ProposalStateV2::UpgradeExecuted
+            || self.expected_observation_generation == 0
+            || self.expected_observation_finalized_slot == 0
+            || self.verification_generation == 0
+            || (self.verification_generation == 1 && self.previous_verification_digest != [0; 32])
+            || (self.verification_generation > 1 && self.previous_verification_digest == [0; 32])
+            || self.plan_valid_until_slot == 0
+        {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        Ok(())
+    }
+}
+
+/// Compact mechanical witness for the first post-upgrade verification
+/// failure. The processor derives the full failure-observation account and its
+/// Clock-bound digest. Operator-supplied bytes or leaf hashes are never trusted
+/// without a canonical proof or an on-chain derivation.
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct ProgramDataFailureProofV2 {
+    pub proof_len: u8,
+    pub nodes: [[u8; 32]; MAX_ARTIFACT_PROOF_DEPTH_V1],
+}
+
+impl ProgramDataFailureProofV2 {
+    pub const LEN: usize = 1 + 32 * MAX_ARTIFACT_PROOF_DEPTH_V1;
+
+    fn validate(&self) -> Result<(), ProgramError> {
+        let used = usize::from(self.proof_len);
+        if used > MAX_ARTIFACT_PROOF_DEPTH_V1
+            || self.nodes[used..].iter().any(|node| *node != [0; 32])
+        {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct ProgramDataFailureWitnessV2 {
+    pub expected_proposal: ProposalGuardV3,
+    pub expected_verification_digest: [u8; 32],
+    pub expected_verification_generation: u64,
+    pub expected_observation_generation: u64,
+    pub expected_observation_state_hash: [u8; 32],
+    pub mismatch_class: ProgramDataMismatchClassV2,
+    pub failing_chunk_index: u32,
+    pub expected_leaf_hash: [u8; 32],
+    pub proof: ProgramDataFailureProofV2,
+    pub plan_valid_until_slot: u64,
+}
+
+impl ProgramDataFailureWitnessV2 {
+    pub const LEN: usize = ProposalGuardV3::LEN + 350;
+
+    fn validate(&self) -> Result<(), ProgramError> {
+        self.expected_proposal.validate()?;
+        self.proof.validate()?;
+        let verification_present = self.expected_verification_digest != [0; 32];
+        if self.expected_proposal.expected_state != ProposalStateV2::UpgradeExecuted
+            || verification_present != (self.expected_verification_generation != 0)
+            || self.expected_observation_generation == 0
+            || self.plan_valid_until_slot == 0
+        {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        let proof_present =
+            self.proof.proof_len != 0 || self.proof.nodes.iter().any(|node| *node != [0; 32]);
+        match self.mismatch_class {
+            ProgramDataMismatchClassV2::ArtifactPayload => {
+                if self.failing_chunk_index == NO_FAILING_CHUNK_INDEX_V1
+                    || self.expected_leaf_hash == [0; 32]
+                    || self.expected_observation_state_hash == [0; 32]
+                {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+            }
+            ProgramDataMismatchClassV2::ZeroTail => {
+                if self.failing_chunk_index == NO_FAILING_CHUNK_INDEX_V1
+                    || self.expected_leaf_hash != [0; 32]
+                    || proof_present
+                    || self.expected_observation_state_hash == [0; 32]
+                {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+            }
+            ProgramDataMismatchClassV2::ObservationStale
+            | ProgramDataMismatchClassV2::ObservationScheme => {
+                if self.failing_chunk_index != NO_FAILING_CHUNK_INDEX_V1
+                    || self.expected_leaf_hash != [0; 32]
+                    || proof_present
+                    || self.expected_observation_state_hash == [0; 32]
+                {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+            }
+            _ => {
+                if self.failing_chunk_index != NO_FAILING_CHUNK_INDEX_V1
+                    || self.expected_leaf_hash != [0; 32]
+                    || proof_present
+                {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+            }
         }
         Ok(())
     }
@@ -139,59 +623,12 @@ impl EmergencyResolutionGuardV2 {
             self.expected_current_deployment_digest,
             self.expected_freeze_observation_digest,
             self.expected_programdata_observation_digest,
-            self.expected_checkpoint_digest,
         ])?;
         if self.expected_gate_status != GateStatusV1::EmergencyFrozen
             || self.expected_gate_epoch == 0
             || self.expected_target_nonce == 0
             || self.expected_current_deployment_generation == 0
             || self.expected_observation_generation == 0
-        {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
-pub struct CheckpointGuardV2 {
-    pub expected_checkpoint_digest: [u8; 32],
-    pub expected_checkpoint_generation: u64,
-    pub expected_phase: StateCheckpointPhaseV1,
-    pub expected_subject_digest: [u8; 32],
-    pub expected_gate_epoch: u64,
-    pub expected_capacity_policy_digest: [u8; 32],
-    pub expected_current_deployment_digest: [u8; 32],
-    pub expected_current_deployment_generation: u64,
-    pub expected_observation_digest: [u8; 32],
-    pub expected_observation_generation: u64,
-    pub expected_council_version: u64,
-    pub expected_council_hash: [u8; 32],
-    pub expected_approval_bitset: u8,
-    pub expected_approval_count: u8,
-    pub expected_accepted: bool,
-}
-
-impl CheckpointGuardV2 {
-    pub const LEN: usize = 236;
-
-    fn validate(&self) -> Result<(), ProgramError> {
-        require_hashes(&[
-            self.expected_checkpoint_digest,
-            self.expected_subject_digest,
-            self.expected_capacity_policy_digest,
-            self.expected_current_deployment_digest,
-            self.expected_observation_digest,
-            self.expected_council_hash,
-        ])?;
-        validate_approval_pair(self.expected_approval_bitset, self.expected_approval_count)?;
-        if self.expected_checkpoint_generation == 0
-            || self.expected_gate_epoch == 0
-            || self.expected_current_deployment_generation == 0
-            || self.expected_observation_generation == 0
-            || self.expected_council_version == 0
-            || self.expected_approval_count != RELEASE1_APPROVAL_THRESHOLD
-            || !self.expected_accepted
         {
             return Err(ProgramError::InvalidInstructionData);
         }
@@ -346,7 +783,7 @@ fixed_instruction!(
     InitializeControllerV2,
     INITIALIZE_CONTROLLER_V2_TAG_ALIAS,
     INITIALIZE_CONTROLLER_V2_TAG,
-    1_424,
+    632,
     {
         cluster_domain: [u8; 32],
         initial_policy_version: u64,
@@ -364,8 +801,8 @@ fixed_instruction!(
         expected_policy_hash: [u8; 32],
         expected_council_hash: [u8; 32],
         seat_terms: [SeatTermV2; 5],
-        capacity_policy: ProgramDataCapacityPolicyV1,
-        controller_release: ControllerReleaseCommitmentV1
+        capacity_policy: CapacityPolicyInputV1,
+        controller_release: ControllerReleaseInputV1
     }
 );
 
@@ -373,8 +810,8 @@ fixed_instruction!(
     CreateProposalV3,
     CREATE_PROPOSAL_V3_TAG_ALIAS,
     CREATE_PROPOSAL_V3_TAG,
-    UpgradeProposalV3::LEN,
-    { candidate: UpgradeProposalV3 }
+    ProposalManifestV3::LEN,
+    { manifest: ProposalManifestV3 }
 );
 
 fixed_instruction!(
@@ -425,12 +862,12 @@ fixed_instruction!(ExpireProposalV3, EXPIRE_PROPOSAL_V3_TAG_ALIAS, EXPIRE_PROPOS
     expected: ProposalGuardV3
 });
 
-fixed_instruction!(GuardianFreezeV2, GUARDIAN_FREEZE_V2_TAG_ALIAS, GUARDIAN_FREEZE_V2_TAG, EmergencyFreezeObservationV2::LEN, {
-    candidate: EmergencyFreezeObservationV2
+fixed_instruction!(GuardianFreezeV2, GUARDIAN_FREEZE_V2_TAG_ALIAS, GUARDIAN_FREEZE_V2_TAG, GuardianFreezeManifestV2::LEN, {
+    manifest: GuardianFreezeManifestV2
 });
 
-fixed_instruction!(CreateEmergencyResolutionV2, CREATE_EMERGENCY_RESOLUTION_V2_TAG_ALIAS, CREATE_EMERGENCY_RESOLUTION_V2_TAG, EmergencyFreezeResolutionV2::LEN, {
-    candidate: EmergencyFreezeResolutionV2
+fixed_instruction!(CreateEmergencyResolutionV2, CREATE_EMERGENCY_RESOLUTION_V2_TAG_ALIAS, CREATE_EMERGENCY_RESOLUTION_V2_TAG, EmergencyResolutionManifestV2::LEN, {
+    manifest: EmergencyResolutionManifestV2
 });
 
 fixed_instruction!(ApproveEmergencyResolutionV2, APPROVE_EMERGENCY_RESOLUTION_V2_TAG_ALIAS, APPROVE_EMERGENCY_RESOLUTION_V2_TAG, EmergencyResolutionGuardV2::LEN + 1 + 1, {
@@ -452,30 +889,28 @@ fixed_instruction!(ExpireEmergencyResolutionV2, EXPIRE_EMERGENCY_RESOLUTION_V2_T
     expected: EmergencyResolutionGuardV2
 });
 
-fixed_instruction!(CreateCheckpointV2, CREATE_CHECKPOINT_V2_TAG_ALIAS, CREATE_CHECKPOINT_V2_TAG, StateCheckpointV2::LEN, {
-    candidate: StateCheckpointV2
+fixed_instruction!(CreateCheckpointV2, CREATE_CHECKPOINT_V2_TAG_ALIAS, CREATE_CHECKPOINT_V2_TAG, CheckpointAttestationGuardV2::LEN, {
+    attestation: CheckpointAttestationGuardV2
 });
 
-fixed_instruction!(RecastCheckpointV2, RECAST_CHECKPOINT_V2_TAG_ALIAS, RECAST_CHECKPOINT_V2_TAG, 32 + StateCheckpointV2::LEN, {
-    expected_previous_checkpoint_digest: [u8; 32],
-    candidate: StateCheckpointV2
+fixed_instruction!(RecastCheckpointV2, RECAST_CHECKPOINT_V2_TAG_ALIAS, RECAST_CHECKPOINT_V2_TAG, CheckpointAttestationGuardV2::LEN, {
+    attestation: CheckpointAttestationGuardV2
 });
 
-fixed_instruction!(FinalizeCheckpointV2, FINALIZE_CHECKPOINT_V2_TAG_ALIAS, FINALIZE_CHECKPOINT_V2_TAG, CheckpointGuardV2::LEN, {
-    expected: CheckpointGuardV2
+fixed_instruction!(FinalizeCheckpointV2, FINALIZE_CHECKPOINT_V2_TAG_ALIAS, FINALIZE_CHECKPOINT_V2_TAG, CheckpointManifestV2::LEN, {
+    manifest: CheckpointManifestV2
 });
 
-fixed_instruction!(BindProgramDataVerificationV2, BIND_PROGRAMDATA_VERIFICATION_V2_TAG_ALIAS, BIND_PROGRAMDATA_VERIFICATION_V2_TAG, ProgramDataVerificationV2::LEN, {
-    candidate: ProgramDataVerificationV2
+fixed_instruction!(BindProgramDataVerificationV2, BIND_PROGRAMDATA_VERIFICATION_V2_TAG_ALIAS, BIND_PROGRAMDATA_VERIFICATION_V2_TAG, ProgramDataVerificationManifestV2::LEN, {
+    manifest: ProgramDataVerificationManifestV2
 });
 
-fixed_instruction!(FinalizeProgramDataVerificationV2, FINALIZE_PROGRAMDATA_VERIFICATION_V2_TAG_ALIAS, FINALIZE_PROGRAMDATA_VERIFICATION_V2_TAG, 32 + ProgramDataVerificationV2::LEN, {
-    expected_bound_verification_digest: [u8; 32],
-    finalized: ProgramDataVerificationV2
+fixed_instruction!(FinalizeProgramDataVerificationV2, FINALIZE_PROGRAMDATA_VERIFICATION_V2_TAG_ALIAS, FINALIZE_PROGRAMDATA_VERIFICATION_V2_TAG, ProgramDataVerificationGuardV2::LEN, {
+    expected: ProgramDataVerificationGuardV2
 });
 
-fixed_instruction!(ObserveProgramDataFailureV2, OBSERVE_PROGRAMDATA_FAILURE_V2_TAG_ALIAS, OBSERVE_PROGRAMDATA_FAILURE_V2_TAG, ProgramDataFailureObservationV2::LEN, {
-    candidate: ProgramDataFailureObservationV2
+fixed_instruction!(ObserveProgramDataFailureV2, OBSERVE_PROGRAMDATA_FAILURE_V2_TAG_ALIAS, OBSERVE_PROGRAMDATA_FAILURE_V2_TAG, ProgramDataFailureWitnessV2::LEN, {
+    witness: ProgramDataFailureWitnessV2
 });
 
 fixed_instruction!(ApproveUnfreezeV2, APPROVE_UNFREEZE_V2_TAG_ALIAS, APPROVE_UNFREEZE_V2_TAG, UnfreezeGuardV2::LEN, {
@@ -495,6 +930,12 @@ impl WireValidate for InitializeControllerV2 {
             self.expected_policy_hash,
             self.expected_council_hash,
         ])?;
+        let minimum_expiry_slots = 1u64
+            .checked_add(self.vote_review_slots)
+            .and_then(|slots| slots.checked_add(self.major_delay_slots))
+            .and_then(|slots| slots.checked_add(self.vote_review_slots))
+            .and_then(|slots| slots.checked_add(2))
+            .ok_or(ProgramError::InvalidInstructionData)?;
         if self.initial_policy_version == 0
             || self.initial_council_version == 0
             || self.next_proposal_id == 0
@@ -503,36 +944,30 @@ impl WireValidate for InitializeControllerV2 {
             || self.target_nonce == u64::MAX
             || self.initial_gate_epoch != 1
             || self.policy_activation_slot == 0
-            || self.routine_delay_slots == 0
+            || self.routine_delay_slots < RELEASE1_MIN_ROUTINE_DELAY_SLOTS
+            || self.major_delay_slots < RELEASE1_MIN_MAJOR_DELAY_SLOTS
+            || self.rollback_delay_slots < RELEASE1_MIN_ROLLBACK_DELAY_SLOTS
+            || self.terminal_delay_slots < RELEASE1_MIN_TERMINAL_DELAY_SLOTS
+            || self.vote_review_slots < RELEASE1_MIN_COUNCIL_REVIEW_SLOTS
+            || self.proposal_expiry_slots < RELEASE1_MIN_PROPOSAL_EXPIRY_SLOTS
             || self.major_delay_slots < self.routine_delay_slots
-            || self.rollback_delay_slots == 0
+            || self.rollback_delay_slots > self.routine_delay_slots
             || self.terminal_delay_slots < self.major_delay_slots
-            || self.vote_review_slots == 0
-            || self.proposal_expiry_slots <= self.major_delay_slots
+            || minimum_expiry_slots >= self.proposal_expiry_slots
         {
             return Err(ProgramError::InvalidInstructionData);
         }
         for term in &self.seat_terms {
             term.validate()?;
         }
-        self.capacity_policy
-            .validate_static()
-            .map_err(ProgramError::from)?;
-        validate_capacity_policy_digest_v1(&self.capacity_policy).map_err(ProgramError::from)?;
-        self.controller_release
-            .validate_static()
-            .map_err(ProgramError::from)?;
-        validate_controller_release_digest_v1(&self.controller_release).map_err(ProgramError::from)
+        self.capacity_policy.validate()?;
+        self.controller_release.validate()
     }
 }
 
 impl WireValidate for CreateProposalV3 {
     fn validate_wire(&self) -> Result<(), ProgramError> {
-        validate_upgrade_proposal_digest_v3(&self.candidate).map_err(ProgramError::from)?;
-        if self.candidate.state != ProposalStateV2::Draft {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-        Ok(())
+        self.manifest.validate()
     }
 }
 
@@ -623,20 +1058,13 @@ impl WireValidate for ExpireProposalV3 {
 
 impl WireValidate for GuardianFreezeV2 {
     fn validate_wire(&self) -> Result<(), ProgramError> {
-        validate_emergency_freeze_observation_digest_v2(&self.candidate).map_err(ProgramError::from)
+        self.manifest.validate()
     }
 }
 
 impl WireValidate for CreateEmergencyResolutionV2 {
     fn validate_wire(&self) -> Result<(), ProgramError> {
-        validate_emergency_freeze_resolution_digest_v2(&self.candidate)
-            .map_err(ProgramError::from)?;
-        if self.candidate.state != EmergencyFreezeResolutionStateV1::Draft
-            || self.candidate.approval_count != 0
-        {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-        Ok(())
+        self.manifest.validate()
     }
 }
 
@@ -645,6 +1073,7 @@ impl WireValidate for ApproveEmergencyResolutionV2 {
         self.expected.validate()?;
         validate_approval_pair(self.expected_approval_bitset, self.expected_approval_count)?;
         if self.expected.expected_state != EmergencyFreezeResolutionStateV1::Draft
+            || self.expected.expected_checkpoint_digest == [0; 32]
             || self.expected_approval_count >= RELEASE1_APPROVAL_THRESHOLD
         {
             return Err(ProgramError::InvalidInstructionData);
@@ -659,7 +1088,11 @@ impl WireValidate for QueueEmergencyResolutionV2 {
         require_resolution_state(
             &self.expected,
             EmergencyFreezeResolutionStateV1::CouncilApproved,
-        )
+        )?;
+        if self.expected.expected_checkpoint_digest == [0; 32] {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        Ok(())
     }
 }
 
@@ -667,6 +1100,9 @@ impl WireValidate for ExecuteEmergencyResolutionV2 {
     fn validate_wire(&self) -> Result<(), ProgramError> {
         self.expected.validate()?;
         require_resolution_state(&self.expected, EmergencyFreezeResolutionStateV1::Timelocked)?;
+        if self.expected.expected_checkpoint_digest == [0; 32] {
+            return Err(ProgramError::InvalidInstructionData);
+        }
         self.envelope.validate()
     }
 }
@@ -688,55 +1124,32 @@ impl WireValidate for ExpireEmergencyResolutionV2 {
 
 impl WireValidate for CreateCheckpointV2 {
     fn validate_wire(&self) -> Result<(), ProgramError> {
-        validate_state_checkpoint_digest_v2(&self.candidate).map_err(ProgramError::from)?;
-        if self.candidate.checkpoint_generation != 1
-            || self.candidate.previous_checkpoint_digest != [0; 32]
-            || self.candidate.approval_count != 0
-            || self.candidate.accepted
-        {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-        Ok(())
+        self.attestation.validate_create()
     }
 }
 
 impl WireValidate for RecastCheckpointV2 {
     fn validate_wire(&self) -> Result<(), ProgramError> {
-        validate_state_checkpoint_digest_v2(&self.candidate).map_err(ProgramError::from)?;
-        if self.expected_previous_checkpoint_digest == [0; 32]
-            || self.candidate.checkpoint_generation <= 1
-            || self.candidate.previous_checkpoint_digest != self.expected_previous_checkpoint_digest
-            || self.candidate.approval_count != 0
-            || self.candidate.accepted
-        {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-        Ok(())
+        self.attestation.validate_recast()
     }
 }
 
 impl WireValidate for FinalizeCheckpointV2 {
     fn validate_wire(&self) -> Result<(), ProgramError> {
-        self.expected.validate()
+        self.manifest.validate()
     }
 }
 
 impl WireValidate for BindProgramDataVerificationV2 {
     fn validate_wire(&self) -> Result<(), ProgramError> {
-        validate_programdata_verification_digest_v2(&self.candidate).map_err(ProgramError::from)?;
-        if self.candidate.status != ProgramDataVerificationStatusV2::ObservationBound {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-        Ok(())
+        self.manifest.validate()
     }
 }
 
 impl WireValidate for FinalizeProgramDataVerificationV2 {
     fn validate_wire(&self) -> Result<(), ProgramError> {
-        validate_programdata_verification_digest_v2(&self.finalized).map_err(ProgramError::from)?;
-        if self.expected_bound_verification_digest == [0; 32]
-            || self.finalized.status != ProgramDataVerificationStatusV2::Verified
-        {
+        self.expected.validate()?;
+        if self.expected.expected_status != ProgramDataVerificationStatusV2::ObservationBound {
             return Err(ProgramError::InvalidInstructionData);
         }
         Ok(())
@@ -745,8 +1158,7 @@ impl WireValidate for FinalizeProgramDataVerificationV2 {
 
 impl WireValidate for ObserveProgramDataFailureV2 {
     fn validate_wire(&self) -> Result<(), ProgramError> {
-        validate_programdata_failure_observation_digest_v2(&self.candidate)
-            .map_err(ProgramError::from)
+        self.witness.validate()
     }
 }
 
@@ -1159,7 +1571,7 @@ closed_builder!(
         current_council: readonly,
         protocol_gate: writable,
         capacity_policy: readonly,
-        current_deployment: readonly,
+        current_deployment: writable,
         emergency_resolution: writable,
         emergency_freeze_observation: readonly,
         programdata_observation: readonly,
@@ -1187,35 +1599,139 @@ closed_builder!(
 );
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CheckpointMutationV2Accounts {
+pub struct CreateCheckpointV2Accounts {
     pub payer: Pubkey,
     pub controller_config: Pubkey,
     pub policy: Pubkey,
     pub current_council: Pubkey,
     pub protocol_gate: Pubkey,
     pub subject: Pubkey,
+    pub linked_primary_or_authority: Pubkey,
     pub capacity_policy: Pubkey,
     pub current_deployment: Pubkey,
     pub programdata_observation: Pubkey,
     pub target_program: Pubkey,
     pub target_programdata: Pubkey,
     pub checkpoint: Pubkey,
-    pub seat_authorities: [Pubkey; 3],
+    pub checkpoint_attestation: Pubkey,
+    pub seat_authority: Pubkey,
     pub system_program: Pubkey,
 }
 
-fn checkpoint_mutation_instruction(
+pub fn create_checkpoint_v2_instruction(
     controller_program: Pubkey,
-    accounts: CheckpointMutationV2Accounts,
-    data: Vec<u8>,
-) -> Instruction {
+    accounts: CreateCheckpointV2Accounts,
+    instruction: CreateCheckpointV2,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: controller_program,
+        accounts: vec![
+            account_meta!(accounts.payer, signer_writable),
+            account_meta!(accounts.controller_config, readonly),
+            account_meta!(accounts.policy, readonly),
+            account_meta!(accounts.current_council, readonly),
+            account_meta!(accounts.protocol_gate, readonly),
+            account_meta!(accounts.subject, readonly),
+            account_meta!(accounts.linked_primary_or_authority, readonly),
+            account_meta!(accounts.capacity_policy, readonly),
+            account_meta!(accounts.current_deployment, readonly),
+            account_meta!(accounts.programdata_observation, readonly),
+            account_meta!(accounts.target_program, readonly),
+            account_meta!(accounts.target_programdata, readonly),
+            account_meta!(accounts.checkpoint, readonly),
+            account_meta!(accounts.checkpoint_attestation, writable),
+            account_meta!(accounts.seat_authority, signer_readonly),
+            account_meta!(accounts.system_program, readonly),
+        ],
+        data: instruction.pack()?,
+    })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RecastCheckpointV2Accounts {
+    pub controller_config: Pubkey,
+    pub policy: Pubkey,
+    pub current_council: Pubkey,
+    pub protocol_gate: Pubkey,
+    pub subject: Pubkey,
+    pub linked_primary_or_authority: Pubkey,
+    pub capacity_policy: Pubkey,
+    pub current_deployment: Pubkey,
+    pub programdata_observation: Pubkey,
+    pub target_program: Pubkey,
+    pub target_programdata: Pubkey,
+    pub checkpoint: Pubkey,
+    pub checkpoint_attestation: Pubkey,
+    pub seat_authority: Pubkey,
+}
+
+pub fn recast_checkpoint_v2_instruction(
+    controller_program: Pubkey,
+    accounts: RecastCheckpointV2Accounts,
+    instruction: RecastCheckpointV2,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: controller_program,
+        accounts: vec![
+            account_meta!(accounts.controller_config, readonly),
+            account_meta!(accounts.policy, readonly),
+            account_meta!(accounts.current_council, readonly),
+            account_meta!(accounts.protocol_gate, readonly),
+            account_meta!(accounts.subject, readonly),
+            account_meta!(accounts.linked_primary_or_authority, readonly),
+            account_meta!(accounts.capacity_policy, readonly),
+            account_meta!(accounts.current_deployment, readonly),
+            account_meta!(accounts.programdata_observation, readonly),
+            account_meta!(accounts.target_program, readonly),
+            account_meta!(accounts.target_programdata, readonly),
+            account_meta!(accounts.checkpoint, readonly),
+            account_meta!(accounts.checkpoint_attestation, writable),
+            account_meta!(accounts.seat_authority, signer_readonly),
+        ],
+        data: instruction.pack()?,
+    })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FinalizeCheckpointV2Accounts {
+    pub payer: Pubkey,
+    pub controller_config: Pubkey,
+    pub policy: Pubkey,
+    pub current_council: Pubkey,
+    pub protocol_gate: Pubkey,
+    pub subject: Pubkey,
+    pub linked_primary_or_authority: Pubkey,
+    pub capacity_policy: Pubkey,
+    pub current_deployment: Pubkey,
+    pub programdata_observation: Pubkey,
+    pub target_program: Pubkey,
+    pub target_programdata: Pubkey,
+    pub checkpoint: Pubkey,
+    pub checkpoint_attestations: [Pubkey; 3],
+    pub system_program: Pubkey,
+}
+
+pub fn finalize_checkpoint_v2_instruction(
+    controller_program: Pubkey,
+    accounts: FinalizeCheckpointV2Accounts,
+    instruction: FinalizeCheckpointV2,
+) -> Result<Instruction, ProgramError> {
+    let subject = if matches!(
+        instruction.manifest.phase,
+        StateCheckpointPhaseV1::Poststate | StateCheckpointPhaseV1::Emergency
+    ) {
+        account_meta!(accounts.subject, writable)
+    } else {
+        account_meta!(accounts.subject, readonly)
+    };
     let mut metas = vec![
         account_meta!(accounts.payer, signer_writable),
         account_meta!(accounts.controller_config, readonly),
         account_meta!(accounts.policy, readonly),
         account_meta!(accounts.current_council, readonly),
         account_meta!(accounts.protocol_gate, readonly),
-        account_meta!(accounts.subject, readonly),
+        subject,
+        account_meta!(accounts.linked_primary_or_authority, readonly),
         account_meta!(accounts.capacity_policy, readonly),
         account_meta!(accounts.current_deployment, readonly),
         account_meta!(accounts.programdata_observation, readonly),
@@ -1225,82 +1741,14 @@ fn checkpoint_mutation_instruction(
     ];
     metas.extend(
         accounts
-            .seat_authorities
+            .checkpoint_attestations
             .into_iter()
-            .map(|authority| account_meta!(authority, signer_readonly)),
+            .map(|attestation| account_meta!(attestation, readonly)),
     );
     metas.push(account_meta!(accounts.system_program, readonly));
-    Instruction {
-        program_id: controller_program,
-        accounts: metas,
-        data,
-    }
-}
-
-pub fn create_checkpoint_v2_instruction(
-    controller_program: Pubkey,
-    accounts: CheckpointMutationV2Accounts,
-    instruction: CreateCheckpointV2,
-) -> Result<Instruction, ProgramError> {
-    Ok(checkpoint_mutation_instruction(
-        controller_program,
-        accounts,
-        instruction.pack()?,
-    ))
-}
-
-pub fn recast_checkpoint_v2_instruction(
-    controller_program: Pubkey,
-    accounts: CheckpointMutationV2Accounts,
-    instruction: RecastCheckpointV2,
-) -> Result<Instruction, ProgramError> {
-    Ok(checkpoint_mutation_instruction(
-        controller_program,
-        accounts,
-        instruction.pack()?,
-    ))
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct FinalizeCheckpointV2Accounts {
-    pub controller_config: Pubkey,
-    pub policy: Pubkey,
-    pub current_council: Pubkey,
-    pub protocol_gate: Pubkey,
-    pub subject: Pubkey,
-    pub capacity_policy: Pubkey,
-    pub current_deployment: Pubkey,
-    pub programdata_observation: Pubkey,
-    pub target_program: Pubkey,
-    pub target_programdata: Pubkey,
-    pub checkpoint: Pubkey,
-}
-
-pub fn finalize_checkpoint_v2_instruction(
-    controller_program: Pubkey,
-    accounts: FinalizeCheckpointV2Accounts,
-    instruction: FinalizeCheckpointV2,
-) -> Result<Instruction, ProgramError> {
-    let subject = if instruction.expected.expected_phase == StateCheckpointPhaseV1::Poststate {
-        account_meta!(accounts.subject, writable)
-    } else {
-        account_meta!(accounts.subject, readonly)
-    };
     Ok(Instruction {
         program_id: controller_program,
-        accounts: vec![
-            account_meta!(accounts.controller_config, readonly),
-            account_meta!(accounts.policy, readonly),
-            account_meta!(accounts.current_council, readonly),
-            account_meta!(accounts.protocol_gate, readonly),
-            subject,
-            account_meta!(accounts.capacity_policy, readonly),
-            account_meta!(accounts.current_deployment, readonly),
-            account_meta!(accounts.programdata_observation, readonly),
-            account_meta!(accounts.target_program, readonly),
-            account_meta!(accounts.target_programdata, readonly),
-            account_meta!(accounts.checkpoint, writable),
-        ],
+        accounts: metas,
         data: instruction.pack()?,
     })
 }
@@ -1396,7 +1844,7 @@ closed_builder!(
         poststate_checkpoint: readonly,
         programdata_verification: readonly,
         capacity_policy: readonly,
-        current_deployment: readonly,
+        current_deployment: writable,
         target_program: readonly,
         target_programdata: readonly,
         authority_pda: readonly,
@@ -1408,7 +1856,7 @@ closed_builder!(
 );
 
 fn require_hashes(values: &[[u8; 32]]) -> Result<(), ProgramError> {
-    if values.iter().any(|value| *value == [0; 32]) {
+    if values.contains(&[0; 32]) {
         Err(ProgramError::InvalidInstructionData)
     } else {
         Ok(())
@@ -1498,23 +1946,81 @@ mod tests {
         }
     }
 
-    fn checkpoint_guard(phase: StateCheckpointPhaseV1) -> CheckpointGuardV2 {
-        CheckpointGuardV2 {
-            expected_checkpoint_digest: [1; 32],
-            expected_checkpoint_generation: 1,
-            expected_phase: phase,
-            expected_subject_digest: [2; 32],
-            expected_gate_epoch: 3,
-            expected_capacity_policy_digest: [4; 32],
-            expected_current_deployment_digest: [5; 32],
+    fn proposal_manifest() -> ProposalManifestV3 {
+        ProposalManifestV3 {
+            proposal_class: ProposalClassV1::RoutineUpgrade,
+            expected_proposal_id: 1,
+            expected_target_nonce: 1,
+            expected_gate_status: GateStatusV1::Active,
+            expected_gate_epoch: 1,
+            expected_capacity_policy_digest: [1; 32],
+            expected_current_deployment_digest: [2; 32],
             expected_current_deployment_generation: 1,
-            expected_observation_digest: [6; 32],
-            expected_observation_generation: 1,
+            expected_policy_version: 1,
+            expected_policy_hash: [3; 32],
             expected_council_version: 1,
-            expected_council_hash: [7; 32],
-            expected_approval_bitset: 0b00111,
-            expected_approval_count: 3,
-            expected_accepted: true,
+            expected_council_hash: [4; 32],
+            artifact_length: 16_384,
+            artifact_sha256: [5; 32],
+            artifact_chunk_merkle_root: [6; 32],
+            source_commit_hash: [7; 32],
+            source_tree_hash: [8; 32],
+            build_input_inventory_hash: [9; 32],
+            reproducible_build_receipt_hash: [10; 32],
+            package_receipt_hash: [11; 32],
+            release_intent_hash: [12; 32],
+            minimum_required_capacity: 16_384,
+            checkpoint_schema_id: [13; 32],
+            checkpoint_policy_hash: [14; 32],
+            primary_proposal: OptionalPubkeyV1::none(),
+            rollback_proposal: OptionalPubkeyV1::some(key(15)).unwrap(),
+            rollback_buffer: OptionalPubkeyV1::some(key(16)).unwrap(),
+            rollback_artifact_length: 16_384,
+            rollback_artifact_sha256: [17; 32],
+            rollback_artifact_chunk_root: [18; 32],
+            plan_valid_until_slot: 1_000,
+        }
+    }
+
+    fn checkpoint_manifest(phase: StateCheckpointPhaseV1) -> CheckpointManifestV2 {
+        CheckpointManifestV2 {
+            phase,
+            checkpoint_generation: 1,
+            previous_checkpoint_digest: [0; 32],
+            expected_subject_digest: [1; 32],
+            expected_gate_epoch: 3,
+            expected_capacity_policy_digest: [2; 32],
+            expected_current_deployment_digest: [3; 32],
+            expected_current_deployment_generation: 1,
+            expected_observation_digest: [4; 32],
+            expected_observation_generation: 1,
+            program_owned_state_root: [5; 32],
+            program_owned_state_count: 1,
+            logical_compressed_state_root: [6; 32],
+            logical_compressed_state_count: 1,
+            semantic_custody_accounting_root: [7; 32],
+            hard_combined_root: [8; 32],
+            external_metadata_observation_root: [9; 32],
+            external_raw_balance_observation_root: [10; 32],
+            schema_identifier: [11; 32],
+            admitted_positive_donation_root: [0; 32],
+            admitted_positive_donation_count: 0,
+            forbidden_drift_count: 0,
+            expected_council_version: 1,
+            expected_council_hash: [12; 32],
+            expected_checkpoint_digest: [13; 32],
+            plan_valid_until_slot: 1_000,
+        }
+    }
+
+    fn checkpoint_attestation(
+        phase: StateCheckpointPhaseV1,
+        previous_attestation_digest: [u8; 32],
+    ) -> CheckpointAttestationGuardV2 {
+        CheckpointAttestationGuardV2 {
+            manifest: checkpoint_manifest(phase),
+            seat_index: 1,
+            expected_previous_attestation_digest: previous_attestation_digest,
         }
     }
 
@@ -1604,6 +2110,12 @@ mod tests {
     #[test]
     fn representative_codecs_are_exact_and_semantically_strict() {
         assert_codec!(
+            CreateProposalV3 {
+                manifest: proposal_manifest()
+            },
+            CreateProposalV3
+        );
+        assert_codec!(
             QueueProposalV3 {
                 expected: proposal_guard(ProposalStateV2::GovernanceSatisfied)
             },
@@ -1624,7 +2136,7 @@ mod tests {
         );
         assert_codec!(
             FinalizeCheckpointV2 {
-                expected: checkpoint_guard(StateCheckpointPhaseV1::Poststate)
+                manifest: checkpoint_manifest(StateCheckpointPhaseV1::Poststate)
             },
             FinalizeCheckpointV2
         );
@@ -1681,16 +2193,18 @@ mod tests {
             ApproveUnfreezeV2::LEN,
             ExecuteUnfreezeV2::LEN,
         ];
-        assert!(lengths
-            .iter()
-            .all(|length| *length > 1 && *length <= MAX_RELEASE1_V3_INSTRUCTION_DATA_LEN));
-        assert_eq!(CreateProposalV3::PAYLOAD_LEN, UpgradeProposalV3::LEN);
-        assert_eq!(InitializeControllerV2::PAYLOAD_LEN, 1_424);
+        assert!(lengths.iter().all(|length| *length > 1 && *length < 1_232));
+        assert_eq!(CreateProposalV3::PAYLOAD_LEN, ProposalManifestV3::LEN);
+        assert_eq!(InitializeControllerV2::PAYLOAD_LEN, 632);
+        assert!(std::hint::black_box(InitializeControllerV2::LEN) < 1_232);
         assert_eq!(INITIALIZE_CONTROLLER_V2_ACCOUNT_COUNT, 22);
-        assert_eq!(CreateCheckpointV2::PAYLOAD_LEN, StateCheckpointV2::LEN);
+        assert_eq!(
+            CreateCheckpointV2::PAYLOAD_LEN,
+            CheckpointAttestationGuardV2::LEN
+        );
         assert_eq!(
             BindProgramDataVerificationV2::PAYLOAD_LEN,
-            ProgramDataVerificationV2::LEN
+            ProgramDataVerificationManifestV2::LEN
         );
         assert_eq!(UnfreezeGuardV2::LEN, 322);
     }
@@ -1718,30 +2232,166 @@ mod tests {
             .all(|meta| !meta.is_signer && !meta.is_writable));
         assert!(queue.accounts[5].is_writable && !queue.accounts[5].is_signer);
 
-        let finalize = finalize_checkpoint_v2_instruction(
+        let create = create_checkpoint_v2_instruction(
             key(1),
-            FinalizeCheckpointV2Accounts {
+            CreateCheckpointV2Accounts {
+                payer: key(2),
+                controller_config: key(3),
+                policy: key(4),
+                current_council: key(5),
+                protocol_gate: key(6),
+                subject: key(7),
+                linked_primary_or_authority: key(8),
+                capacity_policy: key(9),
+                current_deployment: key(10),
+                programdata_observation: key(11),
+                target_program: key(12),
+                target_programdata: key(13),
+                checkpoint: key(14),
+                checkpoint_attestation: key(15),
+                seat_authority: key(16),
+                system_program: key(17),
+            },
+            CreateCheckpointV2 {
+                attestation: checkpoint_attestation(StateCheckpointPhaseV1::Prestate, [0; 32]),
+            },
+        )
+        .unwrap();
+        assert_eq!(create.accounts.len(), 16);
+        assert!(create.accounts[0].is_signer && create.accounts[0].is_writable);
+        assert!(!create.accounts[6].is_signer && !create.accounts[6].is_writable);
+        assert!(create.accounts[13].is_writable && !create.accounts[13].is_signer);
+        assert!(create.accounts[14].is_signer && !create.accounts[14].is_writable);
+
+        let recast = recast_checkpoint_v2_instruction(
+            key(1),
+            RecastCheckpointV2Accounts {
                 controller_config: key(2),
                 policy: key(3),
                 current_council: key(4),
                 protocol_gate: key(5),
                 subject: key(6),
-                capacity_policy: key(7),
-                current_deployment: key(8),
-                programdata_observation: key(9),
-                target_program: key(10),
-                target_programdata: key(11),
-                checkpoint: key(12),
+                linked_primary_or_authority: key(7),
+                capacity_policy: key(8),
+                current_deployment: key(9),
+                programdata_observation: key(10),
+                target_program: key(11),
+                target_programdata: key(12),
+                checkpoint: key(13),
+                checkpoint_attestation: key(14),
+                seat_authority: key(15),
             },
-            FinalizeCheckpointV2 {
-                expected: checkpoint_guard(StateCheckpointPhaseV1::Poststate),
+            RecastCheckpointV2 {
+                attestation: checkpoint_attestation(StateCheckpointPhaseV1::Prestate, [16; 32]),
             },
         )
         .unwrap();
-        assert_eq!(finalize.accounts.len(), 11);
-        assert!(finalize.accounts[4].is_writable);
-        assert!(finalize.accounts[10].is_writable);
-        assert!(finalize.accounts.iter().all(|meta| !meta.is_signer));
+        assert_eq!(recast.accounts.len(), 14);
+        assert!(!recast.accounts[5].is_signer && !recast.accounts[5].is_writable);
+        assert!(recast.accounts[12].is_writable && !recast.accounts[12].is_signer);
+        assert!(recast.accounts[13].is_signer && !recast.accounts[13].is_writable);
+
+        let finalize = finalize_checkpoint_v2_instruction(
+            key(1),
+            FinalizeCheckpointV2Accounts {
+                payer: key(2),
+                controller_config: key(3),
+                policy: key(4),
+                current_council: key(5),
+                protocol_gate: key(6),
+                subject: key(7),
+                linked_primary_or_authority: key(8),
+                capacity_policy: key(9),
+                current_deployment: key(10),
+                programdata_observation: key(11),
+                target_program: key(12),
+                target_programdata: key(13),
+                checkpoint: key(14),
+                checkpoint_attestations: [key(15), key(16), key(17)],
+                system_program: key(18),
+            },
+            FinalizeCheckpointV2 {
+                manifest: checkpoint_manifest(StateCheckpointPhaseV1::Poststate),
+            },
+        )
+        .unwrap();
+        assert_eq!(finalize.accounts.len(), 17);
+        assert!(finalize.accounts[0].is_signer && finalize.accounts[0].is_writable);
+        assert!(finalize.accounts[5].is_writable);
+        assert!(!finalize.accounts[6].is_signer && !finalize.accounts[6].is_writable);
+        assert!(finalize.accounts[12].is_writable);
+
+        let finalize_programdata = finalize_programdata_verification_v2_instruction(
+            key(1),
+            FinalizeProgramDataVerificationV2Accounts {
+                controller_config: key(2),
+                protocol_gate: key(3),
+                proposal: key(4),
+                capacity_policy: key(5),
+                current_deployment: key(6),
+                programdata_observation: key(7),
+                target_program: key(8),
+                target_programdata: key(9),
+                authority_pda: key(10),
+                upgradeable_loader: key(11),
+                programdata_verification: key(12),
+            },
+            FinalizeProgramDataVerificationV2 {
+                expected: ProgramDataVerificationGuardV2 {
+                    expected_proposal_digest: [1; 32],
+                    expected_verification_digest: [2; 32],
+                    expected_verification_generation: 1,
+                    expected_status: ProgramDataVerificationStatusV2::ObservationBound,
+                    expected_gate_epoch: 3,
+                    expected_target_nonce: 4,
+                    expected_capacity_policy_digest: [5; 32],
+                    expected_current_deployment_digest: [6; 32],
+                    expected_current_deployment_generation: 1,
+                    expected_observation_digest: [7; 32],
+                    expected_observation_generation: 1,
+                    expected_actual_capacity: 1_048_576,
+                    expected_authority: key(13),
+                },
+            },
+        )
+        .unwrap();
+        assert_eq!(finalize_programdata.accounts.len(), 11);
+        assert!(finalize_programdata.accounts[2].is_writable);
+        assert!(!finalize_programdata.accounts[4].is_writable);
+        assert!(finalize_programdata.accounts[10].is_writable);
+
+        let unfreeze = execute_unfreeze_v2_instruction(
+            key(1),
+            ExecuteUnfreezeV2Accounts {
+                controller_config: key(2),
+                policy: key(3),
+                current_council: key(4),
+                protocol_gate: key(5),
+                proposal: key(6),
+                linked_proposal: key(7),
+                poststate_checkpoint: key(8),
+                programdata_verification: key(9),
+                capacity_policy: key(10),
+                current_deployment: key(11),
+                target_program: key(12),
+                target_programdata: key(13),
+                authority_pda: key(14),
+                upgradeable_loader: key(15),
+                instructions_sysvar: key(16),
+            },
+            ExecuteUnfreezeV2 {
+                expected: unfreeze_guard(3),
+                linked_proposal: key(7),
+                envelope: envelope(),
+            },
+        )
+        .unwrap();
+        assert_eq!(unfreeze.accounts.len(), 15);
+        assert!(unfreeze.accounts[3].is_writable);
+        assert!(unfreeze.accounts[4].is_writable);
+        assert!(unfreeze.accounts[5].is_writable);
+        assert!(unfreeze.accounts[9].is_writable);
+        assert!(unfreeze.accounts.iter().all(|meta| !meta.is_signer));
     }
 
     #[test]

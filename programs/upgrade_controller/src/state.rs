@@ -270,6 +270,17 @@ pub struct ControllerConfigV1 {
     pub reserved: [u8; CONTROLLER_CONFIG_RESERVED_LEN],
 }
 
+// These are protocol-level non-degeneracy floors, not a production wall-clock
+// schedule.  Production planning must apply a separately reviewed timing
+// profile for the observed cluster.  Keeping the floor in the account
+// validator prevents a one-slot review or timelock from becoming immutable.
+pub const RELEASE1_MIN_ROLLBACK_DELAY_SLOTS: u64 = 5;
+pub const RELEASE1_MIN_ROUTINE_DELAY_SLOTS: u64 = 10;
+pub const RELEASE1_MIN_MAJOR_DELAY_SLOTS: u64 = 20;
+pub const RELEASE1_MIN_TERMINAL_DELAY_SLOTS: u64 = 30;
+pub const RELEASE1_MIN_COUNCIL_REVIEW_SLOTS: u64 = 7;
+pub const RELEASE1_MIN_PROPOSAL_EXPIRY_SLOTS: u64 = 50;
+
 impl ControllerConfigV1 {
     pub const LEN: usize = 512;
 
@@ -311,12 +322,12 @@ impl ControllerConfigV1 {
             || self.current_policy_version == 0
             || self.next_proposal_id == 0
             || self.target_nonce == 0
-            || self.routine_delay_slots == 0
-            || self.major_delay_slots == 0
-            || self.rollback_delay_slots == 0
-            || self.terminal_delay_slots == 0
-            || self.vote_review_slots == 0
-            || self.proposal_expiry_slots == 0
+            || self.routine_delay_slots < RELEASE1_MIN_ROUTINE_DELAY_SLOTS
+            || self.major_delay_slots < RELEASE1_MIN_MAJOR_DELAY_SLOTS
+            || self.rollback_delay_slots < RELEASE1_MIN_ROLLBACK_DELAY_SLOTS
+            || self.terminal_delay_slots < RELEASE1_MIN_TERMINAL_DELAY_SLOTS
+            || self.vote_review_slots < RELEASE1_MIN_COUNCIL_REVIEW_SLOTS
+            || self.proposal_expiry_slots < RELEASE1_MIN_PROPOSAL_EXPIRY_SLOTS
             || self.rollback_delay_slots > self.routine_delay_slots
             || self.routine_delay_slots > self.major_delay_slots
             || self.major_delay_slots > self.terminal_delay_slots

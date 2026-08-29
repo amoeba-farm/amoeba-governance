@@ -82,15 +82,17 @@ pub fn validate_programdata_verification_digest_v2(
 }
 
 /// The checkpoint content, generation chain, selected council, observation,
-/// capacity, roots, donation accounting, and finalized slot are immutable.
-/// The three-seat approval accumulator and threshold-derived `accepted` flag
-/// are cleared so every approving seat signs the same checkpoint digest.
+/// capacity, roots, and donation accounting are immutable. The three-seat
+/// approval accumulator, threshold-derived `accepted` flag, and permissionless
+/// finalization slot are lifecycle evidence and are cleared so independent
+/// seats can attest the same digest before the checkpoint account exists.
 pub fn compute_state_checkpoint_digest_v2(value: &StateCheckpointV2) -> GovernanceResult<[u8; 32]> {
     let mut canonical = value.clone();
     canonical.checkpoint_digest = [0; 32];
     canonical.approval_bitset = 0;
     canonical.approval_count = 0;
     canonical.accepted = false;
+    canonical.finalized_slot = 0;
     hash_fixed_image(
         STATE_CHECKPOINT_V2_DIGEST_DOMAIN,
         &canonical,
@@ -206,6 +208,11 @@ fn clear_upgrade_proposal_lifecycle_v3(value: &mut UpgradeProposalV3) {
 
 fn clear_emergency_resolution_lifecycle_v2(value: &mut EmergencyFreezeResolutionV2) {
     value.state = EmergencyFreezeResolutionStateV1::Draft;
+    // The canonical checkpoint PDA is committed at resolution creation, but
+    // its digest can exist only after the checkpoint binds this resolution
+    // digest. Treat the accepted checkpoint digest as lifecycle evidence so
+    // the two fixed accounts do not form an impossible hash cycle.
+    value.emergency_checkpoint_digest = [0; 32];
     value.approval_bitset = 0;
     value.approval_count = 0;
     value.first_approval_slot = 0;
@@ -329,6 +336,7 @@ mod tests {
         checkpoint.approval_bitset = 7;
         checkpoint.approval_count = 3;
         checkpoint.accepted = true;
+        checkpoint.finalized_slot = 77;
         checkpoint.checkpoint_digest = [9; 32];
         assert_eq!(
             compute_state_checkpoint_digest_v2(&checkpoint).unwrap(),
@@ -352,6 +360,7 @@ mod tests {
         resolution.executed_slot = 4;
         resolution.terminal_slot = 4;
         resolution.terminal_reason_code = 5;
+        resolution.emergency_checkpoint_digest = [7; 32];
         resolution.resolution_digest = [6; 32];
         assert_eq!(
             compute_emergency_freeze_resolution_digest_v2(&resolution).unwrap(),

@@ -15,6 +15,7 @@ use crate::{
         ProgramDataCapacityPolicyV1, ProgramDataObservationPurposeV1, ProgramDataObservationV1,
         TargetAuthorityHandoffProposalV1, TargetAuthorityHandoffReceiptV1,
     },
+    state::GateStatusV1,
     GovernanceError, GovernanceResult,
 };
 
@@ -44,9 +45,17 @@ pub fn compute_programdata_observation_subject_digest_v1(
     purpose: ProgramDataObservationPurposeV1,
     subject: &Pubkey,
     generation: u64,
+    protocol_gate: &Pubkey,
+    gate_status: GateStatusV1,
+    gate_epoch: u64,
+    gate_active_proposal: &Pubkey,
+    gate_freeze_slot: u64,
+    gate_freeze_reason_code: u16,
     capacity_policy_digest: &[u8; 32],
+    artifact_length: u64,
     artifact_sha256: &[u8; 32],
     artifact_merkle_root: &[u8; 32],
+    artifact_scheme_id: &[u8; 32],
     minimum_required_capacity: u64,
 ) -> GovernanceResult<[u8; 32]> {
     if *controller_program == Pubkey::default()
@@ -55,9 +64,13 @@ pub fn compute_programdata_observation_subject_digest_v1(
         || *observed_programdata == Pubkey::default()
         || *subject == Pubkey::default()
         || generation == 0
+        || *protocol_gate == Pubkey::default()
+        || gate_epoch == 0
         || *capacity_policy_digest == [0; 32]
+        || artifact_length == 0
         || *artifact_sha256 == [0; 32]
         || *artifact_merkle_root == [0; 32]
+        || *artifact_scheme_id == [0; 32]
         || minimum_required_capacity == 0
     {
         return Err(GovernanceError::InvalidProgramDataObservation);
@@ -71,9 +84,17 @@ pub fn compute_programdata_observation_subject_digest_v1(
         &[purpose as u8],
         subject.as_ref(),
         &generation.to_le_bytes(),
+        protocol_gate.as_ref(),
+        &[gate_status as u8],
+        &gate_epoch.to_le_bytes(),
+        gate_active_proposal.as_ref(),
+        &gate_freeze_slot.to_le_bytes(),
+        &gate_freeze_reason_code.to_le_bytes(),
         capacity_policy_digest,
+        &artifact_length.to_le_bytes(),
         artifact_sha256,
         artifact_merkle_root,
+        artifact_scheme_id,
         &minimum_required_capacity.to_le_bytes(),
     ])
     .to_bytes())
@@ -84,6 +105,11 @@ pub fn compute_capacity_policy_digest_v1(
 ) -> GovernanceResult<[u8; 32]> {
     let mut canonical = value.clone();
     canonical.policy_digest = [0; 32];
+    // The initialization transaction supplies the immutable policy identity,
+    // while the controller records the actual execution slot on chain. The
+    // digest therefore excludes chronology so a signer never has to predict a
+    // future bank slot.
+    canonical.creation_slot = 0;
     hash_fixed(CAPACITY_POLICY_DIGEST_DOMAIN_V1, &canonical)
 }
 
@@ -102,6 +128,7 @@ pub fn compute_controller_release_digest_v1(
 ) -> GovernanceResult<[u8; 32]> {
     let mut canonical = value.clone();
     canonical.release_digest = [0; 32];
+    canonical.creation_slot = 0;
     hash_fixed(CONTROLLER_RELEASE_DIGEST_DOMAIN_V1, &canonical)
 }
 
@@ -286,11 +313,28 @@ fn clear_ceremony_proposal_lifecycle(
     *terminal_reason_code = 0;
 }
 
+const MAX_CEREMONY_DIGEST_IMAGE_LEN: usize = 1280;
+
 fn hash_fixed<T: BorshSerialize>(domain: &[u8], value: &T) -> GovernanceResult<[u8; 32]> {
-    let bytes = value
-        .try_to_vec()
-        .map_err(|_| GovernanceError::InvalidRelease1Account)?;
-    Ok(hashv(&[domain, &bytes]).to_bytes())
+    // The SBF allocator is a bump arena: dropping each temporary `Vec` does
+    // not reclaim heap during the instruction. Ceremony execution validates
+    // several fixed accounts and previously exhausted the default heap even
+    // though no individual digest was large. Serialize into a bounded stack
+    // image instead. Every ceremony account is fixed at no more than 1,280
+    // bytes, and slice-backed Borsh serialization is byte-identical to
+    // `try_to_vec` while failing closed if a future account exceeds the cap.
+    let mut bytes = [0u8; MAX_CEREMONY_DIGEST_IMAGE_LEN];
+    let remaining = {
+        let mut output = &mut bytes[..];
+        value
+            .serialize(&mut output)
+            .map_err(|_| GovernanceError::InvalidRelease1Account)?;
+        output.len()
+    };
+    let encoded_len = MAX_CEREMONY_DIGEST_IMAGE_LEN
+        .checked_sub(remaining)
+        .ok_or(GovernanceError::ArithmeticOverflow)?;
+    Ok(hashv(&[domain, &bytes[..encoded_len]]).to_bytes())
 }
 
 fn require_digest(actual: [u8; 32], expected: [u8; 32]) -> GovernanceResult<()> {
@@ -332,8 +376,8 @@ mod tests {
     }
 
     #[test]
-    fn observation_subject_is_purpose_generation_and_capacity_bound() {
-        let args = |purpose, generation, capacity| {
+    fn observation_subject_is_purpose_generation_artifact_and_capacity_bound() {
+        let args = |purpose, generation, artifact_length, artifact_scheme, capacity| {
             compute_programdata_observation_subject_digest_v1(
                 &key(1),
                 &key(2),
@@ -342,25 +386,77 @@ mod tests {
                 purpose,
                 &key(5),
                 generation,
+                &key(9),
+                GateStatusV1::FrozenForUpgrade,
+                10,
+                &key(11),
+                12,
+                13,
                 &[6; 32],
+                artifact_length,
                 &[7; 32],
                 &[8; 32],
+                &artifact_scheme,
                 capacity,
             )
             .unwrap()
         };
-        let base = args(ProgramDataObservationPurposeV1::TargetHandoffBridge, 1, 9);
-        assert_ne!(
-            base,
-            args(ProgramDataObservationPurposeV1::BootstrapActivation, 1, 9)
+        let base = args(
+            ProgramDataObservationPurposeV1::TargetHandoffBridge,
+            1,
+            1_024,
+            [10; 32],
+            2_048,
         );
         assert_ne!(
             base,
-            args(ProgramDataObservationPurposeV1::TargetHandoffBridge, 2, 9)
+            args(
+                ProgramDataObservationPurposeV1::BootstrapActivation,
+                1,
+                1_024,
+                [10; 32],
+                2_048,
+            )
         );
         assert_ne!(
             base,
-            args(ProgramDataObservationPurposeV1::TargetHandoffBridge, 1, 10)
+            args(
+                ProgramDataObservationPurposeV1::TargetHandoffBridge,
+                2,
+                1_024,
+                [10; 32],
+                2_048,
+            )
+        );
+        assert_ne!(
+            base,
+            args(
+                ProgramDataObservationPurposeV1::TargetHandoffBridge,
+                1,
+                1_025,
+                [10; 32],
+                2_048,
+            )
+        );
+        assert_ne!(
+            base,
+            args(
+                ProgramDataObservationPurposeV1::TargetHandoffBridge,
+                1,
+                1_024,
+                [11; 32],
+                2_048,
+            )
+        );
+        assert_ne!(
+            base,
+            args(
+                ProgramDataObservationPurposeV1::TargetHandoffBridge,
+                1,
+                1_024,
+                [10; 32],
+                2_049,
+            )
         );
     }
 }

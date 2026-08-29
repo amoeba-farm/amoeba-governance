@@ -3474,7 +3474,7 @@ mod tests {
                 major_delay_slots: 20,
                 rollback_delay_slots: 5,
                 terminal_delay_slots: 30,
-                vote_review_slots: 5,
+                vote_review_slots: 7,
                 proposal_expiry_slots: 100,
                 policy_flags: 0,
                 reserved: [0; CONTROLLER_CONFIG_RESERVED_LEN],

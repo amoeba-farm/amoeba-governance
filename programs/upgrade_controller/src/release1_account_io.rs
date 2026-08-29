@@ -8,7 +8,7 @@ use solana_program::{
 use solana_sdk_ids::system_program;
 use solana_system_interface::instruction as system_instruction;
 
-use crate::GovernanceError;
+use crate::{release1_v3_state::UpgradeProposalV3, GovernanceError};
 
 pub fn validate_exact_privileges(
     account: &AccountInfo<'_>,
@@ -48,9 +48,27 @@ pub fn load_fixed_controller_account<T: BorshDeserialize>(
     if account.data_len() != expected_len {
         return Err(GovernanceError::InvalidAccountSize.into());
     }
-    let decoded = T::try_from_slice(&account.try_borrow_data()?)
-        .map_err(|_| ProgramError::InvalidAccountData)?;
-    Ok(Box::new(decoded))
+    // Keep the deserialize result in the allocator's return place. Binding a
+    // large fixed account to a local first materializes the complete value on
+    // the 4 KiB SBPF stack before moving it into the `Box`.
+    Ok(Box::new(
+        T::try_from_slice(&account.try_borrow_data()?)
+            .map_err(|_| ProgramError::InvalidAccountData)?,
+    ))
+}
+
+pub fn load_upgrade_proposal_v3(
+    program_id: &Pubkey,
+    account: &AccountInfo<'_>,
+) -> Result<Box<UpgradeProposalV3>, ProgramError> {
+    if account.owner != program_id {
+        return Err(GovernanceError::IncorrectAccountOwner.into());
+    }
+    if account.data_len() != UpgradeProposalV3::LEN {
+        return Err(GovernanceError::InvalidAccountSize.into());
+    }
+    let data = account.try_borrow_data()?;
+    UpgradeProposalV3::from_bytes_boxed_strict(&data).map_err(ProgramError::from)
 }
 
 pub fn encode_fixed_account<T: BorshSerialize>(

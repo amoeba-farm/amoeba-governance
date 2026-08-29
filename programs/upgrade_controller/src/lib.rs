@@ -22,7 +22,9 @@ pub mod processor;
 pub mod programdata_observation_merkle;
 pub mod proposal;
 pub mod release1_account_io;
+pub mod release1_authority_instruction;
 pub mod release1_ceremony_digest;
+pub mod release1_ceremony_instruction;
 pub mod release1_ceremony_state;
 pub mod release1_digest;
 pub mod release1_loader_accounts;
@@ -32,13 +34,22 @@ pub mod release1_loader_accounts;
 // action enum from consuming a runtime stack frame.
 #[cfg(not(target_os = "solana"))]
 pub mod release1_model;
+pub mod release1_processor_authority;
 pub mod release1_processor_buffer;
 pub mod release1_processor_checkpoint;
 pub mod release1_processor_initialize;
+pub mod release1_processor_initialize_v2;
 pub mod release1_processor_loader;
+pub mod release1_processor_observation;
 pub mod release1_processor_proposal;
 pub mod release1_processor_terminal;
+pub mod release1_processor_v3_custody;
+pub mod release1_processor_v3_lifecycle;
 pub mod release1_state;
+pub mod release1_v3_custody_instruction;
+pub mod release1_v3_digest;
+pub mod release1_v3_instruction;
+pub mod release1_v3_state;
 pub mod state;
 
 pub use error::{GovernanceError, GovernanceResult};
