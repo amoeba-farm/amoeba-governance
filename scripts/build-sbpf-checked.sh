@@ -48,7 +48,7 @@ if [[ -n "$(repo_git status --porcelain=v1 --untracked-files=all)" ]]; then
   exit 64
 fi
 source_commit="$(repo_git rev-parse HEAD)"
-source_tree="$(repo_git rev-parse HEAD^{tree})"
+source_tree="$(repo_git rev-parse 'HEAD^{tree}')"
 cargo_lock_sha256="$(sha256sum "$repo_root/Cargo.lock" | cut -d ' ' -f 1)"
 run_root="$output_root/$arch"
 if [[ -e "$run_root" ]]; then
