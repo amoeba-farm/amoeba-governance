@@ -237,17 +237,21 @@ smallest benchmark candidate. `next_index` must equal the supplied index, so a
 duplicate or out-of-order append fails without a large bitmap.
 
 Host geometry and deterministic root tests cover the 16, 32, 64, and 128 KiB
-candidates. Actual controller-SBF measurement is presently complete only for
-the selected 16-KiB production constant. At the 10,485,760-byte raw-account
-maximum, observed append costs peaked at 64,674 compute units on SBPF v0 and
-71,121 compute units on SBPF v2, each below the conservative 200,000-unit test
-ceiling, with no runtime stack fault. The account ABI is sized for the
-worst-case 16-KiB depth so benchmark selection cannot shrink runtime support.
+candidates. The actual-controller-SBF maximum-merge matrix now covers all four
+sizes on both engines at the 10,485,760-byte raw-account maximum. Full
+transaction costs are 160,383 / 257,878 / 430,415 / 790,676 compute units on
+SBPF v0 and 192,181 / 314,921 / 560,487 / 1,059,313 on SBPF v2 for 16 / 32 /
+64 / 128 KiB respectively. Every sample repeated twice identically and no
+runtime stack fault occurred.
 
-The ceremony assignment separately required actual-SBF measurements for all
-four candidates. The 32, 64, and 128 KiB candidates have not been exercised by
-the actual-SBF compute-evidence lane. That is an explicit exit-criteria gap;
-host geometry is not being presented as an SBF benchmark substitute.
+The selected 16-KiB case is the only size below the pinned runtime's 200,000
+unit default on both engines. Its v2 margin is 7,819 units (3.91%), so that
+result is conditional on exact runtime/ELF reproduction and is not described
+as generous headroom. Normal Release 1 builds mechanically reject 32, 64, and
+128 KiB; the measurement-only feature changes no ABI or ordinary admission
+rule. The account ABI remains sized for the worst-case 16-KiB depth. Complete
+evidence is recorded in
+`programdata-observation-chunk-controller-sbf-matrix-v1.md`.
 
 ### Artifact and zero-tail binding
 
@@ -397,8 +401,8 @@ This removes the unsafe choice between two superficially similar lifecycles.
 The new loader execution tags stay unavailable until all of these pass:
 
 1. fixed schema lengths, discriminators, and Rust/TypeScript vectors;
-2. actual-SBF v0/v2 chunk benchmarks for all four candidates (**open for 32,
-   64, and 128 KiB; selected 16 KiB is complete**);
+2. actual-controller-SBF v0/v2 maximum-merge chunk benchmarks for all four
+   candidates (**complete; only 16 KiB passes the existing 200,000-unit gate**);
 3. maximum raw length traversal and finalization;
 4. every extension timing point in the adversarial matrix;
 5. nonzero-tail, payload, header, authority, and linkage drift negatives;

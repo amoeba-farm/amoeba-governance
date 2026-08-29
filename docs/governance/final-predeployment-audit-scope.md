@@ -15,16 +15,20 @@ live ceremony. It is not a deployment authorization.
 The branch must not be presented as an exit-complete audit candidate while any
 of these engineering gaps remains open:
 
-1. actual controller-SBF compute measurements exist for the selected 16-KiB
-   ProgramData observation chunk, but not for the required 32, 64, and 128 KiB
-   candidates on both SBPF engines;
-2. the V3 happy path uses the real Loader, but an actual controller-SBF V3
+1. the V3 happy path uses the real Loader, but an actual controller-SBF V3
    rollback execution has not been demonstrated; the retained ignored V1/V2
    rollback fixtures fail their obsolete configuration preflight if forced and
    are not V3 Loader evidence; and
-3. the Spread repository's exact Clippy `-D warnings` gate reports 86
+2. the Spread repository's exact Clippy `-D warnings` gate reports 86
    pre-existing errors outside the governance bridge. The gate source is absent
    from that error set, but the repository-wide gate still fails.
+
+The ProgramData observation candidate-matrix gap is closed. Actual controller
+SBF measured the maximum-merge 16, 32, 64, and 128 KiB steps on both engines;
+only 16 KiB fits the existing 200,000-unit gate, and normal builds continue to
+reject every larger size. The v2 selected case has only 7,819 units (3.91%) of
+margin, so exact final-artifact remeasurement remains inside the future audit
+scope rather than being treated as generic headroom.
 
 Hosted CI also remains unavailable as evidence because the inspected baseline
 runs stopped before repository steps at the account billing/spending boundary.
@@ -38,8 +42,7 @@ unfreeze, and the first gated Spread mutation on the sacrificial validator.
 Receipt v4 independently verified digest
 `faae42ced84225366d4ef5eb99bdfe69aaa1094e000756195382e08bd477cb11`,
 and two read-only CLI processes recovered one four-entry journal. That success
-does not substitute for the missing V3 rollback execution or chunk-candidate
-benchmarks listed above.
+does not substitute for the missing V3 rollback execution listed above.
 
 ## In scope
 

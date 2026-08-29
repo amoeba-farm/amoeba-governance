@@ -232,11 +232,33 @@ no valid unchecked extension that creates an absorbing governance state.
 Actual controller-SBF maximum-capacity runs traversed the full
 10,485,760-byte raw ProgramData account in 640 ordered chunks and completed the
 full frozen lifecycle plus the first gated Spread mutation on both engines.
-The selected 16-KiB append step peaked at 64,674 compute units on v0 and 71,121
-compute units on v2, below the conservative 200,000-unit ceiling, with no
-runtime stack fault. Host root/geometry tests cover 16, 32, 64, and 128 KiB,
-but actual-SBF compute measurement is present only for 16 KiB. The missing 32,
-64, and 128 KiB actual-SBF measurements remain an explicit exit blocker.
+Those lifecycle runs measured the first selected 16-KiB append at 64,674
+compute units on v0 and 71,121 compute units on v2. The subsequent complete
+candidate matrix measures the more expensive maximum-merge append for every
+predeclared size against the same 10,485,760-byte ceiling:
+
+| Chunk | SBPF v0 full transaction CU | SBPF v2 full transaction CU | 200,000-unit gate |
+|---:|---:|---:|---|
+| 16 KiB | 160,383 | 192,181 | pass; selected |
+| 32 KiB | 257,878 | 314,921 | reject |
+| 64 KiB | 430,415 | 560,487 | reject |
+| 128 KiB | 790,676 | 1,059,313 | reject |
+
+Each matrix sample repeated twice with identical compute. Controller execution
+is exactly 300 units below the full transaction because the envelope contains
+two 150-unit ComputeBudget instructions. The measurement transaction used an
+explicit 1,400,000-unit limit so the rejected candidates could be observed;
+the pinned runtime default for the one non-builtin instruction remains
+200,000 units. The v2 selected result retains only 7,819 units (3.91%) of
+default-budget margin, so selection is conditional on exact runtime/ELF
+reproduction and pre-ceremony remeasurement; the report does not call that
+margin generous. Normal Release 1 builds still admit only 16 KiB.
+
+The complete matrix report is
+`docs/governance/programdata-observation-chunk-controller-sbf-matrix-v1.md`.
+Its JSON evidence hashes to
+`42c77a82b9a164f09f150f06b08b8d6d54e64df5bfa0945260e2c673ebf4fe11`.
+The missing-candidate measurement blocker is closed.
 The v0 and v2 maximum-geometry JSON evidence files hash respectively to
 `8ac1642582dd7f6743399694a5b545a77bf8085721ac48fbedb97ccee7638122`
 and `31b7edc44582e203ce1a890d34d0378258e9b93064fac65c0c8aaadcc8832e8d`.
@@ -473,15 +495,13 @@ records its separate exact inventory.
 
 ## 12. Remaining inputs and blockers
 
-This branch is not exit-complete for three engineering reasons:
+This branch is not exit-complete for two engineering reasons:
 
-1. the required actual-SBF candidate benchmark covers 16 KiB but not the 32,
-   64, and 128 KiB candidates;
-2. the V3 happy path is real-Loader-rehearsed, but no actual controller-SBF V3
+1. the V3 happy path is real-Loader-rehearsed, but no actual controller-SBF V3
    rollback execution exists; forcing the retained ignored V1/V2 rollback and
    differential tests fails during their obsolete configuration preflight and
    therefore supplies no Loader evidence; and
-3. Spread's exact Clippy gate still reports 86 unrelated pre-existing errors.
+2. Spread's exact Clippy gate still reports 86 unrelated pre-existing errors.
    Those market/oracle/writer/DLMM/state paths were deliberately not changed.
 
 Engineering completion also cannot supply the external production trust
