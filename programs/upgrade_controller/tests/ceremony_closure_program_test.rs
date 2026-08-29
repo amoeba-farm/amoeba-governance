@@ -854,7 +854,9 @@ fn run_local_ceremony_cli(validator: &StandaloneValidator, cluster_domain: [u8; 
     let material_path = validator.evidence_dir.join("receipt-v4-material.json");
     let receipt_path = validator.evidence_dir.join("receipt-v4.json");
     let verification_path = validator.evidence_dir.join("receipt-v4-verification.json");
-    let finalizer = Command::new("node")
+    let node_binary =
+        std::env::var_os("AMOEBA_NODE_BINARY").unwrap_or_else(|| std::ffi::OsString::from("node"));
+    let finalizer = Command::new(&node_binary)
         .current_dir(&clients_dir)
         .arg("--import")
         .arg("tsx")
@@ -894,7 +896,7 @@ fn run_local_ceremony_cli(validator: &StandaloneValidator, cluster_domain: [u8; 
     let cli_path = clients_dir.join("upgradeGovernance/cliMain.ts");
 
     for run in 1..=2 {
-        let output = Command::new("node")
+        let output = Command::new(&node_binary)
             .current_dir(&clients_dir)
             .arg("--import")
             .arg("tsx")
