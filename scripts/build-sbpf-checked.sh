@@ -14,12 +14,41 @@ if [[ "$arch" != "v0" && "$arch" != "v2" ]]; then
 fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if [[ -n "$(git -C "$repo_root" status --porcelain=v1 --untracked-files=all)" ]]; then
+
+resolve_git_dir() {
+  if git -C "$repo_root" rev-parse --absolute-git-dir >/dev/null 2>&1; then
+    git -C "$repo_root" rev-parse --absolute-git-dir
+    return
+  fi
+  if [[ ! -f "$repo_root/.git" ]]; then
+    echo "unable to resolve repository gitdir for $repo_root" >&2
+    return 1
+  fi
+  local raw_git_dir
+  raw_git_dir="$(sed -n 's/^gitdir: //p' "$repo_root/.git")"
+  if [[ "$raw_git_dir" =~ ^[A-Za-z]:[/\\] ]]; then
+    if ! command -v wslpath >/dev/null 2>&1; then
+      echo "Windows-linked worktree requires wslpath to resolve $raw_git_dir" >&2
+      return 1
+    fi
+    wslpath -u "$raw_git_dir"
+  else
+    python3 -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve())' \
+      "$repo_root/$raw_git_dir"
+  fi
+}
+
+repo_git_dir="$(resolve_git_dir)"
+repo_git() {
+  git --git-dir="$repo_git_dir" --work-tree="$repo_root" "$@"
+}
+
+if [[ -n "$(repo_git status --porcelain=v1 --untracked-files=all)" ]]; then
   echo "refusing to attest SBPF from a dirty source worktree" >&2
   exit 64
 fi
-source_commit="$(git -C "$repo_root" rev-parse HEAD)"
-source_tree="$(git -C "$repo_root" rev-parse HEAD^{tree})"
+source_commit="$(repo_git rev-parse HEAD)"
+source_tree="$(repo_git rev-parse HEAD^{tree})"
 cargo_lock_sha256="$(sha256sum "$repo_root/Cargo.lock" | cut -d ' ' -f 1)"
 run_root="$output_root/$arch"
 if [[ -e "$run_root" ]]; then
