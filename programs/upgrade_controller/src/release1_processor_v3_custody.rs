@@ -557,7 +557,7 @@ pub fn process_extend_target_v2(
         &capacity,
     )?;
     require_deployment_guard(&instruction.expected, &proposal, &deployment)?;
-    let prestate = load_accepted_prestate(
+    let prestate = load_accepted_prestate_at_epoch(
         program_id,
         prestate_info,
         proposal_info,
@@ -568,7 +568,7 @@ pub fn process_extend_target_v2(
         &config,
         &capacity,
         &proposal,
-        &gate,
+        gate.epoch,
         &deployment,
         &instruction.expected_prestate_checkpoint_digest,
         instruction.expected_prestate_checkpoint_generation,
@@ -828,29 +828,7 @@ pub fn process_execute_upgrade_v2(
         &capacity,
     )?;
     require_deployment_guard(&instruction.expected, &proposal, &deployment)?;
-    let prestate = load_accepted_prestate(
-        program_id,
-        prestate_info,
-        proposal_info,
-        config_info,
-        capacity_info,
-        deployment_info,
-        prestate_observation_info,
-        &config,
-        &capacity,
-        &proposal,
-        &gate,
-        &deployment,
-        &instruction.expected_prestate_checkpoint_digest,
-        instruction.expected_prestate_checkpoint_generation,
-    )?;
-    let (
-        purpose,
-        expected_current_length,
-        expected_current_sha,
-        expected_current_root,
-        expected_current_minimum,
-    ) = if proposal.proposal_class == ProposalClassV1::EmergencyRollback {
+    let rollback_primary = if proposal.proposal_class == ProposalClassV1::EmergencyRollback {
         let primary = load_proposal(program_id, counterpart_info, config_info, &config)?;
         if !proposal.primary_proposal.present
             || proposal.primary_proposal.value != *counterpart_info.key
@@ -858,54 +836,114 @@ pub fn process_execute_upgrade_v2(
         {
             return Err(GovernanceError::InvalidProposalCommitment.into());
         }
+        Some(primary)
+    } else {
+        None
+    };
+    // A rollback reuses the primary proposal's accepted protected prestate.
+    // That checkpoint predates the failed candidate, is bound to the prior
+    // frozen epoch, and remains the only exact known-good state anchor while
+    // the gate stays continuously frozen.
+    let (prestate_subject_info, prestate_proposal, prestate_epoch) =
+        if let Some(primary) = rollback_primary.as_deref() {
+            (counterpart_info, primary, primary.freeze_gate_epoch)
+        } else {
+            (proposal_info, proposal.as_ref(), gate.epoch)
+        };
+    let prestate = load_accepted_prestate_at_epoch(
+        program_id,
+        prestate_info,
+        prestate_subject_info,
+        config_info,
+        capacity_info,
+        deployment_info,
+        prestate_observation_info,
+        &config,
+        &capacity,
+        prestate_proposal,
+        prestate_epoch,
+        &deployment,
+        &instruction.expected_prestate_checkpoint_digest,
+        instruction.expected_prestate_checkpoint_generation,
+    )?;
+    let (
+        expected_prestate_length,
+        expected_prestate_sha,
+        expected_prestate_root,
+        expected_prestate_minimum,
+        observed_deployed_slot,
+        observed_actual_capacity,
+    ) = if let Some(primary) = rollback_primary.as_deref() {
+        let failure = load_and_revalidate_rollback_failure(
+            program_id,
+            current_observation_info,
+            config_info,
+            gate_info,
+            counterpart_info,
+            capacity_info,
+            deployment_info,
+            proposal_info,
+            target_program,
+            target_programdata,
+            &config,
+            &capacity,
+            &gate,
+            &deployment,
+            primary,
+            &proposal,
+        )?;
+        require_rollback_failure_guard(&failure, &instruction)?;
         (
-            ProgramDataObservationPurposeV1::Rollback,
-            primary.artifact_length,
-            primary.artifact_sha256,
-            primary.artifact_chunk_merkle_root,
-            primary.minimum_required_capacity,
+            proposal.artifact_length,
+            proposal.artifact_sha256,
+            proposal.artifact_chunk_merkle_root,
+            proposal.minimum_required_capacity,
+            failure.actual_programdata_slot,
+            failure.actual_capacity,
         )
     } else {
-        (
+        let observation = load_fresh_observation(
+            program_id,
+            current_observation_info,
+            config_info,
+            capacity_info,
+            proposal_info,
+            target_program,
+            target_programdata,
+            loader_info,
+            &config,
+            &capacity,
+            &gate,
             ProgramDataObservationPurposeV1::ProposalPrestate,
+            deployment.artifact_length,
+            &deployment.artifact_sha256,
+            &deployment.artifact_merkle_root,
+            deployment.artifact_length,
+        )?;
+        require_observation_guard(
+            &observation,
+            &instruction.expected_observation_digest,
+            instruction.expected_observation_generation,
+            &instruction.expected_observation_root,
+            instruction.expected_observation_finalized_slot,
+            instruction.expected_actual_capacity,
+        )?;
+        (
             deployment.artifact_length,
             deployment.artifact_sha256,
             deployment.artifact_merkle_root,
             deployment.artifact_length,
+            observation.deployed_slot,
+            observation.actual_capacity,
         )
     };
-    let observation = load_fresh_observation(
-        program_id,
-        current_observation_info,
-        config_info,
-        capacity_info,
-        proposal_info,
-        target_program,
-        target_programdata,
-        loader_info,
-        &config,
-        &capacity,
-        &gate,
-        purpose,
-        expected_current_length,
-        &expected_current_sha,
-        &expected_current_root,
-        expected_current_minimum,
-    )?;
-    require_observation_guard(
-        &observation,
-        &instruction.expected_observation_digest,
-        instruction.expected_observation_generation,
-        &instruction.expected_observation_root,
-        instruction.expected_observation_finalized_slot,
-        instruction.expected_actual_capacity,
-    )?;
-    if observation.actual_capacity != deployment.actual_programdata_capacity
+    if observed_actual_capacity != deployment.actual_programdata_capacity
         || !prestate.accepted
         || prestate.programdata_observation != *prestate_observation_info.key
-        || prestate.artifact_length != expected_current_length
-        || prestate.artifact_sha256 != expected_current_sha
-        || prestate.artifact_merkle_root != expected_current_root
+        || prestate.artifact_length != expected_prestate_length
+        || prestate.artifact_sha256 != expected_prestate_sha
+        || prestate.artifact_merkle_root != expected_prestate_root
+        || prestate.minimum_required_capacity != expected_prestate_minimum
         || !prestate.observed_authority.present
         || prestate.observed_authority.value != config.authority_pda
         || *spill_info.key != config.canonical_spill_treasury
@@ -913,7 +951,7 @@ pub fn process_execute_upgrade_v2(
         || *current_observation_info.key == *prestate_observation_info.key
         || *buffer_info.key != proposal.buffer_pubkey
         || *buffer_verification_info.key != proposal.buffer_verification
-        || proposal.minimum_required_capacity > observation.actual_capacity
+        || proposal.minimum_required_capacity > observed_actual_capacity
     {
         return Err(GovernanceError::CrossAccountMismatch.into());
     }
@@ -933,10 +971,10 @@ pub fn process_execute_upgrade_v2(
         target_programdata,
         &config.upgradeable_loader,
     )?;
-    if before.deployed_slot != observation.deployed_slot
+    if before.deployed_slot != observed_deployed_slot
         || before.upgrade_authority != Some(config.authority_pda)
         || u64::try_from(before.capacity).map_err(|_| GovernanceError::ArithmeticOverflow)?
-            != observation.actual_capacity
+            != observed_actual_capacity
         || clock.slot <= before.deployed_slot
     {
         return Err(GovernanceError::StaleProgramDataObservation.into());
@@ -1042,7 +1080,7 @@ pub fn process_execute_upgrade_v2(
     if after.deployed_slot != clock.slot
         || after.upgrade_authority != Some(config.authority_pda)
         || u64::try_from(after.capacity).map_err(|_| GovernanceError::ArithmeticOverflow)?
-            != observation.actual_capacity
+            != observed_actual_capacity
     {
         return Err(GovernanceError::CrossAccountMismatch.into());
     }
@@ -2550,6 +2588,167 @@ fn require_observation_guard(
     Ok(())
 }
 
+/// Loads the immutable primary-failure PDA selected by an EmergencyRollback
+/// execution and proves that the same Loader-executable mismatch is still
+/// present in the live ProgramData.  This is deliberately narrower than the
+/// failure-observation surface: malformed linkage, ownership, header, or
+/// authority cannot safely reach Loader Upgrade and therefore cannot be used
+/// as an execution capability.
+#[allow(clippy::too_many_arguments)]
+fn load_and_revalidate_rollback_failure(
+    program_id: &Pubkey,
+    failure_info: &AccountInfo<'_>,
+    config_info: &AccountInfo<'_>,
+    gate_info: &AccountInfo<'_>,
+    primary_info: &AccountInfo<'_>,
+    capacity_info: &AccountInfo<'_>,
+    deployment_info: &AccountInfo<'_>,
+    rollback_info: &AccountInfo<'_>,
+    target_program: &AccountInfo<'_>,
+    target_programdata: &AccountInfo<'_>,
+    config: &ControllerConfigV1,
+    capacity: &ProgramDataCapacityPolicyV1,
+    gate: &ProtocolGateV1,
+    deployment: &CurrentDeploymentStateV1,
+    primary: &UpgradeProposalV3,
+    rollback: &UpgradeProposalV3,
+) -> Result<Box<ProgramDataFailureObservationV2>, ProgramError> {
+    let failure = load_fixed_controller_account::<ProgramDataFailureObservationV2>(
+        program_id,
+        failure_info,
+        ProgramDataFailureObservationV2::LEN,
+    )?;
+    validate_programdata_failure_observation_digest_v2(&failure)?;
+    let next_epoch = failure
+        .frozen_epoch
+        .checked_add(1)
+        .ok_or(GovernanceError::ArithmeticOverflow)?;
+    let consumed_nonce = primary
+        .target_nonce
+        .checked_add(1)
+        .ok_or(GovernanceError::ArithmeticOverflow)?;
+    if derive_programdata_failure_observation_pda(
+        program_id,
+        primary_info.key,
+        failure.frozen_epoch,
+    ) != (*failure_info.key, failure.bump)
+        || !failure.finalized
+        || failure.controller_config != *config_info.key
+        || failure.protocol_gate != *gate_info.key
+        || failure.primary_proposal != *primary_info.key
+        || failure.proposal_digest != primary.proposal_digest
+        || failure.capacity_policy != *capacity_info.key
+        || failure.capacity_policy_digest != capacity.policy_digest
+        || failure.current_deployment_state != *deployment_info.key
+        || failure.current_deployment_digest != primary.current_deployment_digest
+        || failure.current_deployment_generation != primary.current_deployment_generation
+        || failure.target_program != config.target_program
+        || failure.target_programdata != config.target_programdata
+        || failure.upgradeable_loader != config.upgradeable_loader
+        || failure.frozen_epoch != primary.freeze_gate_epoch
+        || next_epoch != gate.epoch
+        || rollback.freeze_gate_epoch != gate.epoch
+        || gate.status != GateStatusV1::FrozenForUpgrade
+        || gate.active_proposal != *rollback_info.key
+        || failure.target_nonce != consumed_nonce
+        || failure.target_nonce != config.target_nonce
+        || failure.expected_artifact_length != primary.artifact_length
+        || failure.expected_artifact_sha256 != primary.artifact_sha256
+        || failure.expected_artifact_merkle_root != primary.artifact_chunk_merkle_root
+        || failure.expected_artifact_scheme_id != primary.artifact_scheme_id
+        || failure.minimum_required_capacity != primary.minimum_required_capacity
+        || failure.observation_scheme_id != capacity.observation_scheme_id
+        || failure.observation_purpose != ProgramDataObservationPurposeV1::PostUpgrade
+        || failure.actual_programdata_slot != primary.upgrade_executed_slot
+        || failure.actual_capacity != deployment.actual_programdata_capacity
+        || !failure.actual_authority.present
+        || failure.actual_authority.value != config.authority_pda
+        || failure.finalized_slot < primary.upgrade_executed_slot
+        || failure.finalized_slot > rollback.frozen_slot
+        || !matches!(
+            failure.mismatch_class,
+            ProgramDataMismatchClassV2::ArtifactPayload | ProgramDataMismatchClassV2::ZeroTail
+        )
+    {
+        return Err(GovernanceError::CrossAccountMismatch.into());
+    }
+    let runtime = capture_runtime_graph(target_program, target_programdata)?;
+    if !runtime_matches_failure_observation(&runtime, &failure)
+        || !runtime.program_header_present
+        || !runtime.linked_programdata.present
+        || runtime.linked_programdata.value != config.target_programdata
+        || runtime.program_owner != config.upgradeable_loader
+        || !runtime.program_executable
+        || runtime.programdata_owner != config.upgradeable_loader
+        || runtime.programdata_executable
+        || !runtime.programdata_header_present
+        || !runtime.authority.present
+        || runtime.authority.value != config.authority_pda
+    {
+        return Err(GovernanceError::StaleProgramDataObservation.into());
+    }
+    let data = target_programdata.try_borrow_data()?;
+    let payload = data
+        .get(LOADER_PROGRAMDATA_METADATA_LEN..)
+        .ok_or(GovernanceError::InvalidRelease1Account)?;
+    let (expected_leaf, actual_leaf) = match failure.mismatch_class {
+        ProgramDataMismatchClassV2::ArtifactPayload => {
+            let exact = exact_region_chunk(
+                payload,
+                0,
+                primary.artifact_length,
+                primary.artifact_chunk_size,
+                failure.failing_chunk_index,
+            )?;
+            (
+                failure.expected_leaf_hash,
+                artifact_chunk_leaf_hash(failure.failing_chunk_index, exact)?,
+            )
+        }
+        ProgramDataMismatchClassV2::ZeroTail => {
+            let tail_length = runtime
+                .actual_capacity
+                .checked_sub(primary.artifact_length)
+                .ok_or(GovernanceError::InvalidCapacityPlan)?;
+            let exact = exact_region_chunk(
+                payload,
+                primary.artifact_length,
+                tail_length,
+                primary.artifact_chunk_size,
+                failure.failing_chunk_index,
+            )?;
+            (
+                programdata_zero_tail_zero_hash(failure.failing_chunk_index, exact.len())?,
+                programdata_zero_tail_chunk_hash(failure.failing_chunk_index, exact)?,
+            )
+        }
+        _ => return Err(GovernanceError::InvalidRelease1Account.into()),
+    };
+    if expected_leaf != failure.expected_leaf_hash
+        || actual_leaf != failure.actual_leaf_hash
+        || expected_leaf == actual_leaf
+    {
+        return Err(GovernanceError::StaleProgramDataObservation.into());
+    }
+    drop(data);
+    Ok(failure)
+}
+
+fn require_rollback_failure_guard(
+    failure: &ProgramDataFailureObservationV2,
+    instruction: &ExecuteUpgradeV2,
+) -> ProgramResult {
+    if instruction.expected_observation_digest != failure.failure_digest
+        || instruction.expected_observation_generation != failure.observation_generation
+        || instruction.expected_observation_root != failure.actual_leaf_hash
+        || instruction.expected_observation_finalized_slot != failure.finalized_slot
+        || instruction.expected_actual_capacity != failure.actual_capacity
+    {
+        return Err(GovernanceError::StaleProgramDataObservation.into());
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn load_buffer_verification(
     program_id: &Pubkey,
@@ -2727,7 +2926,7 @@ fn canonical_buffer_header(authority: &Pubkey) -> [u8; LOADER_BUFFER_METADATA_LE
 }
 
 #[allow(clippy::too_many_arguments)]
-fn load_accepted_prestate(
+fn load_accepted_prestate_at_epoch(
     program_id: &Pubkey,
     checkpoint_info: &AccountInfo<'_>,
     proposal_info: &AccountInfo<'_>,
@@ -2738,7 +2937,7 @@ fn load_accepted_prestate(
     config: &ControllerConfigV1,
     capacity: &ProgramDataCapacityPolicyV1,
     proposal: &UpgradeProposalV3,
-    gate: &ProtocolGateV1,
+    expected_gate_epoch: u64,
     deployment: &CurrentDeploymentStateV1,
     expected_digest: &[u8; 32],
     expected_generation: u64,
@@ -2783,7 +2982,7 @@ fn load_accepted_prestate(
         || checkpoint.observation_root != observation.final_raw_merkle_root
         || checkpoint.observation_digest != observation.observation_digest
         || checkpoint.observation_finalized_slot != observation.finalized_slot
-        || checkpoint.gate_epoch != gate.epoch
+        || checkpoint.gate_epoch != expected_gate_epoch
         || checkpoint.target_programdata_slot != observation.deployed_slot
         || checkpoint.artifact_length != observation.expected_artifact_length
         || checkpoint.artifact_sha256 != observation.expected_artifact_sha256

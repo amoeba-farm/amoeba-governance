@@ -17,7 +17,7 @@ use solana_program::{
 };
 use solana_program_test::{BanksClientError, ProgramTest, ProgramTestContext};
 use solana_sdk::{
-    account::Account,
+    account::{Account, AccountSharedData},
     commitment_config::CommitmentConfig,
     compute_budget::ComputeBudgetInstruction,
     message::{v0, AddressLookupTableAccount, VersionedMessage},
@@ -35,8 +35,9 @@ use std::{
 };
 use upgrade_controller::{
     artifact_merkle::{
-        artifact_chunk_count, artifact_merkle_proof, artifact_merkle_root,
-        ARTIFACT_MERKLE_SCHEME_ID, MAX_ARTIFACT_BYTES_V1, MAX_ARTIFACT_PROOF_DEPTH_V1,
+        artifact_chunk_count, artifact_chunk_leaf_hash, artifact_merkle_proof,
+        artifact_merkle_root, ARTIFACT_MERKLE_SCHEME_ID, MAX_ARTIFACT_BYTES_V1,
+        MAX_ARTIFACT_PROOF_DEPTH_V1,
     },
     council::compute_council_set_hash,
     pda::{
@@ -46,9 +47,10 @@ use upgrade_controller::{
         derive_controller_config_pda, derive_controller_immutability_receipt_pda,
         derive_controller_release_commitment_pda, derive_council_pda,
         derive_current_deployment_state_pda, derive_gate_pda, derive_policy_pda,
-        derive_programdata_check_pda, derive_programdata_observation_pda, derive_proposal_pda,
-        derive_target_handoff_pda, derive_target_handoff_receipt_pda,
-        derive_upgradeable_programdata_address, UPGRADEABLE_LOADER_ID,
+        derive_programdata_check_pda, derive_programdata_failure_observation_pda,
+        derive_programdata_observation_pda, derive_proposal_pda, derive_target_handoff_pda,
+        derive_target_handoff_receipt_pda, derive_upgradeable_programdata_address,
+        UPGRADEABLE_LOADER_ID,
     },
     policy::compute_policy_hash,
     programdata_observation_merkle::{
@@ -104,8 +106,9 @@ use upgrade_controller::{
         StateCheckpointPhaseV1, BOOTSTRAP_INITIALIZATION_FREEZE_REASON_V1,
     },
     release1_v3_custody_instruction::{
-        adopt_buffer_v2_instruction, execute_upgrade_v2_instruction,
-        finalize_buffer_verification_v2_instruction, verify_buffer_chunk_v2_instruction,
+        activate_rollback_v2_instruction, adopt_buffer_v2_instruction,
+        execute_upgrade_v2_instruction, finalize_buffer_verification_v2_instruction,
+        verify_buffer_chunk_v2_instruction, ActivateRollbackV2, ActivateRollbackV2Accounts,
         AdoptBufferV2, AdoptBufferV2Accounts, ArtifactChunkProofV2, ExecuteUpgradeV2,
         ExecuteUpgradeV2Accounts, FinalizeBufferVerificationV2,
         FinalizeBufferVerificationV2Accounts, VerifyBufferChunkV2, VerifyBufferChunkV2Accounts,
@@ -117,20 +120,23 @@ use upgrade_controller::{
         create_proposal_v3_instruction, execute_unfreeze_v2_instruction,
         finalize_checkpoint_v2_instruction, finalize_governance_v3_instruction,
         finalize_programdata_verification_v2_instruction, freeze_proposal_v3_instruction,
-        initialize_controller_v2_instruction, queue_proposal_v3_instruction, ApproveProposalV3,
-        ApproveProposalV3Accounts, ApproveUnfreezeV2, ApproveUnfreezeV2Accounts,
-        BindProgramDataVerificationV2, BindProgramDataVerificationV2Accounts,
-        CapacityPolicyInputV1, CheckpointAttestationGuardV2, CheckpointManifestV2,
-        ControllerReleaseInputV1, CreateCheckpointV2, CreateCheckpointV2Accounts, CreateProposalV3,
-        CreateProposalV3Accounts, ExecuteUnfreezeV2, ExecuteUnfreezeV2Accounts,
-        FinalizeCheckpointV2, FinalizeCheckpointV2Accounts, FinalizeGovernanceV3,
-        FinalizeGovernanceV3Accounts, FinalizeProgramDataVerificationV2,
+        initialize_controller_v2_instruction, observe_programdata_failure_v2_instruction,
+        queue_proposal_v3_instruction, ApproveProposalV3, ApproveProposalV3Accounts,
+        ApproveUnfreezeV2, ApproveUnfreezeV2Accounts, BindProgramDataVerificationV2,
+        BindProgramDataVerificationV2Accounts, CapacityPolicyInputV1, CheckpointAttestationGuardV2,
+        CheckpointManifestV2, ControllerReleaseInputV1, CreateCheckpointV2,
+        CreateCheckpointV2Accounts, CreateProposalV3, CreateProposalV3Accounts, ExecuteUnfreezeV2,
+        ExecuteUnfreezeV2Accounts, FinalizeCheckpointV2, FinalizeCheckpointV2Accounts,
+        FinalizeGovernanceV3, FinalizeGovernanceV3Accounts, FinalizeProgramDataVerificationV2,
         FinalizeProgramDataVerificationV2Accounts, FreezeProposalV3, FreezeProposalV3Accounts,
-        InitializeControllerV2, InitializeControllerV2Accounts, ProgramDataVerificationGuardV2,
+        InitializeControllerV2, InitializeControllerV2Accounts, ObserveProgramDataFailureV2,
+        ObserveProgramDataFailureV2Accounts, ProgramDataFailureProofV2,
+        ProgramDataFailureWitnessV2, ProgramDataVerificationGuardV2,
         ProgramDataVerificationManifestV2, ProposalGuardV3, ProposalManifestV3, QueueProposalV3,
         QueueProposalV3Accounts, SeatTermV2, UnfreezeGuardV2,
     },
     release1_v3_state::{
+        ProgramDataFailureObservationV2, ProgramDataMismatchClassV2,
         ProgramDataVerificationStatusV2, ProgramDataVerificationV2, StateCheckpointV2,
         UpgradeProposalV3, CAPACITY_SAFE_ACCOUNT_VERSION_V2, STATE_CHECKPOINT_V2_DIGEST_DOMAIN_ID,
         STATE_CHECKPOINT_V2_DISCRIMINATOR, STATE_CHECKPOINT_V2_RESERVED_LEN,
@@ -257,6 +263,8 @@ async fn start_standalone_validator(
     rollback_buffer: Pubkey,
     controller_artifact: &[u8],
     spread_artifact: &[u8],
+    primary_artifact: &[u8],
+    rollback_artifact: &[u8],
 ) -> (CeremonyContext, StandaloneValidator) {
     let root = PathBuf::from(
         std::env::var_os("AMOEBA_STANDALONE_EVIDENCE_DIR")
@@ -315,7 +323,7 @@ async fn start_standalone_validator(
         primary_buffer,
         account(
             UPGRADEABLE_LOADER_ID,
-            buffer_bytes(primary_uploader.pubkey(), spread_artifact),
+            buffer_bytes(primary_uploader.pubkey(), primary_artifact),
             false,
         ),
     );
@@ -324,7 +332,7 @@ async fn start_standalone_validator(
         rollback_buffer,
         account(
             UPGRADEABLE_LOADER_ID,
-            buffer_bytes(rollback_uploader.pubkey(), spread_artifact),
+            buffer_bytes(rollback_uploader.pubkey(), rollback_artifact),
             false,
         ),
     );
@@ -1683,6 +1691,194 @@ async fn observe_programdata(
     (observation, finalized)
 }
 
+/// Begins the exact PostUpgrade observation used by the V3 mechanical failure
+/// witness, but deliberately leaves it accumulating.  The failure instruction
+/// authenticates the expected leaf and reads the mismatching live bytes itself;
+/// an operator cannot convert an incomplete observation into rollback authority.
+#[allow(clippy::too_many_arguments)]
+async fn begin_failure_programdata_observation(
+    context: &mut CeremonyContext,
+    harness: &CeremonyHarness,
+    proposal_key: Pubkey,
+    artifact: &[u8],
+    generation: u64,
+) -> (Pubkey, ProgramDataObservationV1) {
+    let gate: ProtocolGateV1 = state(context, harness.gate).await;
+    let capacity: ProgramDataCapacityPolicyV1 = state(context, harness.capacity_policy).await;
+    let raw = bytes(context, harness.target_programdata).await;
+    let parsed = parse_upgradeable_programdata(&raw).expect("canonical failed ProgramData");
+    assert_eq!(parsed.upgrade_authority, Some(harness.authority));
+    let artifact_sha256 = hashv(&[artifact]).to_bytes();
+    let artifact_root = artifact_merkle_root(artifact, ARTIFACT_BINDING_CHUNK_SIZE_V1)
+        .expect("failure observation artifact root");
+    let purpose = ProgramDataObservationPurposeV1::PostUpgrade;
+    let subject_digest = compute_programdata_observation_subject_digest_v1(
+        &harness.controller,
+        &harness.config,
+        &harness.target,
+        &harness.target_programdata,
+        purpose,
+        &proposal_key,
+        generation,
+        &harness.gate,
+        gate.status,
+        gate.epoch,
+        &gate.active_proposal,
+        gate.freeze_slot,
+        gate.freeze_reason_code,
+        &capacity.policy_digest,
+        artifact.len() as u64,
+        &artifact_sha256,
+        &artifact_root,
+        &ARTIFACT_MERKLE_SCHEME_ID,
+        artifact.len() as u64,
+    )
+    .expect("failure observation subject digest");
+    let observation = derive_programdata_observation_pda(
+        &harness.controller,
+        &harness.target,
+        purpose as u8,
+        &subject_digest,
+        generation,
+    )
+    .0;
+    let guard = ProgramDataObservationGuardV1 {
+        purpose,
+        generation,
+        expected_subject_digest: subject_digest,
+        expected_gate_status: gate.status,
+        expected_gate_epoch: gate.epoch,
+        expected_freeze_reason_code: gate.freeze_reason_code,
+        expected_freeze_slot: gate.freeze_slot,
+    };
+    let begin = begin_programdata_observation_instruction(
+        harness.controller,
+        context.payer.pubkey(),
+        harness.config,
+        harness.gate,
+        harness.capacity_policy,
+        proposal_key,
+        harness.target,
+        harness.target_programdata,
+        observation,
+        UPGRADEABLE_LOADER_ID,
+        system_program::ID,
+        BeginProgramDataObservationV1 {
+            guard,
+            expected_capacity_policy_digest: capacity.policy_digest,
+            expected_artifact_length: artifact.len() as u64,
+            expected_artifact_sha256: artifact_sha256,
+            expected_artifact_merkle_root: artifact_root,
+            expected_artifact_scheme_id: ARTIFACT_MERKLE_SCHEME_ID,
+            minimum_required_capacity: artifact.len() as u64,
+            expected_deployed_slot: parsed.deployed_slot,
+            expected_actual_capacity: parsed.capacity as u64,
+            expected_upgrade_authority: ObservationAuthorityV1::some(harness.authority)
+                .expect("controller authority"),
+        },
+    )
+    .expect("begin failure observation instruction");
+    let [limit, price] = envelope_prefix();
+    submit(context, &[limit, price, begin], &[])
+        .await
+        .expect("begin exact accumulating failure observation through controller SBF");
+    let accumulating: ProgramDataObservationV1 = state(context, observation).await;
+    assert_eq!(
+        accumulating.status,
+        ProgramDataObservationStatusV1::Accumulating
+    );
+    (observation, accumulating)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn build_programdata_failure_instruction(
+    context: &mut CeremonyContext,
+    harness: &CeremonyHarness,
+    primary_key: Pubkey,
+    observation_key: Pubkey,
+    observation: &ProgramDataObservationV1,
+    mismatch_class: ProgramDataMismatchClassV2,
+    failing_chunk_index: u32,
+    expected_leaf_hash: [u8; 32],
+    proof: &[[u8; 32]],
+) -> (Pubkey, Instruction) {
+    let config: ControllerConfigV1 = state(context, harness.config).await;
+    let gate: ProtocolGateV1 = state(context, harness.gate).await;
+    let capacity: ProgramDataCapacityPolicyV1 = state(context, harness.capacity_policy).await;
+    let deployment: CurrentDeploymentStateV1 = state(context, harness.deployment).await;
+    let primary: UpgradeProposalV3 = state(context, primary_key).await;
+    let observation_state_hash = hashv(&[&bytes(context, observation_key).await]).to_bytes();
+    let (failure_key, _) =
+        derive_programdata_failure_observation_pda(&harness.controller, &primary_key, gate.epoch);
+    let mut nodes = [[0; 32]; MAX_ARTIFACT_PROOF_DEPTH_V1];
+    nodes[..proof.len()].copy_from_slice(proof);
+    let instruction = observe_programdata_failure_v2_instruction(
+        harness.controller,
+        ObserveProgramDataFailureV2Accounts {
+            payer: context.payer.pubkey(),
+            controller_config: harness.config,
+            protocol_gate: harness.gate,
+            primary_proposal: primary_key,
+            programdata_verification: primary.programdata_verification,
+            capacity_policy: harness.capacity_policy,
+            current_deployment: harness.deployment,
+            programdata_observation: observation_key,
+            target_program: harness.target,
+            target_programdata: harness.target_programdata,
+            authority_pda: harness.authority,
+            upgradeable_loader: UPGRADEABLE_LOADER_ID,
+            failure_observation: failure_key,
+            system_program: system_program::ID,
+        },
+        ObserveProgramDataFailureV2 {
+            witness: ProgramDataFailureWitnessV2 {
+                expected_proposal: proposal_guard(&primary, &config, &gate, &capacity, &deployment),
+                expected_verification_digest: [0; 32],
+                expected_verification_generation: 0,
+                expected_observation_generation: observation.generation,
+                expected_observation_state_hash: observation_state_hash,
+                mismatch_class,
+                failing_chunk_index,
+                expected_leaf_hash,
+                proof: ProgramDataFailureProofV2 {
+                    proof_len: proof.len() as u8,
+                    nodes,
+                },
+                plan_valid_until_slot: primary.expiry_slot,
+            },
+        },
+    )
+    .expect("build V3 ProgramData failure witness instruction");
+    (failure_key, instruction)
+}
+
+async fn inject_programdata_payload_fault(
+    context: &mut CeremonyContext,
+    programdata: Pubkey,
+    relative_payload_offset: usize,
+) -> (u8, u8) {
+    let CeremonyBackend::ProgramTest(program_test) = &mut context.backend else {
+        panic!("payload fault injection is permitted only in isolated ProgramTest");
+    };
+    let mut account = program_test
+        .banks_client
+        .get_account(programdata)
+        .await
+        .expect("read ProgramData before local fault injection")
+        .expect("ProgramData exists before local fault injection");
+    let absolute_offset = LOADER_PROGRAMDATA_METADATA_LEN
+        .checked_add(relative_payload_offset)
+        .expect("fault offset arithmetic");
+    let before = *account
+        .data
+        .get(absolute_offset)
+        .expect("fault offset inside ProgramData payload");
+    let after = before ^ 1;
+    account.data[absolute_offset] = after;
+    program_test.set_account(&programdata, &AccountSharedData::from(account));
+    (before, after)
+}
+
 async fn record_controller_immutability(
     context: &mut CeremonyContext,
     harness: &CeremonyHarness,
@@ -2619,10 +2815,10 @@ fn checkpoint_candidate(
     let (artifact_length, artifact_sha256, artifact_merkle_root, minimum_required_capacity) =
         match phase {
             StateCheckpointPhaseV1::Prestate => (
-                deployment.artifact_length,
-                deployment.artifact_sha256,
-                deployment.artifact_merkle_root,
-                deployment.artifact_length,
+                observation.expected_artifact_length,
+                observation.expected_artifact_sha256,
+                observation.expected_artifact_merkle_root,
+                observation.minimum_required_capacity,
             ),
             StateCheckpointPhaseV1::Poststate => (
                 proposal.artifact_length,
@@ -3128,9 +3324,18 @@ fn standalone_review_profile_covers_two_verified_artifacts() {
 async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation() {
     let standalone = std::env::var("AMOEBA_STANDALONE_VALIDATOR").as_deref() == Ok("1");
     let maximum_geometry = std::env::var("AMOEBA_MAXIMUM_GEOMETRY").as_deref() == Ok("1");
+    let rollback_rehearsal = std::env::var("AMOEBA_V3_ROLLBACK_REHEARSAL").as_deref() == Ok("1");
     assert!(
         !(standalone && maximum_geometry),
         "maximum geometry is an actual-SBF ProgramTest proof; standalone evidence uses the real Spread artifact"
+    );
+    assert!(
+        !(rollback_rehearsal && maximum_geometry),
+        "rollback rehearsal uses two distinct exact ELFs and is separate from maximum geometry"
+    );
+    assert!(
+        !(rollback_rehearsal && standalone),
+        "the rollback fault trigger is explicitly ProgramTest-only; standalone evidence must not imply a natural failed artifact"
     );
     let controller_artifact = read_controller_sbf();
     let mut spread_artifact = read_spread_sbf();
@@ -3142,6 +3347,16 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
     } else {
         spread_artifact.len()
     };
+    let primary_artifact = if rollback_rehearsal {
+        assert!(
+            controller_artifact.len() < spread_artifact.len(),
+            "rollback rehearsal requires a shorter valid primary ELF than the rollback ELF"
+        );
+        controller_artifact.as_slice()
+    } else {
+        spread_artifact.as_slice()
+    };
+    let rollback_artifact = spread_artifact.as_slice();
     let controller = Pubkey::from_str("8qbHbw2BbbTHBW1sbeqakYXVKRQM8Ne7pLK7m6CVfeR")
         .expect("synthetic local ceremony controller id");
     let controller_programdata = derive_upgradeable_programdata_address(&controller).0;
@@ -3264,7 +3479,7 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         primary_buffer,
         account(
             UPGRADEABLE_LOADER_ID,
-            buffer_bytes(primary_uploader.pubkey(), &spread_artifact),
+            buffer_bytes(primary_uploader.pubkey(), primary_artifact),
             false,
         ),
     );
@@ -3272,7 +3487,7 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         rollback_buffer,
         account(
             UPGRADEABLE_LOADER_ID,
-            buffer_bytes(rollback_uploader.pubkey(), &spread_artifact),
+            buffer_bytes(rollback_uploader.pubkey(), rollback_artifact),
             false,
         ),
     );
@@ -3304,6 +3519,8 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
             rollback_buffer,
             &controller_artifact,
             &spread_artifact,
+            primary_artifact,
+            rollback_artifact,
         )
         .await;
         _standalone_validator = Some(validator);
@@ -3545,11 +3762,11 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         ProposalClassV1::RoutineUpgrade,
         primary_buffer,
         primary_uploader.pubkey(),
-        &spread_artifact,
+        primary_artifact,
         OptionalPubkeyV1::none(),
         OptionalPubkeyV1::some(rollback_key).expect("rollback proposal option"),
         OptionalPubkeyV1::some(rollback_buffer).expect("rollback buffer option"),
-        Some(&spread_artifact),
+        Some(rollback_artifact),
     )
     .await;
     assert_eq!(
@@ -3562,7 +3779,7 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         primary_key,
         primary_buffer,
         &primary_uploader,
-        &spread_artifact,
+        primary_artifact,
     )
     .await;
     assert_eq!(sealed_primary.state, ProposalStateV2::BufferVerified);
@@ -3583,7 +3800,7 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         ProposalClassV1::EmergencyRollback,
         rollback_buffer,
         rollback_uploader.pubkey(),
-        &spread_artifact,
+        rollback_artifact,
         OptionalPubkeyV1::some(primary_key).expect("primary proposal option"),
         OptionalPubkeyV1::none(),
         OptionalPubkeyV1::none(),
@@ -3600,7 +3817,7 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         rollback_key,
         rollback_buffer,
         &rollback_uploader,
-        &spread_artifact,
+        rollback_artifact,
     )
     .await;
     assert_eq!(sealed_rollback.state, ProposalStateV2::BufferVerified);
@@ -3837,9 +4054,289 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
     );
     assert_eq!(
         &deployed_bytes[LOADER_PROGRAMDATA_METADATA_LEN
-            ..LOADER_PROGRAMDATA_METADATA_LEN + spread_artifact.len()],
-        spread_artifact.as_slice()
+            ..LOADER_PROGRAMDATA_METADATA_LEN + primary_artifact.len()],
+        primary_artifact
     );
+    if rollback_rehearsal {
+        let tail = &deployed_bytes[LOADER_PROGRAMDATA_METADATA_LEN + primary_artifact.len()..];
+        assert!(
+            tail.iter().all(|byte| *byte == 0),
+            "pinned Loader-v3 must retain its measured zero-tail behavior"
+        );
+        let (fault_before, fault_after) =
+            inject_programdata_payload_fault(&mut context, harness.target_programdata, 0).await;
+        assert_eq!(fault_before, primary_artifact[0]);
+        assert_eq!(fault_after, primary_artifact[0] ^ 1);
+        advance_to_slot(&mut context, deployed_header.deployed_slot + 1)
+            .await
+            .expect("failure observation must begin strictly after the primary Loader slot");
+        let (failure_observation_key, failure_observation) = begin_failure_programdata_observation(
+            &mut context,
+            &harness,
+            primary_key,
+            primary_artifact,
+            1,
+        )
+        .await;
+        let first_chunk_len = primary_artifact
+            .len()
+            .min(ARTIFACT_BINDING_CHUNK_SIZE_V1 as usize);
+        let expected_leaf = artifact_chunk_leaf_hash(0, &primary_artifact[..first_chunk_len])
+            .expect("primary first artifact leaf");
+        let failure_proof =
+            artifact_merkle_proof(primary_artifact, ARTIFACT_BINDING_CHUNK_SIZE_V1, 0)
+                .expect("primary first artifact proof");
+        let (failure_key, observe_failure) = build_programdata_failure_instruction(
+            &mut context,
+            &harness,
+            primary_key,
+            failure_observation_key,
+            &failure_observation,
+            ProgramDataMismatchClassV2::ArtifactPayload,
+            0,
+            expected_leaf,
+            &failure_proof,
+        )
+        .await;
+        submit(&mut context, &[observe_failure], &[])
+            .await
+            .expect("controller SBF must create the exact immutable payload-failure witness");
+        let failure: ProgramDataFailureObservationV2 = state(&mut context, failure_key).await;
+        assert!(failure.finalized);
+        assert_eq!(
+            failure.mismatch_class,
+            ProgramDataMismatchClassV2::ArtifactPayload
+        );
+        assert_eq!(failure.expected_leaf_hash, expected_leaf);
+        assert_ne!(failure.actual_leaf_hash, failure.expected_leaf_hash);
+
+        let activation_config: ControllerConfigV1 = state(&mut context, harness.config).await;
+        let activation_gate: ProtocolGateV1 = state(&mut context, harness.gate).await;
+        let activation_capacity: ProgramDataCapacityPolicyV1 =
+            state(&mut context, harness.capacity_policy).await;
+        let activation_deployment: CurrentDeploymentStateV1 =
+            state(&mut context, harness.deployment).await;
+        let activation_primary: UpgradeProposalV3 = state(&mut context, primary_key).await;
+        let activation_rollback: UpgradeProposalV3 = state(&mut context, rollback_key).await;
+        let live_rollback_verification: BufferVerificationV1 =
+            state(&mut context, activation_rollback.buffer_verification).await;
+        let observation_state_hash =
+            hashv(&[&bytes(&mut context, failure_observation_key).await]).to_bytes();
+        let activate = activate_rollback_v2_instruction(
+            harness.controller,
+            ActivateRollbackV2Accounts {
+                controller_config: harness.config,
+                policy: harness.policy,
+                protocol_gate: harness.gate,
+                primary_proposal: primary_key,
+                rollback_proposal: rollback_key,
+                rollback_buffer_verification: activation_rollback.buffer_verification,
+                primary_programdata_verification: activation_primary.programdata_verification,
+                failure_observation: failure_key,
+                capacity_policy: harness.capacity_policy,
+                current_deployment: harness.deployment,
+                programdata_observation: failure_observation_key,
+                target_program: harness.target,
+                target_programdata: harness.target_programdata,
+                authority_pda: harness.authority,
+                upgradeable_loader: UPGRADEABLE_LOADER_ID,
+            },
+            ActivateRollbackV2 {
+                expected_primary: proposal_guard(
+                    &activation_primary,
+                    &activation_config,
+                    &activation_gate,
+                    &activation_capacity,
+                    &activation_deployment,
+                ),
+                expected_rollback: proposal_guard(
+                    &activation_rollback,
+                    &activation_config,
+                    &activation_gate,
+                    &activation_capacity,
+                    &activation_deployment,
+                ),
+                expected_failure_evidence_digest: failure.failure_digest,
+                expected_primary_verification_generation: 0,
+                expected_programdata_observation_state_hash: observation_state_hash,
+                expected_programdata_observation_generation: failure_observation.generation,
+                expected_rollback_buffer_verification_status: live_rollback_verification.status,
+                expected_rollback_verified_chunk_bitmap: live_rollback_verification
+                    .verified_chunk_bitmap,
+                expected_rollback_verified_chunk_count: live_rollback_verification
+                    .verified_chunk_count,
+                expected_rollback_buffer_finalized_slot: live_rollback_verification.finalized_slot,
+                expected_next_gate_epoch: activation_gate.epoch + 1,
+            },
+        )
+        .expect("activate exact rollback instruction");
+        submit(&mut context, &[activate], &[]).await.expect(
+            "controller SBF must activate the precommitted rollback without an active interval",
+        );
+        let rollback_gate: ProtocolGateV1 = state(&mut context, harness.gate).await;
+        let frozen_rollback: UpgradeProposalV3 = state(&mut context, rollback_key).await;
+        assert_eq!(rollback_gate.status, GateStatusV1::FrozenForUpgrade);
+        assert_eq!(rollback_gate.active_proposal, rollback_key);
+        assert_eq!(rollback_gate.epoch, activation_gate.epoch + 1);
+        assert_eq!(frozen_rollback.state, ProposalStateV2::Frozen);
+
+        let rollback_config: ControllerConfigV1 = state(&mut context, harness.config).await;
+        let rollback_capacity: ProgramDataCapacityPolicyV1 =
+            state(&mut context, harness.capacity_policy).await;
+        let rollback_deployment: CurrentDeploymentStateV1 =
+            state(&mut context, harness.deployment).await;
+        let consumed_primary_verification: BufferVerificationV1 =
+            state(&mut context, activation_primary.buffer_verification).await;
+        let rollback_execute = execute_upgrade_v2_instruction(
+            harness.controller,
+            ExecuteUpgradeV2Accounts {
+                controller_config: harness.config,
+                policy: harness.policy,
+                protocol_gate: harness.gate,
+                proposal: rollback_key,
+                counterpart_proposal: primary_key,
+                counterpart_buffer_verification: activation_primary.buffer_verification,
+                capacity_policy: harness.capacity_policy,
+                current_deployment: harness.deployment,
+                prestate_programdata_observation: prestate_observation_key,
+                prestate_checkpoint: activation_primary.prestate_checkpoint,
+                current_programdata_observation: failure_key,
+                buffer_verification: frozen_rollback.buffer_verification,
+                target_programdata: harness.target_programdata,
+                target_program: harness.target,
+                buffer: rollback_buffer,
+                canonical_spill_treasury: harness.spill,
+                rent_sysvar: sysvar_ids::rent::ID,
+                clock_sysvar: sysvar_ids::clock::ID,
+                authority_pda: harness.authority,
+                upgradeable_loader: UPGRADEABLE_LOADER_ID,
+                instructions_sysvar: sysvar_ids::instructions::ID,
+            },
+            ExecuteUpgradeV2 {
+                expected: proposal_guard(
+                    &frozen_rollback,
+                    &rollback_config,
+                    &rollback_gate,
+                    &rollback_capacity,
+                    &rollback_deployment,
+                ),
+                expected_prestate_checkpoint_digest: prestate.checkpoint_digest,
+                expected_prestate_checkpoint_generation: prestate.checkpoint_generation,
+                expected_observation_digest: failure.failure_digest,
+                expected_observation_generation: failure.observation_generation,
+                expected_observation_root: failure.actual_leaf_hash,
+                expected_observation_finalized_slot: failure.finalized_slot,
+                expected_actual_capacity: failure.actual_capacity,
+                expected_sealed_buffer_header_hash: live_rollback_verification
+                    .sealed_buffer_header_hash,
+                expected_verified_chunk_count: live_rollback_verification.verified_chunk_count,
+                expected_buffer_verification_status: live_rollback_verification.status,
+                expected_counterpart_proposal_digest: activation_primary.proposal_digest,
+                expected_counterpart_buffer_verification_status: consumed_primary_verification
+                    .status,
+                envelope: envelope(),
+            },
+        )
+        .expect("execute witness-authorized rollback instruction");
+        let [limit, price] = envelope_prefix();
+        submit(&mut context, &[limit, price, rollback_execute], &[])
+            .await
+            .expect("controller SBF must execute one typed real Loader-v3 rollback CPI");
+        let rollback_executed: UpgradeProposalV3 = state(&mut context, rollback_key).await;
+        assert_eq!(rollback_executed.state, ProposalStateV2::UpgradeExecuted);
+        let rolled_back_bytes = bytes(&mut context, harness.target_programdata).await;
+        assert_eq!(
+            &rolled_back_bytes[LOADER_PROGRAMDATA_METADATA_LEN
+                ..LOADER_PROGRAMDATA_METADATA_LEN + rollback_artifact.len()],
+            rollback_artifact
+        );
+        let rolled_back_header = parse_upgradeable_programdata(&rolled_back_bytes)
+            .expect("parse rolled-back ProgramData header");
+        assert_eq!(
+            rolled_back_header.deployed_slot,
+            rollback_executed.upgrade_executed_slot
+        );
+
+        advance_to_slot(&mut context, rolled_back_header.deployed_slot + 1)
+            .await
+            .expect("rollback verification must start after its Loader slot");
+        let (rollback_observation_key, rollback_observation) = observe_programdata(
+            &mut context,
+            &harness,
+            harness.target,
+            harness.target_programdata,
+            rollback_key,
+            ProgramDataObservationPurposeV1::Rollback,
+            1,
+            rollback_artifact,
+            Some(harness.authority),
+        )
+        .await;
+        let (rollback_verified, rollback_programdata_verification) =
+            bind_and_finalize_programdata_v3(
+                &mut context,
+                &harness,
+                rollback_key,
+                rollback_observation_key,
+                &rollback_observation,
+            )
+            .await;
+        assert_eq!(
+            rollback_verified.state,
+            ProposalStateV2::ProgramDataVerified
+        );
+        let rollback_poststate = attest_and_finalize_checkpoint_v3(
+            &mut context,
+            &harness,
+            rollback_key,
+            StateCheckpointPhaseV1::Poststate,
+            rollback_observation_key,
+            &rollback_observation,
+            "ceremony-protected-state",
+        )
+        .await;
+        assert_eq!(
+            rollback_poststate.hard_combined_root,
+            prestate.hard_combined_root
+        );
+        let (completed_rollback, final_deployment, final_gate) = approve_and_execute_unfreeze_v3(
+            &mut context,
+            &harness,
+            rollback_key,
+            primary_key,
+            &rollback_poststate,
+            &rollback_programdata_verification,
+        )
+        .await;
+        assert_eq!(completed_rollback.state, ProposalStateV2::Completed);
+        assert_eq!(final_gate.status, GateStatusV1::Active);
+        assert_eq!(final_gate.epoch, rollback_gate.epoch + 1);
+        assert_eq!(final_gate.last_completed_proposal, rollback_key);
+        assert_eq!(final_deployment.completed_proposal.value, rollback_key);
+        assert_eq!(
+            final_deployment.artifact_sha256,
+            completed_rollback.artifact_sha256
+        );
+        let retired_primary: UpgradeProposalV3 = state(&mut context, primary_key).await;
+        assert_eq!(retired_primary.state, ProposalStateV2::Retired);
+
+        let permitted_mutation = spread_init_user_collateral_instruction(
+            harness.target,
+            spread_user,
+            spread_user_collateral,
+            harness.gate,
+            final_gate.epoch,
+        );
+        submit(&mut context, &[permitted_mutation], &[])
+            .await
+            .expect(
+                "Spread must resume only after rollback poststate and separate unfreeze quorum",
+            );
+        assert!(maybe_account(&mut context, spread_user_collateral)
+            .await
+            .is_some());
+        return;
+    }
 
     advance_to_slot(&mut context, deployed_header.deployed_slot + 1)
         .await
