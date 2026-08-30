@@ -1,0 +1,204 @@
+{
+  "schema": "ameba-devnet-governance-steps-8-11-prerequisite-stop-v1",
+  "ceremonyId": "20260830T024123Z-prerequisite-stop",
+  "status": "stopped-before-step-8",
+  "reason": "steps-1-through-7-not-complete",
+  "assignment": {
+    "path": "C:/Users/space/Downloads/Amoeba_Devnet_Governance_Steps_8_to_11_Agent_Spec.md",
+    "sha256": "c116e43808af64f1c366443e1a80ca227c2bcd0cfc9cddc182f70dfe596d4edd",
+    "bytes": 31471,
+    "lines": 1130
+  },
+  "source": {
+    "governance": {
+      "repository": "SPACE999978/ameba_gov",
+      "pullRequest": 1,
+      "head": "52642f787bdd234469cb04efbd90332ff514e0aa",
+      "base": "c2771a7a74c895bbb9a81ba38273e19ac25931ea",
+      "changedFiles": 81,
+      "reviewSubmissions": 0,
+      "reviewThreads": 0,
+      "openReviewThreads": 0,
+      "mergeable": true,
+      "mergeState": "UNSTABLE"
+    },
+    "spread": {
+      "repository": "SPACE999978/ameba_spread",
+      "pullRequest": 20,
+      "head": "ad225990ef72726a58aef8810263fad5503af218",
+      "base": "88c067ae6f2901131698be1e12fdff6f259b361b",
+      "changedFiles": 95,
+      "reviewSubmissions": 0,
+      "reviewThreads": 0,
+      "openReviewThreads": 0,
+      "mergeable": true,
+      "mergeState": "UNSTABLE"
+    }
+  },
+  "hostedCi": {
+    "status": "not-green",
+    "billingWaiverInvoked": false,
+    "reasonWaiverNotInvoked": "the on-chain prerequisite gate failed before ceremony admission",
+    "runs": [
+      {
+        "repository": "SPACE999978/ameba_gov",
+        "runId": 33286547021,
+        "jobCount": 2,
+        "executedStepCount": 0,
+        "conclusion": "failure"
+      },
+      {
+        "repository": "SPACE999978/ameba_gov",
+        "runId": 33286530344,
+        "jobCount": 2,
+        "executedStepCount": 0,
+        "conclusion": "failure"
+      },
+      {
+        "repository": "SPACE999978/ameba_spread",
+        "runId": 33286555175,
+        "jobCount": 4,
+        "executedStepCount": 0,
+        "conclusion": "failure"
+      },
+      {
+        "repository": "SPACE999978/ameba_spread",
+        "runId": 33286529997,
+        "jobCount": 4,
+        "executedStepCount": 0,
+        "conclusion": "failure"
+      }
+    ]
+  },
+  "reviewedIdentity": {
+    "manifestSha256": "7a8fb47f58011c19ec7522a11893bb13b6709dc4c0b0bca22735dc52196208e3",
+    "manifestStatus": "unselected",
+    "identityGeneration": 0,
+    "controllerProgramId": null,
+    "controllerConfigPda": null,
+    "protocolGatePda": null,
+    "reviewSha256": "e9ff5083c40733fd0ee04a4f4f36f1f757e592f2bc6d1601ad1f98a40303c19a",
+    "reviewStatus": "pending-selection",
+    "reviewedSourceCommit": null,
+    "controllerArtifactSha256": null,
+    "controllerProgramDataSha256": null,
+    "controllerImmutabilityReceiptSha256": null,
+    "spreadBridgePlanSha256": null,
+    "independentReviewCount": 0,
+    "productionUseAuthorized": false
+  },
+  "devnet": {
+    "rpc": "https://api.devnet.solana.com",
+    "commitment": "finalized",
+    "genesisHash": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+    "observationContextSlot": 490199962,
+    "targetProgram": "9ipkBCjEfeJDMF6AFrezRmDDHmbnmeyv45cfXNqAnWsH",
+    "targetProgramData": "2DBN762WGdNc85xiVdvQX7Lo4TXAq3WhVz9mBQcaU3a3",
+    "targetProgramOwner": "BPFLoaderUpgradeab1e11111111111111111111111",
+    "targetProgramDataAuthority": "D5jhTM3kYHdKixrc52Kn657gBHytQLhQqsTmJBcNFVdq",
+    "targetLastDeploySlot": 487702729,
+    "targetPayloadCapacity": 1241776,
+    "targetRawProgramDataLength": 1241821,
+    "targetRawProgramDataSha256": "5eef434e2b02d70e3776fe2b7b624be3e87d56884ab74145929fbe1d65b3fb02",
+    "targetCapacityPayloadSha256": "bcc76952d9f57a63b0853a372c57bb32e90b0d851d7ba90c252d88be73b54191",
+    "targetTrailingZeroBytes": 99127,
+    "targetNonzeroSuffixTrimmedLength": 1142649,
+    "containsPhase3SyntheticMarker": false,
+    "containsLocalCeremonyMarker": false,
+    "containsGateMagicAscii": false,
+    "reviewedBridgeArtifactSha256": null,
+    "exactBridgeArtifactComparisonPossible": false,
+    "trackedCandidateComparisonContextSlot": 490201962,
+    "trackedV0CandidateLength": 1154184,
+    "trackedV0CandidateSha256": "7b29416cba304909b5546aa4726aedbf7fb7a9b4e506d7292f171f5afcb20749",
+    "livePrefixAtTrackedV0LengthSha256": "c112d21a8830b318e67a690d08fffdb58609f0215c59e1de528248c93ecc1bc2",
+    "trackedV0CandidateMatchesLive": false,
+    "trackedV2CandidateLength": 1281248,
+    "trackedV2CandidateSha256": "e93c70b96c398fde4029fd2e873c547858880d668489f25477721034c944a514",
+    "trackedV2CandidateExceedsLiveCapacityBytes": 39472
+  },
+  "syntheticFixtureChecks": [
+    {
+      "kind": "phase-3-synthetic",
+      "controllerProgram": "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi",
+      "controllerAccountOwner": "11111111111111111111111111111111",
+      "controllerAccountExecutable": false,
+      "controllerAccountDataLength": 0,
+      "controllerConfigPda": "DeXoJJjvjQ8zbw9Dv6YeAiYJfx6UvQzFnZ4k8b6ZkYQK",
+      "controllerConfigAccountExists": false,
+      "protocolGatePda": "DKhD62NUwnURpbvxnrqvvfqTG7zix9nWn1j72r4k1jw1",
+      "protocolGateAccountExists": false
+    },
+    {
+      "kind": "local-ceremony",
+      "controllerProgram": "8qbHbw2BbbTHBW1sbeqakYXVKRQM8Ne7pLK7m6CVfeR",
+      "controllerAccountOwner": "11111111111111111111111111111111",
+      "controllerAccountExecutable": false,
+      "controllerAccountDataLength": 0,
+      "controllerConfigPda": "FYdLuzfpWBibs7g8K6e5qwvBKPSrDQGWKEPoM1rtTqsX",
+      "controllerConfigAccountExists": false,
+      "protocolGatePda": "EFgLaszu2GXC7zo5Q4pcg2hGfhZULSjUKhsit5PczQWf",
+      "protocolGateAccountExists": false
+    }
+  ],
+  "prerequisites": [
+    {
+      "step": 1,
+      "status": "fail",
+      "reason": "no chosen reviewed Devnet controller identity, source, or artifact"
+    },
+    {
+      "step": 2,
+      "status": "fail",
+      "reason": "no reviewed five-seat, guardian, or treasury identity set is fixed"
+    },
+    {
+      "step": 3,
+      "status": "fail",
+      "reason": "no reviewed controller program ID exists and the synthetic fixture address is not executable"
+    },
+    {
+      "step": 4,
+      "status": "fail",
+      "reason": "no deployed reviewed controller exists to initialize"
+    },
+    {
+      "step": 5,
+      "status": "fail",
+      "reason": "no canonical reviewed gate address or initialized bootstrap-frozen gate exists"
+    },
+    {
+      "step": 6,
+      "status": "fail",
+      "reason": "no reviewed controller ProgramData exists whose authority can be proven None"
+    },
+    {
+      "step": 7,
+      "status": "fail",
+      "reason": "no reviewed bridge artifact or pinned controller identity exists for exact comparison to deployed Spread bytes"
+    }
+  ],
+  "ceremonySteps": {
+    "step8": "not-started",
+    "step9": "not-started",
+    "step10": "not-started",
+    "step11": "not-started"
+  },
+  "sideEffects": {
+    "rpcWrites": 0,
+    "signaturesRequested": 0,
+    "signaturesSubmitted": 0,
+    "serviceMutations": 0,
+    "writerQuiescenceAttempted": false,
+    "authorityChanges": 0,
+    "deployments": 0,
+    "mainnetActivity": 0
+  },
+  "canonicalGateObservation": null,
+  "externalAuditStatus": "absent",
+  "notes": [
+    "The absence of embedded marker strings is not proof of the governance bridge.",
+    "The capacity-wide payload hash is not an artifact hash and cannot replace exact artifact comparison.",
+    "Expected feature branches are review inputs, not proof of on-chain deployment."
+  ]
+}
