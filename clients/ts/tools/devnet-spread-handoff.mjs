@@ -4949,6 +4949,80 @@ function proofBufferClosePoststate(validated) {
   };
 }
 
+function classifyProofBufferCloseRecoveryState(before, observation) {
+  assert(Number.isSafeInteger(observation.slot) && observation.slot > 0, "proof-buffer Close recovery slot is invalid");
+  assert.equal(typeof observation.proofBufferPresent, "boolean", "proof-buffer Close recovery presence flag is invalid");
+  if (observation.proofBufferPresent) {
+    assert.deepEqual(
+      observation.state,
+      before,
+      "proof-buffer Close expired-state probe did not observe the exact prepared prestate",
+    );
+    return { kind: "unchanged-prestate", slot: observation.slot };
+  }
+  const after = observation.state;
+  for (const field of ["programdataRawSha256", "programdataDeployedSlot", "gateAccountSha256", "handoffReceiptAccountSha256"]) {
+    assert.equal(after[field], before[field], `proof-buffer Close recovery changed ${field}`);
+  }
+  assert.equal(
+    after.reconstructedTreasuryPrestateSha256,
+    before.treasuryAccountSha256,
+    "proof-buffer Close recovery treasury changed outside the exact lamport transfer",
+  );
+  assert.equal(
+    after.treasuryLamports - before.treasuryLamports,
+    before.proofBufferLamports,
+    "proof-buffer Close recovery treasury delta is not the exact closed-buffer balance",
+  );
+  return { kind: "landed-poststate", slot: observation.slot };
+}
+
+async function observeProofBufferCloseRecoveryState(connection, prepared, inputs, plan, minContextSlot) {
+  const proofBufferRead = await connection.getAccountInfoAndContext(
+    inputs.proofBuffer,
+    finalizedConfig(minContextSlot),
+  );
+  assert(
+    proofBufferRead.context.slot >= minContextSlot,
+    "proof-buffer Close recovery buffer read predates the finalized expiry boundary",
+  );
+  const bufferVacant = proofBufferRead.value === null || (
+    proofBufferRead.value.owner.equals(SystemProgram.programId)
+    && proofBufferRead.value.data.length === 0
+  );
+  const recoveryPoststateMarker = bufferVacant
+    ? { receipt: { finalizedSlot: proofBufferRead.context.slot }, recoveryProbe: true }
+    : null;
+  const validated = await readActivationLiveState(
+    connection,
+    inputs,
+    plan,
+    proofBufferRead.context.slot,
+    recoveryPoststateMarker,
+  );
+  assert(
+    validated.state.slot >= proofBufferRead.context.slot,
+    "proof-buffer Close recovery state predates its buffer-presence observation",
+  );
+  if (!bufferVacant) {
+    return classifyProofBufferCloseRecoveryState(prepared.stateSnapshot, {
+      slot: validated.state.slot,
+      proofBufferPresent: true,
+      state: proofBufferClosePrestate(validated, inputs),
+    });
+  }
+  const after = proofBufferClosePoststate(validated);
+  const reconstructedTreasuryPrestateSha256 = sha256Hex(Buffer.from(JSON.stringify({
+    ...accountFingerprint(validated.treasuryAccount),
+    lamports: prepared.stateSnapshot.treasuryLamports,
+  }), "utf8"));
+  return classifyProofBufferCloseRecoveryState(prepared.stateSnapshot, {
+    slot: validated.state.slot,
+    proofBufferPresent: false,
+    state: { ...after, reconstructedTreasuryPrestateSha256 },
+  });
+}
+
 async function loadProofBufferCloseReceipt(inputs, plan, negativeProof) {
   const file = fileInRunDir(inputs.runDir, PROOF_BUFFER_CLOSE_RECEIPT_FILE);
   let bytes;
@@ -5035,6 +5109,20 @@ function proofBufferCloseAttempt(journal) {
 
 function assertProofBufferClosePrepared(prepared, inputs, plan) {
   assert(prepared, "proof-buffer Close lacks its prepared transaction");
+  assert(
+    Number.isSafeInteger(prepared.minContextSlot) && prepared.minContextSlot > 0,
+    "proof-buffer Close prepared minimum context slot is invalid",
+  );
+  assert(
+    Number.isSafeInteger(prepared.lastValidBlockHeight) && prepared.lastValidBlockHeight > 0,
+    "proof-buffer Close prepared last-valid block height is invalid",
+  );
+  assert(typeof prepared.blockhash === "string" && bs58.decode(prepared.blockhash).length === 32, "proof-buffer Close prepared blockhash is invalid");
+  assert.deepEqual(
+    prepared.expectedSigners,
+    [PAYER.toBase58(), LEGACY_AUTHORITY.toBase58()],
+    "proof-buffer Close prepared signer commitment changed",
+  );
   assertExactKeys(prepared.stateSnapshot, [
     "programdataRawSha256", "programdataDeployedSlot", "gateAccountSha256",
     "handoffReceiptAccountSha256", "proofBufferRawSha256", "proofBufferAccountSha256",
@@ -5045,6 +5133,7 @@ function assertProofBufferClosePrepared(prepared, inputs, plan) {
   assert.equal(sha256Hex(wire), prepared.wireSha256, "proof-buffer Close wire hash changed");
   assert.equal(wire.length, plan.transactionBlueprints.close.packetBytes, "proof-buffer Close packet length changed");
   const transaction = VersionedTransaction.deserialize(wire);
+  assert.equal(transaction.message.recentBlockhash, prepared.blockhash, "proof-buffer Close message blockhash changed");
   assert.equal(bs58.encode(transaction.signatures[0]), prepared.signature, "proof-buffer Close fee-payer signature changed");
   assert.equal(sha256Hex(Buffer.from(transaction.message.serialize())), prepared.messageSha256, "proof-buffer Close message changed");
   assert.deepEqual(
@@ -5081,9 +5170,29 @@ async function finalizedProofBufferCloseTransaction(connection, prepared, inputs
   return landed;
 }
 
-async function pollProofBufferCloseFinalized(connection, journal, prepared, inputs, plan) {
+async function pollProofBufferCloseFinalized(connection, journal, prepared, inputs, plan, testHooks = null) {
+  const validatePrepared = testHooks?.validatePrepared
+    ?? ((currentPrepared) => assertProofBufferClosePrepared(currentPrepared, inputs, plan));
+  validatePrepared(prepared);
+  const finalizedTransaction = testHooks?.finalizedTransaction
+    ?? ((currentConnection, currentPrepared) => finalizedProofBufferCloseTransaction(
+      currentConnection,
+      currentPrepared,
+      inputs,
+      plan,
+    ));
+  const observeRecoveryState = testHooks?.observeRecoveryState
+    ?? ((currentConnection, currentPrepared, minContextSlot) => observeProofBufferCloseRecoveryState(
+      currentConnection,
+      currentPrepared,
+      inputs,
+      plan,
+      minContextSlot,
+    ));
+  const wait = testHooks?.wait
+    ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   for (;;) {
-    const landed = await finalizedProofBufferCloseTransaction(connection, prepared, inputs, plan);
+    const landed = await finalizedTransaction(connection, prepared);
     if (landed) {
       if (landed.meta.err !== null) {
         await journal.append("proof-buffer-close-failed", {
@@ -5109,18 +5218,292 @@ async function pollProofBufferCloseFinalized(connection, journal, prepared, inpu
         throw new Error("proof-buffer Close finalized with an error; keep the gate frozen and stop");
       }
       if (statuses.value[0] !== null) {
-        await new Promise((resolve) => setTimeout(resolve, FINALIZED_STATUS_POLL_INTERVAL_MS));
+        await wait(FINALIZED_STATUS_POLL_INTERVAL_MS);
         continue;
       }
+      const exactLanded = await finalizedTransaction(connection, prepared);
+      if (exactLanded) {
+        if (exactLanded.meta.err !== null) {
+          await journal.append("proof-buffer-close-failed", {
+            stage: "former-authority-proof-buffer-close",
+            signature: prepared.signature,
+            slot: exactLanded.slot,
+            errorSha256: sha256Hex(Buffer.from(JSON.stringify(exactLanded.meta.err), "utf8")),
+          });
+          throw new Error("proof-buffer Close finalized with an error; keep the gate frozen and stop");
+        }
+        return exactLanded;
+      }
+      const finalizedProofSlot = await connection.getSlot("finalized");
+      assert(
+        Number.isSafeInteger(finalizedProofSlot) && finalizedProofSlot > 0,
+        "proof-buffer Close finalized expiry slot is invalid",
+      );
+      assert(
+        finalizedProofSlot >= prepared.minContextSlot,
+        "proof-buffer Close finalized expiry slot predates the prepared minimum context",
+      );
+      const recovery = await observeRecoveryState(connection, prepared, finalizedProofSlot);
+      assert(
+        Number.isSafeInteger(recovery.slot) && recovery.slot >= finalizedProofSlot,
+        "proof-buffer Close recovery probe predates the finalized expiry boundary",
+      );
+      if (recovery.kind === "landed-poststate") {
+        const alreadyRecorded = journal.entries.some((entry) => (
+          entry.event === "proof-buffer-close-poststate-history-pending"
+          && entry.stage === "former-authority-proof-buffer-close"
+          && entry.signature === prepared.signature
+        ));
+        if (!alreadyRecorded) {
+          await journal.append("proof-buffer-close-poststate-history-pending", {
+            stage: "former-authority-proof-buffer-close",
+            signature: prepared.signature,
+            observedBlockHeight: blockHeight,
+            finalizedProofSlot,
+            poststateProofSlot: recovery.slot,
+          });
+        }
+        await wait(FINALIZED_STATUS_POLL_INTERVAL_MS);
+        continue;
+      }
+      assert.equal(recovery.kind, "unchanged-prestate", "proof-buffer Close recovery classification changed");
       await journal.append("proof-buffer-close-expired", {
         stage: "former-authority-proof-buffer-close",
         signature: prepared.signature,
         observedBlockHeight: blockHeight,
+        finalizedProofSlot,
+        prestateProofSlot: recovery.slot,
       });
       return null;
     }
-    await new Promise((resolve) => setTimeout(resolve, FINALIZED_STATUS_POLL_INTERVAL_MS));
+    await wait(FINALIZED_STATUS_POLL_INTERVAL_MS);
   }
+}
+
+async function selfTestProofBufferCloseRecovery() {
+  const hash = (byte) => byte.repeat(64);
+  const before = {
+    programdataRawSha256: hash("1"),
+    programdataDeployedSlot: "123",
+    gateAccountSha256: hash("2"),
+    handoffReceiptAccountSha256: hash("3"),
+    proofBufferRawSha256: hash("4"),
+    proofBufferAccountSha256: hash("5"),
+    proofBufferLamports: 700,
+    treasuryAccountSha256: hash("6"),
+    treasuryLamports: 1_000,
+  };
+  assert.deepEqual(
+    classifyProofBufferCloseRecoveryState(before, {
+      slot: 101,
+      proofBufferPresent: true,
+      state: structuredClone(before),
+    }),
+    { kind: "unchanged-prestate", slot: 101 },
+  );
+  const landedState = {
+    programdataRawSha256: before.programdataRawSha256,
+    programdataDeployedSlot: before.programdataDeployedSlot,
+    gateAccountSha256: before.gateAccountSha256,
+    handoffReceiptAccountSha256: before.handoffReceiptAccountSha256,
+    treasuryAccountSha256: hash("7"),
+    treasuryLamports: 1_700,
+    reconstructedTreasuryPrestateSha256: before.treasuryAccountSha256,
+  };
+  assert.deepEqual(
+    classifyProofBufferCloseRecoveryState(before, {
+      slot: 102,
+      proofBufferPresent: false,
+      state: landedState,
+    }),
+    { kind: "landed-poststate", slot: 102 },
+  );
+  assert.throws(
+    () => classifyProofBufferCloseRecoveryState(before, {
+      slot: 102,
+      proofBufferPresent: false,
+      state: { ...landedState, gateAccountSha256: hash("8") },
+    }),
+    /changed gateAccountSha256/u,
+  );
+
+  const testBuffer = new PublicKey("11111111111111111111111111111112");
+  const preparedBlockhash = bs58.encode(Buffer.alloc(32, 9));
+  const preparedTransaction = new VersionedTransaction(new TransactionMessage({
+    payerKey: PAYER,
+    recentBlockhash: preparedBlockhash,
+    instructions: [directFormerAuthorityCloseBufferInstruction(testBuffer)],
+  }).compileToV0Message());
+  preparedTransaction.signatures[0].set(Buffer.alloc(64, 1));
+  preparedTransaction.signatures[1].set(Buffer.alloc(64, 2));
+  const preparedWire = Buffer.from(preparedTransaction.serialize());
+  const exactPrepared = {
+    signature: bs58.encode(preparedTransaction.signatures[0]),
+    blockhash: preparedBlockhash,
+    lastValidBlockHeight: 1,
+    minContextSlot: 100,
+    expectedSigners: [PAYER.toBase58(), LEGACY_AUTHORITY.toBase58()],
+    messageSha256: sha256Hex(Buffer.from(preparedTransaction.message.serialize())),
+    wireSha256: sha256Hex(preparedWire),
+    wireBytes: preparedWire.length,
+    wireBase64: preparedWire.toString("base64"),
+    stateSnapshot: before,
+  };
+  const preparedInputs = { proofBuffer: testBuffer };
+  const preparedPlan = { transactionBlueprints: { close: { packetBytes: preparedWire.length } } };
+  assert.doesNotThrow(() => assertProofBufferClosePrepared(exactPrepared, preparedInputs, preparedPlan));
+  const tamperedPreparedJournal = { entries: [], async append(event, fields) { this.entries.push({ event, ...fields }); } };
+  await assert.rejects(
+    pollProofBufferCloseFinalized(
+      new Proxy({}, { get() { throw new Error("tampered prepared state reached RPC"); } }),
+      tamperedPreparedJournal,
+      { ...exactPrepared, minContextSlot: 0 },
+      preparedInputs,
+      preparedPlan,
+    ),
+    /prepared minimum context slot is invalid/u,
+  );
+  assert.equal(tamperedPreparedJournal.entries.length, 0, "tampered proof-buffer Close prepared state emitted terminal evidence");
+
+  const prepared = {
+    signature: "proof-buffer-close-self-test",
+    blockhash: bs58.encode(Buffer.alloc(32, 9)),
+    lastValidBlockHeight: 1,
+    minContextSlot: 100,
+    expectedSigners: [PAYER.toBase58(), LEGACY_AUTHORITY.toBase58()],
+    stateSnapshot: before,
+  };
+  const makeJournal = () => ({
+    entries: [],
+    async append(event, fields) {
+      const entry = { event, ...fields };
+      this.entries.push(entry);
+      return entry;
+    },
+  });
+  const makeConnection = () => ({
+    async getBlockHeight() { return 2; },
+    async getSignatureStatuses() { return { value: [null] }; },
+    async getSlot() { return 101; },
+  });
+
+  const expiredJournal = makeJournal();
+  const expired = await pollProofBufferCloseFinalized(
+    makeConnection(),
+    expiredJournal,
+    prepared,
+    {},
+    {},
+    {
+      validatePrepared() {},
+      async finalizedTransaction() { return null; },
+      async observeRecoveryState(_connection, _prepared, minimumSlot) {
+        return { kind: "unchanged-prestate", slot: minimumSlot };
+      },
+      async wait() {},
+    },
+  );
+  assert.equal(expired, null);
+  assert.equal(expiredJournal.entries.filter((entry) => entry.event === "proof-buffer-close-expired").length, 1);
+
+  const landedJournal = makeJournal();
+  let transactionLookups = 0;
+  let waits = 0;
+  const landed = await pollProofBufferCloseFinalized(
+    makeConnection(),
+    landedJournal,
+    prepared,
+    {},
+    {},
+    {
+      validatePrepared() {},
+      async finalizedTransaction() {
+        transactionLookups += 1;
+        return transactionLookups >= 3 ? { meta: { err: null }, slot: 103 } : null;
+      },
+      async observeRecoveryState(_connection, _prepared, minimumSlot) {
+        return { kind: "landed-poststate", slot: minimumSlot + 1 };
+      },
+      async wait() { waits += 1; },
+    },
+  );
+  assert.equal(landed.slot, 103);
+  assert.equal(transactionLookups, 3, "proof-buffer Close did not recheck exact finalized history");
+  assert.equal(waits, 1, "proof-buffer Close history-pending recovery did not pace its next lookup");
+  assert.equal(landedJournal.entries.filter((entry) => entry.event === "proof-buffer-close-poststate-history-pending").length, 1);
+  assert.equal(landedJournal.entries.some((entry) => entry.event === "proof-buffer-close-expired"), false);
+
+  const staleJournal = makeJournal();
+  await assert.rejects(
+    pollProofBufferCloseFinalized(
+      makeConnection(),
+      staleJournal,
+      prepared,
+      {},
+      {},
+      {
+        validatePrepared() {},
+        async finalizedTransaction() { return null; },
+        async observeRecoveryState(_connection, _prepared, minimumSlot) {
+          return { kind: "unchanged-prestate", slot: minimumSlot - 1 };
+        },
+        async wait() {},
+      },
+    ),
+    /predates the finalized expiry boundary/u,
+  );
+  assert.equal(staleJournal.entries.some((entry) => entry.event === "proof-buffer-close-expired"), false);
+
+  const staleFinalizedSlotJournal = makeJournal();
+  let staleFinalizedSlotProbeCalls = 0;
+  await assert.rejects(
+    pollProofBufferCloseFinalized(
+      { ...makeConnection(), async getSlot() { return 99; } },
+      staleFinalizedSlotJournal,
+      prepared,
+      {},
+      {},
+      {
+        validatePrepared() {},
+        async finalizedTransaction() { return null; },
+        async observeRecoveryState() {
+          staleFinalizedSlotProbeCalls += 1;
+          return { kind: "unchanged-prestate", slot: 100 };
+        },
+        async wait() {},
+      },
+    ),
+    /finalized expiry slot predates the prepared minimum context/u,
+  );
+  assert.equal(staleFinalizedSlotProbeCalls, 0, "stale finalized slot reached the proof-buffer Close state probe");
+  assert.equal(staleFinalizedSlotJournal.entries.length, 0, "stale finalized slot emitted proof-buffer Close terminal evidence");
+
+  const driftJournal = makeJournal();
+  await assert.rejects(
+    pollProofBufferCloseFinalized(
+      makeConnection(),
+      driftJournal,
+      prepared,
+      {},
+      {},
+      {
+        validatePrepared() {},
+        async finalizedTransaction() { return null; },
+        async observeRecoveryState() { throw new Error("malformed proof-buffer Close recovery drift"); },
+        async wait() {},
+      },
+    ),
+    /malformed proof-buffer Close recovery drift/u,
+  );
+  assert.equal(driftJournal.entries.some((entry) => entry.event === "proof-buffer-close-expired"), false);
+  return {
+    unchangedPrestateExpires: true,
+    landedPoststateRetainsPreparedHistory: true,
+    staleObservationRejected: true,
+    staleFinalizedSlotRejected: true,
+    tamperedPreparedRejected: true,
+    malformedDriftRejected: true,
+  };
 }
 
 async function writeProofBufferCloseReceipt(inputs, plan, journal, negativeProof, prepared, landed, afterValidated) {
@@ -5384,6 +5767,14 @@ async function assertCurrentAction(connection, inputs, plan, expectedStage, minC
   return { validated, action, slot: validated.state.slot };
 }
 
+function currentActionObservationSlot(current, stage) {
+  assert(
+    Number.isSafeInteger(current?.slot) && current.slot > 0,
+    `${stage} finalized action observation slot is invalid`,
+  );
+  return current.slot;
+}
+
 async function reconcileJournal(connection, journal, inputs, plan) {
   const unresolved = unresolvedPreparedStages(journal);
   for (const stage of unresolved) {
@@ -5482,7 +5873,8 @@ async function submitAction(connection, journal, inputs, plan, payer, initialAct
       decodedActionEntrySha256: journal.entries.at(-2)?.entrySha256 ?? null,
     },
     verifyImmediatelyBeforeSubmit: async (minContextSlot) => {
-      await assertCurrentAction(connection, inputs, plan, action.stage, minContextSlot);
+      const current = await assertCurrentAction(connection, inputs, plan, action.stage, minContextSlot);
+      return currentActionObservationSlot(current, action.stage);
     },
   });
   return landed;
@@ -5643,7 +6035,16 @@ async function submitActivationAction(
       decodedActionEntrySha256: decodedEntry.entrySha256,
     },
     verifyImmediatelyBeforeSubmit: async (minContextSlot) => {
-      await assertCurrentActivationAction(connection, inputs, plan, negativeProof, proofBufferCloseReceipt, action.stage, minContextSlot);
+      const current = await assertCurrentActivationAction(
+        connection,
+        inputs,
+        plan,
+        negativeProof,
+        proofBufferCloseReceipt,
+        action.stage,
+        minContextSlot,
+      );
+      return currentActionObservationSlot(current, action.stage);
     },
   });
   return landed;
@@ -6684,6 +7085,12 @@ async function statusActivation() {
 
 async function selfTest() {
   const runtimeSafety = await selfTestCeremonyRuntime();
+  const proofBufferCloseRecoverySafety = await selfTestProofBufferCloseRecovery();
+  assert.equal(currentActionObservationSlot({ slot: 123 }, "self-test action"), 123);
+  assert.throws(
+    () => currentActionObservationSlot({ slot: undefined }, "self-test missing action slot"),
+    /observation slot is invalid/u,
+  );
   assert.equal(
     FINALIZED_STATUS_POLL_INTERVAL_MS,
     30_000,
@@ -6873,6 +7280,13 @@ async function selfTest() {
     firstRateLimitCallCount: runtimeSafety.firstRateLimitCallCount,
     proofBufferCloseInstructionDataHex: close.data.toString("hex"),
     proofBufferCloseReceiptDigestVector: closeReceiptVector.receiptSha256,
+    proofBufferCloseUnchangedPrestateExpires: proofBufferCloseRecoverySafety.unchangedPrestateExpires,
+    proofBufferCloseLandedPoststateRetainsPreparedHistory: proofBufferCloseRecoverySafety.landedPoststateRetainsPreparedHistory,
+    proofBufferCloseStaleObservationRejected: proofBufferCloseRecoverySafety.staleObservationRejected,
+    proofBufferCloseStaleFinalizedSlotRejected: proofBufferCloseRecoverySafety.staleFinalizedSlotRejected,
+    proofBufferCloseTamperedPreparedRejected: proofBufferCloseRecoverySafety.tamperedPreparedRejected,
+    proofBufferCloseMalformedDriftRejected: proofBufferCloseRecoverySafety.malformedDriftRejected,
+    handoffAndActivationPreSubmitSlotsPropagated: true,
     compatibilityAdapterSha256: EXPECTED_COMPATIBILITY_ADAPTER_SHA256,
     frozenGateCensusReceiptDigestVector: frozenDigestVector.receiptSha256,
     twoCycleSeatRunwayRequiredTermEndSlot: runway.requiredTermEndSlot,

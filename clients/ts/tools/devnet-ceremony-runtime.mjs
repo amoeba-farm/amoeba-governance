@@ -729,6 +729,10 @@ async function proveExpiredNotLanded({
   assert.equal(status, null, `${stage} transaction is visible but lacks an exact finalized transaction`);
   const finalizedSlot = await connection.getSlot("finalized");
   assert(Number.isSafeInteger(finalizedSlot) && finalizedSlot > 0, `${stage} finalized expiry slot is invalid`);
+  assert(
+    finalizedSlot >= attempt.entry.minContextSlot,
+    `${stage} finalized expiry slot predates the prepared minimum context`,
+  );
   const proof = await verifyExpiredPrestate(finalizedSlot);
   const proofSlot = verifiedObservationSlot(proof, finalizedSlot, stage);
   await journal.append("expired-not-landed", {
@@ -1023,6 +1027,98 @@ export async function selfTestCeremonyRuntime() {
     reconciliationJournal.entries.some((entry) => entry.event === "replan-required" && entry.automaticRebroadcast === false),
     "ambiguous prepared transaction did not end at a fail-closed replan boundary",
   );
+
+  const staleStage = "stale-finalized-slot-self-test";
+  const stalePrepared = { ...prepared, stage: staleStage };
+  const staleJournal = {
+    entries: [stalePrepared],
+    async append(event, fields) {
+      this.entries.push({ event, operationId: operationIdValue, ...fields });
+    },
+  };
+  let stalePrestateProbeCalls = 0;
+  await assert.rejects(
+    reconcileOneFinalized({
+      connection: {
+        async getSignatureStatuses() { return { value: [null] }; },
+        async getBlockHeight() { return 2; },
+        async getTransaction() { return null; },
+        async getSlot() { return 99; },
+      },
+      journal: staleJournal,
+      operationId: operationIdValue,
+      stage: staleStage,
+      expectedSigners: [payer.publicKey],
+      expectedPacketBytes: wire.length,
+      verifyImmediatelyBeforeResubmit: async () => {
+        throw new Error("automatic rebroadcast callback must remain unreachable");
+      },
+      verifyExpiredPrestate: async () => {
+        stalePrestateProbeCalls += 1;
+        return 100;
+      },
+    }),
+    /finalized expiry slot predates the prepared minimum context/u,
+  );
+  assert.equal(stalePrestateProbeCalls, 0, "stale finalized slot reached the expiry prestate probe");
+  assert.equal(
+    staleJournal.entries.some((entry) => entry.event === "expired-not-landed"),
+    false,
+    "stale finalized slot terminalized the prepared transaction",
+  );
+
+  const freshStage = "fresh-submit-self-test";
+  const freshJournal = {
+    entries: [],
+    async append(event, fields) {
+      const entry = { event, operationId: operationIdValue, ...fields };
+      this.entries.push(entry);
+      return entry;
+    },
+  };
+  let freshSendCalls = 0;
+  let freshVerifierCalls = 0;
+  let freshSendMinimumContextSlot = null;
+  const freshConnection = {
+    async isBlockhashValid() { return { context: { slot: 105 }, value: true }; },
+    async sendRawTransaction(_wire, options) {
+      freshSendCalls += 1;
+      freshSendMinimumContextSlot = options.minContextSlot;
+      return signature;
+    },
+    async getSignatureStatuses() {
+      return { value: [{ err: null, confirmationStatus: "finalized" }] };
+    },
+    async getTransaction() {
+      return {
+        slot: 106,
+        blockTime: null,
+        meta: { err: null, fee: 5_000, computeUnitsConsumed: 0 },
+        transaction: { signatures: [signature], message: transaction.message },
+      };
+    },
+  };
+  const freshLanded = await submitOneFinalized({
+    connection: freshConnection,
+    transaction,
+    latestBlockhash: { blockhash, lastValidBlockHeight: 200 },
+    journal: freshJournal,
+    operationId: operationIdValue,
+    stage: freshStage,
+    expectedSigners: [payer.publicKey],
+    expectedPacketBytes: wire.length,
+    minContextSlot: 100,
+    verifyImmediatelyBeforeSubmit: async (minimumSlot) => {
+      freshVerifierCalls += 1;
+      assert.equal(minimumSlot, 100);
+      return { slot: 105 };
+    },
+  });
+  assert.equal(freshLanded.slot, 106);
+  assert.equal(freshVerifierCalls, 1, "fresh submission did not run exactly one pre-submit verifier");
+  assert.equal(freshSendCalls, 1, "fresh submission did not send exactly once");
+  assert.equal(freshSendMinimumContextSlot, 105, "fresh submission did not propagate the verified observation slot");
+  assert.equal(freshJournal.entries.filter((entry) => entry.event === "finalized").length, 1);
   return Object.freeze({
     ceremonyRpcOwnerLockName: CEREMONY_RPC_OWNER_LOCK_NAME,
     finalizedTransactionPollIntervalMs: FINALIZED_TRANSACTION_POLL_INTERVAL_MS,
@@ -1030,5 +1126,9 @@ export async function selfTestCeremonyRuntime() {
     firstRateLimitCallCount: rateLimitCalls,
     ambiguousPreparedTransactionSendCalls: sendCalls,
     ambiguousPreparedTransactionRequiresReplan: true,
+    staleFinalizedExpirySlotRejected: true,
+    freshSubmitVerifierCalls: freshVerifierCalls,
+    freshSubmitSendCalls: freshSendCalls,
+    freshSubmitMinimumContextSlot: freshSendMinimumContextSlot,
   });
 }
