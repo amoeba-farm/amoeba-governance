@@ -8,6 +8,12 @@ const ALLOWED_KEYS = new Set([
   "AMEBA_DEVNET_HELIUS_STATE_RPC_URL",
 ]);
 
+const RPC_SELECTION_KEYS = new Map([
+  ["state", "AMEBA_DEVNET_STATE_RPC_URL"],
+  ["history", "AMEBA_DEVNET_HISTORY_RPC_URL"],
+  ["helius-state", "AMEBA_DEVNET_HELIUS_STATE_RPC_URL"],
+]);
+
 export async function requireSecureRegularFile(file, label) {
   const resolved = path.resolve(file);
   const status = await lstat(resolved);
@@ -62,12 +68,15 @@ export async function loadDevnetRpcConfiguration() {
     assert(!values.has(key), `RPC environment key ${key} is duplicated`);
     values.set(key, parseValue(raw, index + 1));
   }
-  const stateRpcUrl = values.get("AMEBA_DEVNET_STATE_RPC_URL");
-  assert(stateRpcUrl, "AMEBA_DEVNET_STATE_RPC_URL is absent");
+  const selection = process.env.AMEBA_RPC_SELECTION?.trim() || "state";
+  const selectedKey = RPC_SELECTION_KEYS.get(selection);
+  assert(selectedKey, `unsupported Devnet RPC selection ${selection}`);
+  const stateRpcUrl = values.get(selectedKey);
+  assert(stateRpcUrl, `${selectedKey} is absent`);
   const parsed = new URL(stateRpcUrl);
   assert.equal(parsed.protocol, "https:", "state RPC must use HTTPS");
   assert.equal(parsed.username, "", "state RPC URL must not contain username credentials");
   assert.equal(parsed.password, "", "state RPC URL must not contain password credentials");
   assert.equal(parsed.hash, "", "state RPC URL must not contain a fragment");
-  return { stateRpcUrl, stateRpcOrigin: parsed.origin };
+  return { rpcSelection: selection, stateRpcUrl, stateRpcOrigin: parsed.origin };
 }

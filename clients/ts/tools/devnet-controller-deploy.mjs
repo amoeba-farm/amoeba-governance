@@ -28,6 +28,12 @@ const FAILED_V5_STDERR_SHA256 = "d7a2f4702f16fe0aa91d837713d3d67ad40623535a9220c
 const RECOVERY_BUFFER_RAW_SHA256 = "ff9049899f0f15fdd02f70279a1b23b42bd045b23e69efb822dc08eea44af78e";
 const RECOVERY_BUFFER_PAYLOAD_SHA256 = "120cea59632a3ef55abce092698f658aa4bc10e1995441593050b766c2554bf8";
 const RECOVERY_BUFFER_LAMPORTS = 7_758_764_400;
+const FAILED_V6_OPERATION_ID = "eb52e159fbb35648921fd09ac807fab1f29bce79938a5b79f7d50ec9475222e5";
+const RESUME_V7_BUFFER_RAW_SHA256 = "9fcfb538655b5f7a5224fae24bc730e20dcb69c69dd40bd5df4a03528f498cb0";
+const RESUME_V7_BUFFER_PAYLOAD_SHA256 = "3d15e358e6aaa2372de167832698bcf90b6434aadec84ecd3c99d039da738ab8";
+const RESUME_V7_EXACT_WRITE_COUNT = 32;
+const RESUME_V7_EXACT_WRITTEN_BYTES = 29_312;
+const RESUME_V7_WRITE_MANIFEST_SHA256 = "877887efc25d877c0c55c6012e49da5d02d6ff46a3509f2251fbb831973af254";
 
 function requiredEnvironment(name) {
   const value = process.env[name]?.trim();
@@ -77,7 +83,7 @@ async function solanaAddressFromHandle(handle, expected, label) {
 }
 
 async function inputs() {
-  const { stateRpcOrigin, stateRpcUrl: rpcUrl } = await loadDevnetRpcConfiguration();
+  const { rpcSelection, stateRpcOrigin, stateRpcUrl: rpcUrl } = await loadDevnetRpcConfiguration();
   const runDir = await requireSecureDirectory(requiredEnvironment("AMEBA_CEREMONY_RUN_DIR"), "ceremony run directory");
   const artifactPath = path.resolve(requiredEnvironment("AMEBA_CONTROLLER_ARTIFACT"));
   const programKeypairPath = path.resolve(requiredEnvironment("AMEBA_CONTROLLER_PROGRAM_KEYPAIR"));
@@ -115,6 +121,7 @@ async function inputs() {
     initializerPath: initializer.file,
     programKeypairPath: programKeypair.file,
     rpcUrl,
+    rpcSelection,
     stateRpcOrigin,
     runDir,
   };
@@ -131,15 +138,15 @@ async function assertAbsent(connection, controllerProgram, controllerProgramdata
   return response.context.slot;
 }
 
-async function assertRecoverableV5Buffer(connection, controllerProgram, controllerProgramdata, buffer, artifactLength) {
+async function assertRecoverableBuffer(connection, controllerProgram, controllerProgramdata, buffer, artifactLength, expectedRawSha256, expectedPayloadSha256, label) {
   const response = await connection.getMultipleAccountsInfoAndContext(
     [controllerProgram, controllerProgramdata, buffer],
     { commitment: "finalized" },
   );
-  assert.equal(response.value[0], null, "controller program address became occupied during recovery");
-  assert.equal(response.value[1], null, "controller ProgramData address became occupied during recovery");
+  assert.equal(response.value[0], null, `controller program address became occupied during ${label}`);
+  assert.equal(response.value[1], null, `controller ProgramData address became occupied during ${label}`);
   const account = response.value[2];
-  assert(account, "the exact resumable v5 deploy buffer is absent");
+  assert(account, `the exact ${label} deploy buffer is absent`);
   assert(account.owner.equals(LOADER) && !account.executable, "recovery buffer Loader state changed");
   assert.equal(account.data.length, 37 + artifactLength, "recovery buffer length changed");
   assert.equal(account.data.readUInt32LE(0), 1, "recovery buffer Loader tag changed");
@@ -148,8 +155,8 @@ async function assertRecoverableV5Buffer(connection, controllerProgram, controll
   assert.equal(account.lamports, RECOVERY_BUFFER_LAMPORTS, "recovery buffer lamports changed");
   const rawSha256 = sha256(account.data);
   const payloadSha256 = sha256(account.data.subarray(37));
-  assert.equal(rawSha256, RECOVERY_BUFFER_RAW_SHA256, "recovery buffer raw bytes changed");
-  assert.equal(payloadSha256, RECOVERY_BUFFER_PAYLOAD_SHA256, "recovery buffer payload bytes changed");
+  assert.equal(rawSha256, expectedRawSha256, `${label} buffer raw bytes changed`);
+  assert.equal(payloadSha256, expectedPayloadSha256, `${label} buffer payload bytes changed`);
   return {
     observationSlot: response.context.slot,
     bufferLamports: account.lamports,
@@ -159,6 +166,20 @@ async function assertRecoverableV5Buffer(connection, controllerProgram, controll
     bufferPayloadSha256: payloadSha256,
     bufferAuthority: EXPECTED_INITIALIZER.toBase58(),
   };
+}
+
+function assertRecoverableV5Buffer(connection, controllerProgram, controllerProgramdata, buffer, artifactLength) {
+  return assertRecoverableBuffer(
+    connection, controllerProgram, controllerProgramdata, buffer, artifactLength,
+    RECOVERY_BUFFER_RAW_SHA256, RECOVERY_BUFFER_PAYLOAD_SHA256, "v5 recovery",
+  );
+}
+
+function assertRecoverableV6Buffer(connection, controllerProgram, controllerProgramdata, buffer, artifactLength) {
+  return assertRecoverableBuffer(
+    connection, controllerProgram, controllerProgramdata, buffer, artifactLength,
+    RESUME_V7_BUFFER_RAW_SHA256, RESUME_V7_BUFFER_PAYLOAD_SHA256, "v6 resume",
+  );
 }
 
 function operationId(material) {
@@ -204,6 +225,12 @@ const RECOVERY_PLAN_KEYS = [
   "recoveryBufferPayloadBytes", "recoveryBufferPayloadSha256", "recoveryBufferRawBytes",
   "recoveryBufferRawSha256", "recoveryFromOperationId", "recoveryPlanV5Sha256",
   "recoveryStderrSha256", "recoveryStdoutSha256", "schema",
+].sort();
+
+const RESUME_V7_PLAN_KEYS = [
+  ...RECOVERY_PLAN_KEYS,
+  "recoveryPlanV6Sha256", "resumeExactWriteCount", "resumeExactWrittenBytes",
+  "resumeWriteManifestSha256", "rpcSelection",
 ].sort();
 
 function assertExactKeys(value, keys, label) {
@@ -294,6 +321,64 @@ async function planRecoveryDeploy() {
   const plan = { ...material, operationId: operationId(material) };
   assertExactKeys(plan, RECOVERY_PLAN_KEYS, "controller deploy recovery plan");
   await writeExclusiveJson(path.join(value.runDir, "controller-deploy-recovery-plan-v6.json"), plan);
+  process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
+}
+
+async function planResumeDeployV7() {
+  const value = await inputs();
+  assert.equal(value.rpcSelection, "helius-state", "v7 resume requires the dedicated Helius Devnet state RPC");
+  const recovery = await assertRecoverableV6Buffer(
+    value.connection,
+    value.controllerProgram,
+    value.controllerProgramdata,
+    value.buffer,
+    value.artifact.length,
+  );
+  const priorPlanBytes = await readFile(path.join(value.runDir, "controller-deploy-recovery-plan-v6.json"));
+  const priorPlan = JSON.parse(priorPlanBytes.toString("utf8"));
+  assertExactKeys(priorPlan, RECOVERY_PLAN_KEYS, "failed v6 deploy recovery plan");
+  const { operationId: priorOperationId, ...priorMaterial } = priorPlan;
+  assert.equal(operationId(priorMaterial), priorOperationId, "failed v6 deploy recovery plan operation ID changed");
+  assert.equal(priorOperationId, FAILED_V6_OPERATION_ID, "unexpected failed v6 operation");
+  const funding = await fundingSnapshot(value.connection, value.artifact.length, true);
+  const material = {
+    schema: "ameba-governance-devnet-controller-deploy-resume-plan-v7",
+    genesisHash: EXPECTED_GENESIS,
+    observedSlot: recovery.observationSlot,
+    planValidUntilSlot: recovery.observationSlot + 2_000,
+    controllerProgram: value.controllerProgram.toBase58(),
+    controllerProgramdata: value.controllerProgramdata.toBase58(),
+    buffer: value.buffer.toBase58(),
+    artifactBytes: value.artifact.length,
+    artifactSha256: sha256(value.artifact),
+    exactProgramdataCapacity: value.artifact.length,
+    feePayer: EXPECTED_FEE_PAYER.toBase58(),
+    initialUpgradeAuthority: EXPECTED_INITIALIZER.toBase58(),
+    ...funding,
+    bufferAlreadyFunded: true,
+    recoveryBufferAuthority: recovery.bufferAuthority,
+    recoveryBufferLamports: recovery.bufferLamports,
+    recoveryBufferRawBytes: recovery.bufferRawBytes,
+    recoveryBufferRawSha256: recovery.bufferRawSha256,
+    recoveryBufferPayloadBytes: recovery.bufferPayloadBytes,
+    recoveryBufferPayloadSha256: recovery.bufferPayloadSha256,
+    recoveryFromOperationId: FAILED_V6_OPERATION_ID,
+    recoveryPlanV5Sha256: priorPlan.recoveryPlanV5Sha256,
+    recoveryPlanV6Sha256: sha256(priorPlanBytes),
+    recoveryStdoutSha256: FAILED_V5_STDOUT_SHA256,
+    recoveryStderrSha256: FAILED_V5_STDERR_SHA256,
+    resumeExactWriteCount: RESUME_V7_EXACT_WRITE_COUNT,
+    resumeExactWrittenBytes: RESUME_V7_EXACT_WRITTEN_BYTES,
+    resumeWriteManifestSha256: RESUME_V7_WRITE_MANIFEST_SHA256,
+    loader: LOADER.toBase58(),
+    commitment: "finalized",
+    rpcSelection: value.rpcSelection,
+    rpcProviderOriginSha256: rpcProviderOriginSha256(value.stateRpcOrigin),
+    mainnetAllowed: false,
+  };
+  const plan = { ...material, operationId: operationId(material) };
+  assertExactKeys(plan, RESUME_V7_PLAN_KEYS, "controller deploy v7 resume plan");
+  await writeExclusiveJson(path.join(value.runDir, "controller-deploy-resume-plan-v7.json"), plan);
   process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
 }
 
@@ -695,9 +780,185 @@ async function executeRecoveryDeploy() {
   process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
 }
 
+function redactTransportOutput(value) {
+  return value.replace(/https?:\/\/[^\s"'`]+/gu, "[REDACTED_URL]");
+}
+
+async function recordFailedCommand(runDir, file, operationIdValue, result) {
+  await writeExclusiveJson(path.join(runDir, file), {
+    schema: "ameba-governance-devnet-command-failure-v1",
+    operationId: operationIdValue,
+    exitStatus: result.status,
+    stdoutSha256: sha256(Buffer.from(result.stdout ?? "", "utf8")),
+    stderrSha256: sha256(Buffer.from(result.stderr ?? "", "utf8")),
+    stdoutRedacted: redactTransportOutput(result.stdout ?? ""),
+    stderrRedacted: redactTransportOutput(result.stderr ?? ""),
+  });
+}
+
+async function executeResumeDeployV7() {
+  const value = await inputs();
+  assert.equal(value.rpcSelection, "helius-state", "v7 resume requires the dedicated Helius Devnet state RPC");
+  const planPath = path.join(value.runDir, "controller-deploy-resume-plan-v7.json");
+  const plan = JSON.parse(await readFile(planPath, "utf8"));
+  assertExactKeys(plan, RESUME_V7_PLAN_KEYS, "controller deploy v7 resume plan");
+  const { operationId: storedOperationId, ...material } = plan;
+  assert.equal(operationId(material), storedOperationId, "deploy v7 resume plan operation ID changed");
+  assert.equal(requiredEnvironment("AMEBA_CEREMONY_ARM"), storedOperationId, "deploy v7 resume is not explicitly armed");
+  assert.equal(plan.schema, "ameba-governance-devnet-controller-deploy-resume-plan-v7");
+  assert.equal(plan.genesisHash, EXPECTED_GENESIS);
+  assert.equal(plan.controllerProgram, value.controllerProgram.toBase58());
+  assert.equal(plan.controllerProgramdata, value.controllerProgramdata.toBase58());
+  assert.equal(plan.buffer, value.buffer.toBase58());
+  assert.equal(plan.artifactSha256, sha256(value.artifact));
+  assert.equal(plan.artifactBytes, value.artifact.length);
+  assert.equal(plan.exactProgramdataCapacity, value.artifact.length);
+  assert.equal(plan.feePayer, EXPECTED_FEE_PAYER.toBase58());
+  assert.equal(plan.initialUpgradeAuthority, EXPECTED_INITIALIZER.toBase58());
+  assert.equal(plan.loader, LOADER.toBase58());
+  assert.equal(plan.commitment, "finalized");
+  assert.equal(plan.rpcSelection, value.rpcSelection);
+  assert.equal(plan.rpcProviderOriginSha256, rpcProviderOriginSha256(value.stateRpcOrigin));
+  assert.equal(plan.mainnetAllowed, false);
+  assert.equal(plan.bufferAlreadyFunded, true);
+  assert.equal(plan.recoveryFromOperationId, FAILED_V6_OPERATION_ID);
+  assert.equal(plan.recoveryStdoutSha256, FAILED_V5_STDOUT_SHA256);
+  assert.equal(plan.recoveryStderrSha256, FAILED_V5_STDERR_SHA256);
+  assert.equal(plan.recoveryBufferRawSha256, RESUME_V7_BUFFER_RAW_SHA256);
+  assert.equal(plan.recoveryBufferPayloadSha256, RESUME_V7_BUFFER_PAYLOAD_SHA256);
+  assert.equal(plan.recoveryBufferLamports, RECOVERY_BUFFER_LAMPORTS);
+  assert.equal(plan.resumeExactWriteCount, RESUME_V7_EXACT_WRITE_COUNT);
+  assert.equal(plan.resumeExactWrittenBytes, RESUME_V7_EXACT_WRITTEN_BYTES);
+  assert.equal(plan.resumeWriteManifestSha256, RESUME_V7_WRITE_MANIFEST_SHA256);
+  const priorPlanBytes = await readFile(path.join(value.runDir, "controller-deploy-recovery-plan-v6.json"));
+  assert.equal(plan.recoveryPlanV6Sha256, sha256(priorPlanBytes), "failed v6 plan evidence changed");
+  assert(Number.isSafeInteger(plan.observedSlot) && Number.isSafeInteger(plan.planValidUntilSlot) && plan.planValidUntilSlot === plan.observedSlot + 2_000);
+  const currentRecovery = await assertRecoverableV6Buffer(
+    value.connection,
+    value.controllerProgram,
+    value.controllerProgramdata,
+    value.buffer,
+    value.artifact.length,
+  );
+  assert(currentRecovery.observationSlot <= plan.planValidUntilSlot, "controller deploy v7 resume plan expired");
+  assert.equal(plan.recoveryBufferAuthority, currentRecovery.bufferAuthority);
+  assert.equal(plan.recoveryBufferLamports, currentRecovery.bufferLamports);
+  assert.equal(plan.recoveryBufferRawBytes, currentRecovery.bufferRawBytes);
+  assert.equal(plan.recoveryBufferRawSha256, currentRecovery.bufferRawSha256);
+  assert.equal(plan.recoveryBufferPayloadBytes, currentRecovery.bufferPayloadBytes);
+  assert.equal(plan.recoveryBufferPayloadSha256, currentRecovery.bufferPayloadSha256);
+  const currentFunding = await fundingSnapshot(value.connection, value.artifact.length, true);
+  for (const [field, expected] of Object.entries(currentFunding)) {
+    assert.equal(plan[field], expected, `controller deploy v7 funding field ${field} changed`);
+  }
+
+  const handles = [];
+  let result;
+  try {
+    const configHandle = await anonymousVerifiedFile(
+      value.runDir,
+      "controller-deploy-solana-config-v7.yml",
+      renderSolanaConfig(value.rpcUrl, "/proc/self/fd/8"),
+    );
+    handles.push(configHandle);
+    const artifactHandle = await anonymousVerifiedFile(
+      value.runDir,
+      "controller-deploy-artifact-v7.so",
+      value.artifact,
+    );
+    handles.push(artifactHandle);
+    const programHandle = await openSecureHandle(value.programKeypairPath, "controller program keypair");
+    const bufferHandle = await openSecureHandle(value.bufferKeypairPath, "controller deploy buffer keypair");
+    const initializerHandle = await openSecureHandle(value.initializerPath, "controller initializer keypair");
+    const payerHandle = await openSecureHandle(value.feePayerPath, "fee payer keypair");
+    handles.push(programHandle, bufferHandle, initializerHandle, payerHandle);
+    await solanaAddressFromHandle(programHandle, EXPECTED_CONTROLLER_PROGRAM, "controller program");
+    await solanaAddressFromHandle(bufferHandle, EXPECTED_DEPLOY_BUFFER, "controller deploy buffer");
+    await solanaAddressFromHandle(initializerHandle, EXPECTED_INITIALIZER, "controller initializer");
+    await solanaAddressFromHandle(payerHandle, EXPECTED_FEE_PAYER, "fee payer");
+    assertCliDevnet(configHandle);
+
+    const immediateRecovery = await assertRecoverableV6Buffer(
+      value.connection,
+      value.controllerProgram,
+      value.controllerProgramdata,
+      value.buffer,
+      value.artifact.length,
+    );
+    assert(immediateRecovery.observationSlot <= plan.planValidUntilSlot, "controller deploy v7 resume plan expired immediately before submission");
+    assert.equal(immediateRecovery.bufferRawSha256, plan.recoveryBufferRawSha256, "v7 resume buffer changed immediately before submission");
+    const immediateFunding = await fundingSnapshot(value.connection, value.artifact.length, true);
+    for (const [field, expected] of Object.entries(immediateFunding)) {
+      assert.equal(plan[field], expected, `controller deploy v7 funding field ${field} changed immediately before submission`);
+    }
+
+    result = spawnWithHandles([
+      "program", "deploy",
+      "--config", "/proc/self/fd/3",
+      "--program-id", "/proc/self/fd/5",
+      "--buffer", "/proc/self/fd/6",
+      "--upgrade-authority", "/proc/self/fd/7",
+      "--fee-payer", "/proc/self/fd/8",
+      "--max-len", String(value.artifact.length),
+      "--max-sign-attempts", "1",
+      "--commitment", "finalized",
+      "--use-rpc",
+      "--output", "json",
+      "/proc/self/fd/4",
+    ], handles);
+  } finally {
+    await Promise.all(handles.map((handle) => handle.close()));
+  }
+  if (result.status !== 0) {
+    await recordFailedCommand(value.runDir, "controller-deploy-resume-v7-failure.json", storedOperationId, result);
+    commandFailure("controller deploy v7 resume", result);
+  }
+  const deployment = JSON.parse(result.stdout);
+  assertExactKeys(deployment, ["programId", "signature"], "Solana CLI v7 deploy output");
+  assert.equal(deployment.programId, value.controllerProgram.toBase58(), "Solana CLI returned a different program ID");
+  const transactionSignature = assertSolanaSignature(deployment.signature);
+  const transaction = await verifyFinalizedTransaction(value.connection, transactionSignature);
+
+  const response = await value.connection.getMultipleAccountsInfoAndContext(
+    [value.controllerProgram, value.controllerProgramdata, value.buffer],
+    { commitment: "finalized" },
+  );
+  const state = parseLoaderState({
+    program: response.value[0],
+    programdata: response.value[1],
+  }, value.controllerProgramdata, EXPECTED_INITIALIZER, value.artifact);
+  assert.equal(response.value[2], null, "controller deploy v7 buffer was not closed after deployment");
+  const receipt = {
+    schema: "ameba-governance-devnet-controller-deploy-receipt-v4",
+    operationId: storedOperationId,
+    recoveryFromOperationId: FAILED_V6_OPERATION_ID,
+    recoveryPlanV5Sha256: plan.recoveryPlanV5Sha256,
+    recoveryPlanV6Sha256: plan.recoveryPlanV6Sha256,
+    resumeExactWriteCount: plan.resumeExactWriteCount,
+    resumeExactWrittenBytes: plan.resumeExactWrittenBytes,
+    resumeWriteManifestSha256: plan.resumeWriteManifestSha256,
+    genesisHash: EXPECTED_GENESIS,
+    finalizedObservationSlot: response.context.slot,
+    controllerProgram: value.controllerProgram.toBase58(),
+    controllerProgramdata: value.controllerProgramdata.toBase58(),
+    feePayer: EXPECTED_FEE_PAYER.toBase58(),
+    initialUpgradeAuthority: EXPECTED_INITIALIZER.toBase58(),
+    buffer: value.buffer.toBase58(),
+    rpcSelection: value.rpcSelection,
+    rpcProviderOriginSha256: plan.rpcProviderOriginSha256,
+    transactionSignature,
+    ...transaction,
+    ...state,
+  };
+  await writeExclusiveJson(path.join(value.runDir, "controller-deploy-receipt.json"), receipt);
+  process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
+}
+
 const mode = process.argv[2];
 if (mode === "plan") await planDeploy();
 else if (mode === "execute") await executeDeploy();
 else if (mode === "plan-recovery") await planRecoveryDeploy();
 else if (mode === "execute-recovery") await executeRecoveryDeploy();
-else throw new Error("expected plan, execute, plan-recovery, or execute-recovery mode");
+else if (mode === "plan-resume-v7") await planResumeDeployV7();
+else if (mode === "execute-resume-v7") await executeResumeDeployV7();
+else throw new Error("expected plan, execute, plan-recovery, execute-recovery, plan-resume-v7, or execute-resume-v7 mode");
