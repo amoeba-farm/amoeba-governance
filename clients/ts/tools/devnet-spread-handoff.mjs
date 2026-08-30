@@ -255,7 +255,7 @@ const BRIDGE_DEPLOYMENT_PLAN_FILE = "spread-reviewed-bridge-deployment-plan-v1.j
 const BRIDGE_UPGRADE_RECEIPT_FILE = "spread-reviewed-bridge-upgrade-receipt-v1.json";
 const BRIDGE_UPGRADE_RECEIPT_SCHEMA = "ameba-spread-reviewed-governance-bridge-upgrade-receipt-v1";
 const BRIDGE_UPGRADE_RECEIPT_DOMAIN = "AMOEBA_SPREAD_REVIEWED_BRIDGE_UPGRADE_RECEIPT_V1";
-const EXPECTED_COMPATIBILITY_ADAPTER_SHA256 = "a632705ebdb92d4474dc277bcde57fa10791e4c2e20d6666986dc4490ef5c580";
+const EXPECTED_COMPATIBILITY_ADAPTER_SHA256 = "29ec9aad15fbb32bcad25a7e4bd50508fe93c2c9027514adcc40e77f83811033";
 const FIRST_POST_SUMMARY_SCHEMA = "ameba-spread-governance-bridge-ceremony-validation-summary-v1";
 const FIRST_POST_SUMMARY_DOMAIN = "ameba-spread-governance-bridge-ceremony-validation-summary-v1\0";
 const UPGRADE_RECEIPT_DOMAIN = "ameba-spread-programdata-upgrade-receipt-v2\0";
@@ -6746,7 +6746,7 @@ async function selfTest() {
     assertCanonicalBasename("spread-bridge-poststate-repeat-attempt-0001-census.json", POSTSTATE_REPEAT_CENSUS_PATTERN, "repeat self-test census")[1],
     "0001",
   );
-  assert.equal(EXPECTED_COMPATIBILITY_ADAPTER_SHA256, "a632705ebdb92d4474dc277bcde57fa10791e4c2e20d6666986dc4490ef5c580");
+  assert.equal(EXPECTED_COMPATIBILITY_ADAPTER_SHA256, "29ec9aad15fbb32bcad25a7e4bd50508fe93c2c9027514adcc40e77f83811033");
   const mutatorProbe = frozenGateProbeInstruction(
     { byte: 17, default_class: "RecognizedMutating" },
     42n,
