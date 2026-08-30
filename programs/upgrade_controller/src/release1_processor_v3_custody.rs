@@ -1950,11 +1950,16 @@ pub fn process_activate_rollback_v2(
         return Err(GovernanceError::InvalidProposalCommitment.into());
     }
     let slot = Clock::get()?.slot;
+    let rollback_ready_slot = primary
+        .upgrade_executed_slot
+        .checked_add(config.rollback_delay_slots)
+        .ok_or(GovernanceError::ArithmeticOverflow)?;
     if slot == 0
         || slot < policy.activation_slot
         || slot < rollback.not_before_slot
         || slot >= rollback.expiry_slot
-        || slot < primary.upgrade_executed_slot
+        || primary.upgrade_executed_slot == 0
+        || slot < rollback_ready_slot
     {
         return Err(GovernanceError::InvalidProposalTiming.into());
     }
@@ -1997,6 +2002,7 @@ pub fn process_activate_rollback_v2(
         ProgramDataFailureObservationV2::LEN,
     )?;
     validate_programdata_failure_observation_digest_v2(&failure)?;
+    validate_rollback_activation_mismatch_class(failure.mismatch_class)?;
     if derive_programdata_failure_observation_pda(program_id, primary_info.key, gate.epoch)
         != (*failure_info.key, failure.bump)
         || failure.primary_proposal != *primary_info.key
@@ -3521,7 +3527,7 @@ fn validate_failure_witness(
     runtime: &RuntimeProgramDataGraphV2,
     config: &ControllerConfigV1,
 ) -> Result<([u8; 32], [u8; 32]), ProgramError> {
-    validate_rollback_authorizing_mismatch_class(instruction.mismatch_class)?;
+    validate_recordable_programdata_mismatch_class(instruction.mismatch_class)?;
     let proof_present = instruction.proof.proof_len != 0
         || instruction.proof.nodes.iter().any(|node| *node != [0; 32]);
     match instruction.mismatch_class {
@@ -3754,7 +3760,7 @@ fn validate_failure_witness(
     }
 }
 
-fn validate_rollback_authorizing_mismatch_class(
+fn validate_recordable_programdata_mismatch_class(
     mismatch_class: ProgramDataMismatchClassV2,
 ) -> ProgramResult {
     if matches!(
@@ -3763,6 +3769,15 @@ fn validate_rollback_authorizing_mismatch_class(
             | ProgramDataMismatchClassV2::ObservationStale
             | ProgramDataMismatchClassV2::ObservationScheme
     ) {
+        return Err(GovernanceError::InvalidRelease1Account.into());
+    }
+    Ok(())
+}
+
+fn validate_rollback_activation_mismatch_class(
+    mismatch_class: ProgramDataMismatchClassV2,
+) -> ProgramResult {
+    if !is_loader_executable_rollback_failure(mismatch_class) {
         return Err(GovernanceError::InvalidRelease1Account.into());
     }
     Ok(())
@@ -4150,13 +4165,13 @@ mod tests {
     }
 
     #[test]
-    fn unprovable_or_restart_only_failure_classes_cannot_authorize_rollback() {
+    fn unprovable_or_restart_only_failure_classes_cannot_be_recorded() {
         for mismatch_class in [
             ProgramDataMismatchClassV2::ArtifactLength,
             ProgramDataMismatchClassV2::ObservationStale,
             ProgramDataMismatchClassV2::ObservationScheme,
         ] {
-            assert!(validate_rollback_authorizing_mismatch_class(mismatch_class).is_err());
+            assert!(validate_recordable_programdata_mismatch_class(mismatch_class).is_err());
         }
         for mismatch_class in [
             ProgramDataMismatchClassV2::ProgramLinkage,
@@ -4166,12 +4181,12 @@ mod tests {
             ProgramDataMismatchClassV2::ArtifactPayload,
             ProgramDataMismatchClassV2::ZeroTail,
         ] {
-            validate_rollback_authorizing_mismatch_class(mismatch_class).unwrap();
+            validate_recordable_programdata_mismatch_class(mismatch_class).unwrap();
         }
     }
 
     #[test]
-    fn rollback_execution_accepts_only_live_byte_mismatch_classes() {
+    fn rollback_activation_and_execution_accept_only_live_byte_mismatch_classes() {
         for mismatch_class in [
             ProgramDataMismatchClassV2::ProgramLinkage,
             ProgramDataMismatchClassV2::ProgramOwner,
@@ -4186,12 +4201,14 @@ mod tests {
             ProgramDataMismatchClassV2::ObservationStale,
             ProgramDataMismatchClassV2::ObservationScheme,
         ] {
+            assert!(validate_rollback_activation_mismatch_class(mismatch_class).is_err());
             assert!(!is_loader_executable_rollback_failure(mismatch_class));
         }
         for mismatch_class in [
             ProgramDataMismatchClassV2::ArtifactPayload,
             ProgramDataMismatchClassV2::ZeroTail,
         ] {
+            validate_rollback_activation_mismatch_class(mismatch_class).unwrap();
             assert!(is_loader_executable_rollback_failure(mismatch_class));
         }
     }

@@ -40,6 +40,7 @@ use upgrade_controller::{
         MAX_ARTIFACT_PROOF_DEPTH_V1,
     },
     council::compute_council_set_hash,
+    error::GovernanceError,
     pda::{
         derive_authority_pda, derive_bootstrap_activation_pda,
         derive_bootstrap_activation_receipt_pda, derive_buffer_check_pda,
@@ -4226,6 +4227,46 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
             },
         )
         .expect("activate exact rollback instruction");
+        let rollback_ready_slot = activation_primary
+            .upgrade_executed_slot
+            .checked_add(activation_config.rollback_delay_slots)
+            .expect("rollback readiness slot");
+        let early_activation_slot = current_slot(&mut context).await;
+        assert!(
+            early_activation_slot < rollback_ready_slot,
+            "rollback delay negative proof must execute before slot {rollback_ready_slot}, observed {early_activation_slot}"
+        );
+        let activation_writable_accounts = [harness.gate, rollback_key];
+        let before = snapshot_accounts(&mut context, &activation_writable_accounts).await;
+        let [activation_limit, activation_price] = envelope_prefix();
+        let early_failure = submit_expected_failure_with_evidence(
+            &mut context,
+            &[activation_limit, activation_price, activate.clone()],
+            &[],
+        )
+        .await;
+        let timing_code = GovernanceError::InvalidProposalTiming as u32;
+        assert!(
+            early_failure
+                .error
+                .contains(&format!("Custom({timing_code})"))
+                || early_failure
+                    .error
+                    .contains(&format!("custom program error: 0x{timing_code:x}")),
+            "early rollback activation must fail with InvalidProposalTiming, got {}",
+            early_failure.error
+        );
+        assert!(early_failure.observed_slot < rollback_ready_slot);
+        assert_accounts_unchanged(
+            &mut context,
+            &activation_writable_accounts,
+            &before,
+            "early rollback activation rejection",
+        )
+        .await;
+        advance_to_slot(&mut context, rollback_ready_slot)
+            .await
+            .expect("rollback activation must wait the full post-upgrade delay");
         let [activation_limit, activation_price] = envelope_prefix();
         submit(
             &mut context,
