@@ -4,13 +4,13 @@ Status: **COMPLETE FOR THE RELEASE 1 CANDIDATE MATRIX; 16 KiB REMAINS THE
 ONLY ADMITTED SIZE**
 
 Evidence source commit:
-`4167b191f9d816f07a26abf428c2d8a49e2a60b8`
+`9c1a45236279f37bfa934b3a70ededb77136e3e2`
 
 Evidence JSON:
 `docs/governance/evidence/programdata-observation-chunk-controller-sbf-matrix-v1.json`
 
 Evidence JSON SHA-256:
-`48141ca03d65fc289e509f6effc654be63844c0dd6967932f57040b3d41b0278`
+`f96450435520e27eeefc9116bda612f66e855106a42e22b7e42726a30d52b149`
 
 This report closes the missing actual-SBF measurements for the 32, 64, and
 128 KiB ProgramData observation candidates. It does not change the Release 1
@@ -57,15 +57,15 @@ two canonical ComputeBudget instructions.
 | Engine | Chunk | Controller CU | Full transaction CU | Margin to 200,000 | Current gate |
 |---|---:|---:|---:|---:|---|
 | SBPF v0 | 16 KiB | 158,583 | 158,883 | +41,117 (20.56%) | pass; selected |
-| SBPF v0 | 32 KiB | 251,578 | 251,878 | -51,878 | reject |
-| SBPF v0 | 64 KiB | 428,615 | 428,915 | -228,915 | reject |
-| SBPF v0 | 128 KiB | 790,376 | 790,676 | -590,676 | reject |
-| SBPF v2 | 16 KiB | 193,381 | 193,681 | +6,319 (3.16%) | pass; selected |
+| SBPF v0 | 32 KiB | 250,078 | 250,378 | -50,378 | reject |
+| SBPF v0 | 64 KiB | 430,115 | 430,415 | -230,415 | reject |
+| SBPF v0 | 128 KiB | 791,876 | 792,176 | -592,176 | reject |
+| SBPF v2 | 16 KiB | 191,881 | 192,181 | +7,819 (3.91%) | pass; selected |
 | SBPF v2 | 32 KiB | 317,621 | 317,921 | -117,921 | reject |
-| SBPF v2 | 64 KiB | 563,187 | 563,487 | -363,487 | reject |
+| SBPF v2 | 64 KiB | 561,687 | 561,987 | -361,987 | reject |
 | SBPF v2 | 128 KiB | 1,051,513 | 1,051,813 | -851,813 | reject |
 
-The v2 16-KiB result has only 6,319 units, or 3.16%, of headroom below the
+The v2 16-KiB result has only 7,819 units, or 3.91%, of headroom below the
 existing 200,000-unit gate. This report therefore does **not** characterize
 that margin as generous or broadly conservative. It is sufficient for the
 exact measured controller ELF and pinned runtime, and no adjustment to the
@@ -83,8 +83,8 @@ policy decision; this benchmark does not do so.
 
 | Engine | Controller ELF | SHA-256 | Linked stack metric | Margin | Diagnostics |
 |---|---:|---|---:|---:|---|
-| SBPF v0 | 1,114,800 B | `7e6dd502407d87470b3c4176d075e6f13f4a8120b9de18edf0346ad88c767b7b` | maximum direct `r10` offset 4,096 B | 0 B | 16 dependency-only frame diagnostics; all exact symbols absent from linked ELF; no caller-frame/stack-offset diagnostic |
-| SBPF v2 | 1,115,352 B | `5e9b2d7123a140725fafb7b844a9c41fcbdcd6d375a3dd016b03f079f9dffd16` | maximum dynamic frame 3,904 B | 192 B | no frame or caller-overlap diagnostic |
+| SBPF v0 | 1,114,944 B | `22780650d3dd57ff4fbdae0d93d140e609a516d44379a6817fba09fb2e0f3ab3` | maximum direct `r10` offset 4,096 B | 0 B | 16 dependency-only frame diagnostics; all exact symbols absent from linked ELF; no caller-frame/stack-offset diagnostic |
+| SBPF v2 | 1,115,504 B | `a466ed24f8b2990244722288cf465ded84dd5ff7f5e04944f15e52aaa43c82b2` | maximum dynamic frame 3,904 B | 192 B | no frame or caller-overlap diagnostic |
 
 The v0 linked ELF reaches, but does not exceed, the 4,096-byte direct-offset
 limit. It has no inferred spare direct-offset margin. Both engines completed
@@ -110,7 +110,7 @@ overlap remains a hard blocker.
 The clean evidence run used:
 
 ```bash
-AMOEBA_BENCH_BASE_COMMIT=4167b191f9d816f07a26abf428c2d8a49e2a60b8 \
+AMOEBA_BENCH_BASE_COMMIT=9c1a45236279f37bfa934b3a70ededb77136e3e2 \
 AMOEBA_BENCH_EVIDENCE_OUT="$PWD/docs/governance/evidence/programdata-observation-chunk-controller-sbf-matrix-v1.json" \
 bash benchmarks/programdata_observation_chunk_controller_sbf/run-benchmark.sh
 ```

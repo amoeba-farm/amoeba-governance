@@ -9,8 +9,8 @@
                 "linked_elf_safe": true
             },
             "elf": {
-                "bytes": 1114800,
-                "sha256": "7e6dd502407d87470b3c4176d075e6f13f4a8120b9de18edf0346ad88c767b7b"
+                "bytes": 1114944,
+                "sha256": "22780650d3dd57ff4fbdae0d93d140e609a516d44379a6817fba09fb2e0f3ab3"
             },
             "measurements": [
                 {
@@ -24,8 +24,8 @@
                     "compute_margin": 1241117,
                     "compute_usage_basis_points": 1135,
                     "conservative_compute_gate": "pass",
-                    "controller_elf_length": 1114800,
-                    "controller_elf_sha256": "7e6dd502407d87470b3c4176d075e6f13f4a8120b9de18edf0346ad88c767b7b",
+                    "controller_elf_length": 1114944,
+                    "controller_elf_sha256": "22780650d3dd57ff4fbdae0d93d140e609a516d44379a6817fba09fb2e0f3ab3",
                     "controller_units_consumed": 158583,
                     "controller_units_samples": [
                         158583,
@@ -58,33 +58,33 @@
                     "chunk_size": 32768,
                     "compute_budget_envelope_units": 300,
                     "compute_limit": 1400000,
-                    "compute_margin": 1148122,
-                    "compute_usage_basis_points": 1799,
+                    "compute_margin": 1149622,
+                    "compute_usage_basis_points": 1788,
                     "conservative_compute_gate": "reject",
-                    "controller_elf_length": 1114800,
-                    "controller_elf_sha256": "7e6dd502407d87470b3c4176d075e6f13f4a8120b9de18edf0346ad88c767b7b",
-                    "controller_units_consumed": 251578,
+                    "controller_elf_length": 1114944,
+                    "controller_elf_sha256": "22780650d3dd57ff4fbdae0d93d140e609a516d44379a6817fba09fb2e0f3ab3",
+                    "controller_units_consumed": 250078,
                     "controller_units_samples": [
-                        251578,
-                        251578
+                        250078,
+                        250078
                     ],
-                    "default_budget_margin_units": -51878,
+                    "default_budget_margin_units": -50378,
                     "determinism_samples": 2,
                     "execution": "actual_controller_sbf_programtest",
                     "full_transaction_units_samples": [
-                        251878,
-                        251878
+                        250378,
+                        250378
                     ],
                     "merge_depth": 8,
                     "raw_programdata_length": 10485760,
                     "runtime_default_instruction_compute_limit": 200000,
-                    "runtime_default_margin_basis_points": -2594,
+                    "runtime_default_margin_basis_points": -2519,
                     "runtime_stack_fault": false,
                     "sbpf_target": "v0",
                     "schema": "ameba-programdata-observation-chunk-matrix-measurement-v1",
                     "selected_release1_size": false,
                     "test_only_feature": true,
-                    "units_consumed": 251878,
+                    "units_consumed": 250378,
                     "within_conservative_ceiling": false
                 },
                 {
@@ -95,33 +95,33 @@
                     "chunk_size": 65536,
                     "compute_budget_envelope_units": 300,
                     "compute_limit": 1400000,
-                    "compute_margin": 971085,
-                    "compute_usage_basis_points": 3064,
+                    "compute_margin": 969585,
+                    "compute_usage_basis_points": 3074,
                     "conservative_compute_gate": "reject",
-                    "controller_elf_length": 1114800,
-                    "controller_elf_sha256": "7e6dd502407d87470b3c4176d075e6f13f4a8120b9de18edf0346ad88c767b7b",
-                    "controller_units_consumed": 428615,
+                    "controller_elf_length": 1114944,
+                    "controller_elf_sha256": "22780650d3dd57ff4fbdae0d93d140e609a516d44379a6817fba09fb2e0f3ab3",
+                    "controller_units_consumed": 430115,
                     "controller_units_samples": [
-                        428615,
-                        428615
+                        430115,
+                        430115
                     ],
-                    "default_budget_margin_units": -228915,
+                    "default_budget_margin_units": -230415,
                     "determinism_samples": 2,
                     "execution": "actual_controller_sbf_programtest",
                     "full_transaction_units_samples": [
-                        428915,
-                        428915
+                        430415,
+                        430415
                     ],
                     "merge_depth": 7,
                     "raw_programdata_length": 10485760,
                     "runtime_default_instruction_compute_limit": 200000,
-                    "runtime_default_margin_basis_points": -11446,
+                    "runtime_default_margin_basis_points": -11521,
                     "runtime_stack_fault": false,
                     "sbpf_target": "v0",
                     "schema": "ameba-programdata-observation-chunk-matrix-measurement-v1",
                     "selected_release1_size": false,
                     "test_only_feature": true,
-                    "units_consumed": 428915,
+                    "units_consumed": 430415,
                     "within_conservative_ceiling": false
                 },
                 {
@@ -132,33 +132,33 @@
                     "chunk_size": 131072,
                     "compute_budget_envelope_units": 300,
                     "compute_limit": 1400000,
-                    "compute_margin": 609324,
-                    "compute_usage_basis_points": 5648,
+                    "compute_margin": 607824,
+                    "compute_usage_basis_points": 5658,
                     "conservative_compute_gate": "reject",
-                    "controller_elf_length": 1114800,
-                    "controller_elf_sha256": "7e6dd502407d87470b3c4176d075e6f13f4a8120b9de18edf0346ad88c767b7b",
-                    "controller_units_consumed": 790376,
+                    "controller_elf_length": 1114944,
+                    "controller_elf_sha256": "22780650d3dd57ff4fbdae0d93d140e609a516d44379a6817fba09fb2e0f3ab3",
+                    "controller_units_consumed": 791876,
                     "controller_units_samples": [
-                        790376,
-                        790376
+                        791876,
+                        791876
                     ],
-                    "default_budget_margin_units": -590676,
+                    "default_budget_margin_units": -592176,
                     "determinism_samples": 2,
                     "execution": "actual_controller_sbf_programtest",
                     "full_transaction_units_samples": [
-                        790676,
-                        790676
+                        792176,
+                        792176
                     ],
                     "merge_depth": 6,
                     "raw_programdata_length": 10485760,
                     "runtime_default_instruction_compute_limit": 200000,
-                    "runtime_default_margin_basis_points": -29534,
+                    "runtime_default_margin_basis_points": -29609,
                     "runtime_stack_fault": false,
                     "sbpf_target": "v0",
                     "schema": "ameba-programdata-observation-chunk-matrix-measurement-v1",
                     "selected_release1_size": false,
                     "test_only_feature": true,
-                    "units_consumed": 790676,
+                    "units_consumed": 792176,
                     "within_conservative_ceiling": false
                 }
             ],
@@ -178,8 +178,8 @@
                 "linked_elf_safe": true
             },
             "elf": {
-                "bytes": 1115352,
-                "sha256": "5e9b2d7123a140725fafb7b844a9c41fcbdcd6d375a3dd016b03f079f9dffd16"
+                "bytes": 1115504,
+                "sha256": "a466ed24f8b2990244722288cf465ded84dd5ff7f5e04944f15e52aaa43c82b2"
             },
             "measurements": [
                 {
@@ -190,33 +190,33 @@
                     "chunk_size": 16384,
                     "compute_budget_envelope_units": 300,
                     "compute_limit": 1400000,
-                    "compute_margin": 1206319,
-                    "compute_usage_basis_points": 1383,
+                    "compute_margin": 1207819,
+                    "compute_usage_basis_points": 1373,
                     "conservative_compute_gate": "pass",
-                    "controller_elf_length": 1115352,
-                    "controller_elf_sha256": "5e9b2d7123a140725fafb7b844a9c41fcbdcd6d375a3dd016b03f079f9dffd16",
-                    "controller_units_consumed": 193381,
+                    "controller_elf_length": 1115504,
+                    "controller_elf_sha256": "a466ed24f8b2990244722288cf465ded84dd5ff7f5e04944f15e52aaa43c82b2",
+                    "controller_units_consumed": 191881,
                     "controller_units_samples": [
-                        193381,
-                        193381
+                        191881,
+                        191881
                     ],
-                    "default_budget_margin_units": 6319,
+                    "default_budget_margin_units": 7819,
                     "determinism_samples": 2,
                     "execution": "actual_controller_sbf_programtest",
                     "full_transaction_units_samples": [
-                        193681,
-                        193681
+                        192181,
+                        192181
                     ],
                     "merge_depth": 9,
                     "raw_programdata_length": 10485760,
                     "runtime_default_instruction_compute_limit": 200000,
-                    "runtime_default_margin_basis_points": 316,
+                    "runtime_default_margin_basis_points": 391,
                     "runtime_stack_fault": false,
                     "sbpf_target": "v2",
                     "schema": "ameba-programdata-observation-chunk-matrix-measurement-v1",
                     "selected_release1_size": true,
                     "test_only_feature": true,
-                    "units_consumed": 193681,
+                    "units_consumed": 192181,
                     "within_conservative_ceiling": true
                 },
                 {
@@ -230,8 +230,8 @@
                     "compute_margin": 1082079,
                     "compute_usage_basis_points": 2271,
                     "conservative_compute_gate": "reject",
-                    "controller_elf_length": 1115352,
-                    "controller_elf_sha256": "5e9b2d7123a140725fafb7b844a9c41fcbdcd6d375a3dd016b03f079f9dffd16",
+                    "controller_elf_length": 1115504,
+                    "controller_elf_sha256": "a466ed24f8b2990244722288cf465ded84dd5ff7f5e04944f15e52aaa43c82b2",
                     "controller_units_consumed": 317621,
                     "controller_units_samples": [
                         317621,
@@ -264,33 +264,33 @@
                     "chunk_size": 65536,
                     "compute_budget_envelope_units": 300,
                     "compute_limit": 1400000,
-                    "compute_margin": 836513,
-                    "compute_usage_basis_points": 4025,
+                    "compute_margin": 838013,
+                    "compute_usage_basis_points": 4014,
                     "conservative_compute_gate": "reject",
-                    "controller_elf_length": 1115352,
-                    "controller_elf_sha256": "5e9b2d7123a140725fafb7b844a9c41fcbdcd6d375a3dd016b03f079f9dffd16",
-                    "controller_units_consumed": 563187,
+                    "controller_elf_length": 1115504,
+                    "controller_elf_sha256": "a466ed24f8b2990244722288cf465ded84dd5ff7f5e04944f15e52aaa43c82b2",
+                    "controller_units_consumed": 561687,
                     "controller_units_samples": [
-                        563187,
-                        563187
+                        561687,
+                        561687
                     ],
-                    "default_budget_margin_units": -363487,
+                    "default_budget_margin_units": -361987,
                     "determinism_samples": 2,
                     "execution": "actual_controller_sbf_programtest",
                     "full_transaction_units_samples": [
-                        563487,
-                        563487
+                        561987,
+                        561987
                     ],
                     "merge_depth": 7,
                     "raw_programdata_length": 10485760,
                     "runtime_default_instruction_compute_limit": 200000,
-                    "runtime_default_margin_basis_points": -18174,
+                    "runtime_default_margin_basis_points": -18099,
                     "runtime_stack_fault": false,
                     "sbpf_target": "v2",
                     "schema": "ameba-programdata-observation-chunk-matrix-measurement-v1",
                     "selected_release1_size": false,
                     "test_only_feature": true,
-                    "units_consumed": 563487,
+                    "units_consumed": 561987,
                     "within_conservative_ceiling": false
                 },
                 {
@@ -304,8 +304,8 @@
                     "compute_margin": 348187,
                     "compute_usage_basis_points": 7513,
                     "conservative_compute_gate": "reject",
-                    "controller_elf_length": 1115352,
-                    "controller_elf_sha256": "5e9b2d7123a140725fafb7b844a9c41fcbdcd6d375a3dd016b03f079f9dffd16",
+                    "controller_elf_length": 1115504,
+                    "controller_elf_sha256": "a466ed24f8b2990244722288cf465ded84dd5ff7f5e04944f15e52aaa43c82b2",
                     "controller_units_consumed": 1051513,
                     "controller_units_samples": [
                         1051513,
@@ -339,7 +339,7 @@
             }
         }
     },
-    "base_commit": "4167b191f9d816f07a26abf428c2d8a49e2a60b8",
+    "base_commit": "9c1a45236279f37bfa934b3a70ededb77136e3e2",
     "benchmark_contract": {
         "candidate_chunk_sizes": [
             16384,
@@ -373,8 +373,8 @@
             131072
         ],
         "current_policy_adjustment_required": false,
-        "max_selected_compute_units": 193681,
-        "min_selected_compute_margin_units": 1206319,
+        "max_selected_compute_units": 192181,
+        "min_selected_compute_margin_units": 1207819,
         "nonselected_candidates_remain_rejected": true,
         "production_selection_assessment": "conditional_on_exact_pinned_runtime_elf_and_preceremony_remeasurement",
         "reason": "The comparative matrix closes measurement coverage without changing consensus. The selected 16 KiB case fits the pinned runtime's 200,000-CU default on both engines, but the v2 full-transaction margin is narrow and is not characterized as generous. Every larger candidate exceeds the current default and remains rejected by the normal Release 1 capacity-policy validator. No policy adjustment is required for this exact artifact; any controller or runtime drift must be remeasured, and increasing the admitted budget would require a separate reviewed policy decision.",
@@ -386,8 +386,8 @@
                 "units": 41117
             },
             "v2": {
-                "basis_points": 316,
-                "units": 6319
+                "basis_points": 391,
+                "units": 7819
             }
         }
     },
@@ -399,7 +399,7 @@
         "program_test": "2.3.13",
         "rustc": "rustc 1.89.0 (29483883e 2025-08-04)"
     },
-    "generated_at_utc": "2026-08-29T23:49:13.954824+00:00",
+    "generated_at_utc": "2026-08-30T00:59:24.362113+00:00",
     "schema": "ameba-programdata-observation-chunk-controller-sbf-matrix-v1",
     "selection_gates": {
         "actual_controller_sbf_required_for": [
