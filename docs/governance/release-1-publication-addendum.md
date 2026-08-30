@@ -1,7 +1,8 @@
 # Amoeba Governance Release 1 publication addendum
 
-**Observation time:** 2026-08-29T05:02:55Z  
-**Repository:** `SPACE999978/ameba_gov`  
+**Observation time:** 2026-08-29T05:02:55Z
+
+**Repository:** `SPACE999978/ameba_gov`
 **Published branch:** `main`
 
 This addendum records the historical `main` publication state at the observation

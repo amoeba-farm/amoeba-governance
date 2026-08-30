@@ -1,8 +1,10 @@
 # Release 1 ProgramData Capacity and Liveness Audit
 
-Status: normative implementation decision for the ceremony-closure branch  
-Governance baseline: `c2771a7a74c895bbb9a81ba38273e19ac25931ea`  
-Spread baseline: `88c067ae6f2901131698be1e12fdff6f259b361b`  
+Status: normative implementation decision for the ceremony-closure branch
+
+Governance baseline: `c2771a7a74c895bbb9a81ba38273e19ac25931ea`
+
+Spread baseline: `88c067ae6f2901131698be1e12fdff6f259b361b`
 Ceremony-closure specification SHA-256: `11b211c82a0662f8394e6719180b48be32cdabfcf9607f4f1a519e1fcb65ed20`
 
 This audit is the design gate that precedes ceremony-closure processor work. It
