@@ -3371,8 +3371,8 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
     let controller_artifact = read_controller_sbf();
     let (mut spread_artifact, target_is_spread) = read_sacrificial_target_sbf();
     assert!(
-        target_is_spread || (!standalone && !maximum_geometry),
-        "generic sacrificial target coverage is ProgramTest-only and cannot stand in for Spread or maximum-geometry evidence"
+        target_is_spread || !standalone,
+        "generic sacrificial target coverage is ProgramTest-only and cannot stand in for Spread evidence"
     );
     if maximum_geometry {
         spread_artifact.resize(MAX_ARTIFACT_BYTES_V1 as usize, 0);
@@ -4671,21 +4671,23 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
     assert_eq!(final_deployment.completed_proposal.value, primary_key);
     assert_eq!(final_deployment.artifact_sha256, executed.artifact_sha256);
 
-    let permitted_mutation = spread_init_user_collateral_instruction(
-        harness.target,
-        spread_user,
-        spread_user_collateral,
-        harness.gate,
-        final_gate.epoch,
-    );
-    submit(&mut context, &[permitted_mutation], &[])
-        .await
-        .expect("first post-ceremony Spread mutation through active canonical gate");
-    let mutated = maybe_account(&mut context, spread_user_collateral)
-        .await
-        .expect("Spread mutation created canonical user collateral");
-    assert_eq!(mutated.owner, harness.target);
-    assert!(!mutated.data.is_empty());
+    if target_is_spread {
+        let permitted_mutation = spread_init_user_collateral_instruction(
+            harness.target,
+            spread_user,
+            spread_user_collateral,
+            harness.gate,
+            final_gate.epoch,
+        );
+        submit(&mut context, &[permitted_mutation], &[])
+            .await
+            .expect("first post-ceremony Spread mutation through active canonical gate");
+        let mutated = maybe_account(&mut context, spread_user_collateral)
+            .await
+            .expect("Spread mutation created canonical user collateral");
+        assert_eq!(mutated.owner, harness.target);
+        assert!(!mutated.data.is_empty());
+    }
 
     if let Some(validator) = _standalone_validator.as_ref() {
         let receipt_accounts = ceremony_account_snapshots
@@ -4837,6 +4839,7 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         let maximum_evidence = json!({
             "schema": "amoeba-release1-maximum-geometry-actual-sbf-v1",
             "sbpfTarget": std::env::var("AMOEBA_SBPF_TARGET").unwrap_or_else(|_| "unspecified".into()),
+            "targetKind": if target_is_spread { "spread" } else { "generic-sacrificial" },
             "controllerElfLength": controller_artifact.len(),
             "controllerElfSha256": lower_hex(hashv(&[&controller_artifact]).as_ref()),
             "artifactLength": spread_artifact.len(),
@@ -4849,7 +4852,7 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
             "artifactChunkCount": artifact_chunk_count,
             "fullV3LoaderLifecycle": true,
             "rollbackPreparedAndRetired": true,
-            "firstSpreadMutation": true,
+            "firstSpreadMutation": target_is_spread,
             "finalGateEpoch": final_gate.epoch,
             "liveRpcWrite": false,
         });
@@ -4867,12 +4870,14 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
     }
 
     println!(
-        "AMOEBA_CEREMONY_AUTHORITY_EVIDENCE={{\"sbpf_target\":\"{}\",\"controller_elf_length\":{},\"controller_elf_sha256\":\"{}\",\"spread_elf_length\":{},\"spread_elf_sha256\":\"{}\",\"controller_immutable\":true,\"checked_handoff\":true,\"former_authority_rejected\":true,\"bootstrap_activation\":true,\"full_v3_loader_lifecycle\":true,\"rollback_prepared_and_retired\":true,\"first_spread_mutation\":true,\"activated_epoch\":{},\"final_epoch\":{},\"live_rpc_write\":false}}",
+        "AMOEBA_CEREMONY_AUTHORITY_EVIDENCE={{\"sbpf_target\":\"{}\",\"target_kind\":\"{}\",\"controller_elf_length\":{},\"controller_elf_sha256\":\"{}\",\"target_elf_length\":{},\"target_elf_sha256\":\"{}\",\"controller_immutable\":true,\"checked_handoff\":true,\"former_authority_rejected\":true,\"bootstrap_activation\":true,\"full_v3_loader_lifecycle\":true,\"rollback_prepared_and_retired\":true,\"first_spread_mutation\":{},\"activated_epoch\":{},\"final_epoch\":{},\"live_rpc_write\":false}}",
         std::env::var("AMOEBA_SBPF_TARGET").unwrap_or_else(|_| "unspecified".into()),
+        if target_is_spread { "spread" } else { "generic-sacrificial" },
         controller_artifact.len(),
         hashv(&[&controller_artifact]),
         spread_artifact.len(),
         hashv(&[&spread_artifact]),
+        target_is_spread,
         active_gate.epoch,
         final_gate.epoch,
     );
