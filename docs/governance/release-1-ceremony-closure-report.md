@@ -5,10 +5,10 @@ CEREMONY REMAIN OPEN**
 
 Branch: `codex/release1-ceremony-closure`
 
-Controller runtime-source candidate: `25e1244485339d272948cc4806ee75694909ebae`
+Controller runtime-source candidate: `9c1a45236279f37bfa934b3a70ededb77136e3e2`
 
 Governance integrated verification candidate before this report refresh:
-`4167b191f9d816f07a26abf428c2d8a49e2a60b8`
+`0771dd3e9dd1e2f96c24d4910339253852db772b`
 
 Production controller identity: intentionally unselected
 
@@ -24,10 +24,11 @@ branches and pull requests only; it does not widen the live boundary.
 | Item | Value |
 |---|---|
 | Governance starting commit | `c2771a7a74c895bbb9a81ba38273e19ac25931ea` |
-| Governance executable-source ending commit | `25e1244485339d272948cc4806ee75694909ebae` |
-| Governance integrated verification commit before report refresh | `4167b191f9d816f07a26abf428c2d8a49e2a60b8` |
+| Governance executable-source ending commit | `9c1a45236279f37bfa934b3a70ededb77136e3e2` |
+| Governance integrated verification commit before report refresh | `0771dd3e9dd1e2f96c24d4910339253852db772b` |
 | Spread starting commit | `88c067ae6f2901131698be1e12fdff6f259b361b` |
-| Spread integrated verification commit before report refresh | `486cf624797b9a28e2634b20e83380ec82ba3a53` |
+| Spread code/CI verification commit before report refresh | `12ff4e34307f5429a4d0c977c6149210dccb685f` |
+| Spread integration-report commit | `215f43d4288d3d6b67984c96c41096e7fe96fdf9` |
 | Branches | `codex/release1-ceremony-closure` in both isolated worktrees |
 | Ceremony specification SHA-256 | `11b211c82a0662f8394e6719180b48be32cdabfcf9607f4f1a519e1fcb65ed20` |
 | Production identity | unselected; synthetic local identities are release-forbidden |
@@ -43,12 +44,14 @@ Normative and prerequisite inputs were byte-identified before implementation:
 | Serialization decisions | `9c767f5436632a9301d7246fd164a0b84556d56a2be84e3de8a69e7cc28abcfd` |
 | Upgrade-governance specification | `16f8b4c0cb4e1b05752f5deb299570bf717ffb7ff4e53cd1325801dd4e246117` |
 | Release 1 completion amendment | `02882c25abcaf989676bd47b80523670f236a64ff6652e59226beb38683e5b4b` |
-| Release 1 completion report | `60125897268c34ded10c386f1bc3db77bdda643ef6cde93ddcd872e8fe718a02` |
+| Release 1 completion report at prerequisite inspection | `60125897268c34ded10c386f1bc3db77bdda643ef6cde93ddcd872e8fe718a02` |
+| Release 1 completion report after historical-supersession annotation | `a8881712cc8df953b229c1cc8ff400d67d2257261e96f945bf2f426552450b6b` |
 | Spread Phase 3 amendment | `b70f6cba33597b5c89517ff7a73838a18e3c75bc630887d9162369a82a640599` |
 | Spread Phase 3 report | `dfb941414c2199ac9508eb9af27cd9972abf5ff5b3a284c4451c248792afe2ae` |
 | Spread Phase 3 closure report | `fa13de3d95608445893287cc846f7429e1a8a012514d3bc8b38bc069403810bb` |
 | Spread Phase 3 instruction-manifest report | `738295aab703e0c033c1eafd7314c015e05bea908ebfa17694c65c0315a85310` |
-| Spread Release 1 integration report | `821748866b60481396c8911ff6076979d00add161418997cfcf153b9705ddcfe` |
+| Spread Release 1 integration report | `28aabd6411fc0ae9a9f9b674c2f49cdc18b7d74e45a53268e0badb402d47d12a` |
+| Spread ceremony-closure integration report | `ba57be3789cf413db24db0e028bd8054d43b9013b7b413a75ca2b0e4e9ef690e` |
 
 `Amoeba_Spread_Upgrade_Governance_Architecture.pdf` was not present in the
 inspected worktrees or Downloads directory, so no PDF hash is claimed.
@@ -240,17 +243,17 @@ predeclared size against the same 10,485,760-byte ceiling:
 
 | Chunk | SBPF v0 full transaction CU | SBPF v2 full transaction CU | 200,000-unit gate |
 |---:|---:|---:|---|
-| 16 KiB | 158,883 | 193,681 | pass; selected |
-| 32 KiB | 251,878 | 317,921 | reject |
-| 64 KiB | 428,915 | 563,487 | reject |
-| 128 KiB | 790,676 | 1,051,813 | reject |
+| 16 KiB | 158,883 | 192,181 | pass; selected |
+| 32 KiB | 250,378 | 317,921 | reject |
+| 64 KiB | 430,415 | 561,987 | reject |
+| 128 KiB | 792,176 | 1,051,813 | reject |
 
 Each matrix sample repeated twice with identical compute. Controller execution
 is exactly 300 units below the full transaction because the envelope contains
 two 150-unit ComputeBudget instructions. The measurement transaction used an
 explicit 1,400,000-unit limit so the rejected candidates could be observed;
 the pinned runtime default for the one non-builtin instruction remains
-200,000 units. The v2 selected result retains only 6,319 units (3.16%) of
+200,000 units. The v2 selected result retains only 7,819 units (3.91%) of
 default-budget margin, so selection is conditional on exact runtime/ELF
 reproduction and pre-ceremony remeasurement; the report does not call that
 margin generous. Normal Release 1 builds still admit only 16 KiB.
@@ -258,11 +261,14 @@ margin generous. Normal Release 1 builds still admit only 16 KiB.
 The complete matrix report is
 `docs/governance/programdata-observation-chunk-controller-sbf-matrix-v1.md`.
 Its final integrated JSON evidence hashes to
-`48141ca03d65fc289e509f6effc654be63844c0dd6967932f57040b3d41b0278`.
+`f96450435520e27eeefc9116bda612f66e855106a42e22b7e42726a30d52b149`.
 The missing-candidate measurement blocker is closed.
 The v0 and v2 maximum-geometry JSON evidence files hash respectively to
-`8ac1642582dd7f6743399694a5b545a77bf8085721ac48fbedb97ccee7638122`
-and `31b7edc44582e203ce1a890d34d0378258e9b93064fac65c0c8aaadcc8832e8d`.
+`8c80cdc10f7e5620c9a6de3532febf93d668530f71df82ce05d9468cc55fa571`
+and `9ca1378fd1dd1d2226b5295c5b6c2df6136c3f5b09707e9c8fabe93b67226696`.
+They are tracked as
+`docs/governance/evidence/release-1-maximum-geometry-spread-v0.json` and
+`docs/governance/evidence/release-1-maximum-geometry-spread-v2.json`.
 
 ## 6. Checked handoff and activation
 
@@ -343,13 +349,16 @@ The exact final rollback artifacts and results are:
 
 | Engine | Controller artifact | Spread artifact | Result |
 |---|---|---|---|
-| SBPF v0 | 1,114,448 bytes; `2864df9cb04363ee3acef8b6df50153cf1f7e6a468215aed76125fa6ff093f98` | 1,154,184 bytes; `7b29416cba304909b5546aa4726aedbf7fb7a9b4e506d7292f171f5afcb20749` | pass, 83.44 s |
-| SBPF v2 | 1,115,080 bytes; `8f32e309db1b70581148b05fc1e3a287011f4888d5d487675a1882077b33f364` | 1,281,248 bytes; `e93c70b96c398fde4029fd2e873c547858880d668489f25477721034c944a514` | pass, 93.03 s |
+| SBPF v0 | 1,114,592 bytes; `0c107bce1ec34d3badf72b69161f0cae0b82a7b85ea714770f3876c08e6c1b18` | 1,154,184 bytes; `7b29416cba304909b5546aa4726aedbf7fb7a9b4e506d7292f171f5afcb20749` | pass, 94.06 s |
+| SBPF v2 | 1,115,232 bytes; `29f5f746a3d1f9dbd5ebcf72ef5d4450bb0d10a67cf4c6c047124da7eb0b9b56` | 1,281,248 bytes; `e93c70b96c398fde4029fd2e873c547858880d668489f25477721034c944a514` | pass, 99.26 s |
 
 Wrong witness, observation/epoch drift, wrong accepted prestate, repaired
 mismatch, and mismatch-class drift all fail atomically before Loader execution.
 Only reprovable `ArtifactPayload` and `ZeroTail` mismatch classes can authorize
-rollback. The dedicated report is
+rollback. Activation before the exact checked
+`primary.upgrade_executed_slot + rollback_delay_slots` also fails with
+`InvalidProposalTiming` and leaves both writable accounts byte-identical. The
+dedicated report is
 `docs/governance/evidence/release-1-v3-rollback-rehearsal.md`.
 
 ## 8. Packet and operator evidence
@@ -377,25 +386,28 @@ instruction fallback.
 
 ## 9. Artifact evidence
 
-The final controller artifacts were rebuilt from integrated verification commit
-`4167b191f9d816f07a26abf428c2d8a49e2a60b8` with platform-tools v1.53.
+The final controller artifacts were rebuilt twice from runtime-source commit
+`9c1a45236279f37bfa934b3a70ededb77136e3e2` with platform-tools v1.53.
 The Spread artifacts are the exact governance-gated Phase 3 artifacts retained
 through the lint and TypeScript/package integration commits. These are
 synthetic local review artifacts, not production release identities.
 
 | Artifact | SBPF | Bytes | SHA-256 |
 |---|---|---:|---|
-| controller | v0 | 1,114,448 | `2864df9cb04363ee3acef8b6df50153cf1f7e6a468215aed76125fa6ff093f98` |
-| controller | v2 | 1,115,080 | `8f32e309db1b70581148b05fc1e3a287011f4888d5d487675a1882077b33f364` |
+| controller | v0 | 1,114,592 | `0c107bce1ec34d3badf72b69161f0cae0b82a7b85ea714770f3876c08e6c1b18` |
+| controller | v2 | 1,115,232 | `29f5f746a3d1f9dbd5ebcf72ef5d4450bb0d10a67cf4c6c047124da7eb0b9b56` |
 | Spread target | v0 | 1,154,184 | `7b29416cba304909b5546aa4726aedbf7fb7a9b4e506d7292f171f5afcb20749` |
 | Spread target | v2 | 1,281,248 | `e93c70b96c398fde4029fd2e873c547858880d668489f25477721034c944a514` |
 
-The final unstripped controller linked ELFs were 1,328,840 bytes / SHA-256
-`1000095b4892850f1b3c4c1e71aacc96926af94636063549daf373fba0179e52`
-for v0 and 1,328,520 bytes / SHA-256
-`d67a96ad1f2e51f4c229076fa782cfbc64bf34e9cba7d341b753deec24a7468e`
+The final unstripped controller linked ELFs were 1,328,056 bytes / SHA-256
+`6d5313a1c55148f07d8a3591dcb3e5f3e40f7ff5fbb7d5c72328fe16229fe4ae`
+for v0 and 1,328,048 bytes / SHA-256
+`5c4ae80c125db3a21169f0954802e37f7199a16e785d907768cd085158bd6d0b`
 for v2. The v0 analyzer classified 16 diagnostics as dependency-only and proved
 every reported symbol absent from the linked ELF; v2 reported zero diagnostics.
+Both rebuilds were byte-identical. The exact source tree was
+`5bb65ea5edbee7aceea55bf8886df93dd23ebe75` and `Cargo.lock` SHA-256 was
+`0c26b200f23a65d0976f30474208b74a64f04623f16d539e6b805c4fcf98768d`.
 
 ## 10. Verification matrix
 
@@ -406,22 +418,22 @@ every reported symbol absent from the linked ELF; v2 reported zero diagnostics.
 | Governance TypeScript tests | pass, 127/127 |
 | Governance package build/consumer | pass; 49 entries, packed 162,491 bytes, unpacked 1,039,452 bytes, shasum `fff1310c413b0672f31465394cb338f7032021e4` |
 | Spread TypeScript typecheck/tests | pass, 312 total: 311 pass, 1 intentional skip |
-| Full controller ProgramTest v2 | pass, 1/1, 104.20 s |
-| Full controller ProgramTest v0 | pass, 1/1, prior evidence retained |
+| Full exact-Spread controller ProgramTest v2 | pass, 1/1, 104.96 s |
+| Full exact-Spread controller ProgramTest v0 | pass, 1/1, 92.28 s |
 | Full standalone local validator | pass: complete controller-SBF/real-Loader happy path, checked handoff, former-authority rejection, bootstrap activation, durable-nonce v0 upgrade, separate unfreeze, final epoch 4, and first gated Spread mutation |
 | Receipt v4 independent verifier | pass: actual receipt digest `faae42ced84225366d4ef5eb99bdfe69aaa1094e000756195382e08bd477cb11`; two read-only CLI processes, four-entry journal, lock absent |
 | Governance Rust format / Clippy `-D warnings` | pass |
 | Governance all host targets | pass: 287 unit tests, 1 fixture generator ignored, plus capacity and golden suites; explicit manual/SBF cases remained ignored |
 | Governance release build | pass |
 | Controller SBF v0/v2 rebuild and linked-ELF stack analysis | pass with the dependency-only v0 qualification above |
-| Maximum-capacity actual controller-SBF lifecycle | pass v0 and v2; 640 raw chunks, final epoch 4, first gated Spread mutation succeeded |
-| Final ProgramData chunk matrix | pass v0 and v2; 16 KiB selected at 158,883 / 193,681 CU; 32/64/128 KiB measured and rejected |
+| Maximum-capacity actual controller-SBF lifecycle | pass v0 in 216.78 s and v2 in 206.99 s; 640 raw chunks, 96 artifact chunks, final epoch 4, first gated Spread mutation succeeded |
+| Final ProgramData chunk matrix | pass v0 and v2; 16 KiB selected at 158,883 / 192,181 CU; 32/64/128 KiB measured and rejected |
 | Actual controller-SBF V3 rollback | pass v0 and v2 against exact Spread artifacts; real Loader-v3 recovery, poststate, and separate unfreeze |
 | Spread format and host tests | final rerun recorded in Spread integration report |
 | Spread Clippy `-D warnings` | pass: full locked workspace/all-targets, zero warnings |
 | Workflow syntax | pass: actionlint 1.7.12 and PyYAML parse across all three workflow files |
 | Changed shell scripts | pass: ShellCheck 0.11.0 and `bash -n` |
-| Hosted CI | not run on this unpushed branch; baseline runs blocked by billing before steps |
+| Hosted CI | no repository-step evidence at this checkpoint; last observed baseline runs were blocked by billing before steps |
 
 ## 11. Changed-file inventory
 
@@ -467,12 +479,16 @@ A clients/ts/upgradeGovernance/release1V3CustodyInstructions.ts
 A clients/ts/upgradeGovernance/release1V3Instructions.ts
 M clients/ts/upgradeGovernance/spreadGateBridgeV1.ts
 A docs/governance/evidence/programdata-observation-chunk-controller-sbf-matrix-v1.json
+A docs/governance/evidence/release-1-maximum-geometry-spread-v0.json
+A docs/governance/evidence/release-1-maximum-geometry-spread-v2.json
 M docs/governance/evidence/release-1-packet-surface-v1.json
 A docs/governance/evidence/release-1-v3-rollback-rehearsal.md
 A docs/governance/final-predeployment-audit-scope.md
+M docs/governance/phase-7-readiness-report.md
 A docs/governance/programdata-observation-chunk-controller-sbf-matrix-v1.md
 A docs/governance/release-1-capacity-liveness-audit.md
 A docs/governance/release-1-ceremony-closure-report.md
+M docs/governance/release-1-completion-report.md
 A docs/governance/release-1-local-ceremony-receipt.md
 A docs/governance/release-1-publication-addendum.md
 A fixtures/README.md
@@ -520,6 +536,12 @@ workspace is Clippy-clean with warnings denied, and the V3 rollback completes
 through actual controller SBF and Loader-v3 on both engines. No known local
 engineering blocker remains from that closure list.
 
+The stale hosted lanes that invoked the intentionally retired V1/V2 custody
+tags were also removed. Hosted CI now calls the current V3 ceremony harness for
+ordinary happy, rollback, and maximum-geometry paths on both engines. A local
+generic v0 CI-equivalent happy run passed in 92.35 seconds, while the stronger
+exact-Spread happy, rollback, and maximum-geometry runs passed on both engines.
+
 Engineering completion also cannot supply the external production trust
 inputs. The remaining production items are the final controller identity and
 artifact, five real seat capabilities, guardian and treasury identities,
@@ -535,7 +557,8 @@ failure.
 
 ## 13. Safety statement
 
-No push, main merge, tag, release, package publication, production controller
+Through the local evidence checkpoint recorded by this report, no push, main
+merge, tag, release, package publication, production controller
 selection, production-key access, live signing, Devnet/Mainnet RPC write, live
 deployment, ProgramData authority transfer, controller or target immutability,
 gate initialization, service/tunnel/timer mutation, automation change, frontend

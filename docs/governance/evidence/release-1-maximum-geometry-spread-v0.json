@@ -1,0 +1,20 @@
+{
+  "artifactChunkCount": 96,
+  "artifactChunkSize": 16384,
+  "artifactLength": 1572864,
+  "artifactSha256": "d0a2ab7ca980413650bedbb2ad3f2dbba9d3e2ea95db76aacffd5c2bb2626df3",
+  "controllerElfLength": 1114592,
+  "controllerElfSha256": "0c107bce1ec34d3badf72b69161f0cae0b82a7b85ea714770f3876c08e6c1b18",
+  "finalGateEpoch": 4,
+  "firstSpreadMutation": true,
+  "fullV3LoaderLifecycle": true,
+  "liveRpcWrite": false,
+  "programdataPayloadCapacity": 10485715,
+  "rawObservationChunkCount": 640,
+  "rawObservationChunkSize": 16384,
+  "rawProgramdataLength": 10485760,
+  "rollbackPreparedAndRetired": true,
+  "sbpfTarget": "v0",
+  "schema": "amoeba-release1-maximum-geometry-actual-sbf-v1",
+  "targetKind": "spread"
+}

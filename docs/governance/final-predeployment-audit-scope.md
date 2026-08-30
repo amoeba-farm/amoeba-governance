@@ -3,7 +3,7 @@
 Status: **AUDIT PACKAGE READY — INDEPENDENT AUDIT NOT YET PERFORMED**
 
 Integrated verification candidate before report refresh:
-`4167b191f9d816f07a26abf428c2d8a49e2a60b8`
+`0771dd3e9dd1e2f96c24d4910339253852db772b`
 
 Production controller identity: intentionally unselected
 
@@ -16,8 +16,8 @@ live ceremony. It is not a deployment authorization.
 The three recorded engineering blockers are closed. Actual controller SBF
 measured the maximum-merge 16, 32, 64, and 128 KiB steps on both engines; only
 16 KiB fits the existing 200,000-unit gate, and normal builds continue to reject
-every larger size. The exact final integrated v2 selected case has only 6,319
-units (3.16%) of margin, so any source, dependency, toolchain, or runtime change
+every larger size. The exact final integrated v2 selected case has only 7,819
+units (3.91%) of margin, so any source, dependency, toolchain, or runtime change
 still requires remeasurement rather than treating that result as generic
 headroom.
 
@@ -27,6 +27,9 @@ V3 rollback through actual controller SBF and Loader-v3 against the exact
 Spread v0 and v2 artifacts, including ProgramData verification, poststate, and
 separate unfreeze. The failure trigger is explicitly a ProgramTest-only
 one-byte payload corruption; the recovery lifecycle itself is actual SBF.
+Rollback activation now rejects every structural mismatch class and enforces
+the configured delay from the primary upgrade-execution slot before mutating
+the gate; the early-activation rejection is byte-atomic through actual SBF.
 
 Hosted CI also remains unavailable as evidence because the inspected baseline
 runs stopped before repository steps at the account billing/spending boundary.

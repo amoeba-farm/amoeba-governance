@@ -1,6 +1,6 @@
 # Amoeba Governance Release 1 completion report
 
-**Status:** BLOCKED CANDIDATE — RELEASE 1 IS NOT EXIT-COMPLETE
+**Status:** HISTORICAL PHASE 4–6 SNAPSHOT — SUPERSEDED FOR CURRENT STATUS
 
 **Branch:** `codex/release1-completion`
 
@@ -8,11 +8,12 @@
 actual-controller-SBF ProgramTest, and clean source-bound artifacts only. A
 standalone local validator was not run.
 
-This report records the completed local engineering candidate and the security
-boundaries that prevent an exit-complete or ceremony-ready claim. The final SBF
-and Loader evidence is bound to one clean exact source commit; passing downstream
-rehearsals are not presented as proof of the two missing production ceremony
-paths.
+This report records the Phase 4–6 candidate and its then-current security
+boundaries at the commits below. Later ceremony-closure work added the typed
+checked authority handoff, governed bootstrap activation, current V3 rollback,
+final chunk measurements, and full actual-SBF lifecycle. Current status and
+evidence live in `release-1-ceremony-closure-report.md`; historical hashes and
+results below remain unchanged as an audit trail.
 
 ## 1. Source identity and tree state
 
@@ -569,9 +570,9 @@ of 8,384 bytes; every named offending symbol is absent from the linked
 controller ELF, and no controller symbol, caller-frame overlap, or reachable
 overflow is reported. The v2 analyzer reports zero frame diagnostics.
 
-## 15. Warnings and unresolved blockers
+## 15. Historical warnings and blockers at this snapshot
 
-Unresolved security blockers:
+Security blockers recorded at this historical commit:
 
 1. The controller has no typed `AcceptTargetAuthorityV1`. Loader-v3
    `SetAuthorityChecked` requires both current and new authorities to sign, and
@@ -594,7 +595,10 @@ Residual release warnings:
 5. No independent audit or hosted CI run exists on these unpushed branches.
    Branch protection is recommended but was not changed.
 
-No blocker may be converted into a warning merely to claim completion.
+Items 1–3 were subsequently closed by typed, actual-controller-SBF ceremony
+paths without reviving the unchecked path or bank-patching gate activation.
+The current evidence and remaining external readiness boundaries are recorded
+in `release-1-ceremony-closure-report.md` and `phase-7-readiness-report.md`.
 
 ## 16. Phase 7 boundary and no-live attestation
 
@@ -616,9 +620,9 @@ not a live signature, cluster submission, or production handoff.
 Operator attestation: the local command history, Git state, and branch boundary
 show no live or remote mutation. The Spread Devnet ProgramData was untouched.
 
-## 17. Exit decision
+## 17. Historical exit decision
 
-**Current decision:** NOT EXIT-COMPLETE; NOT PHASE-7 READY.
+**Decision at this snapshot:** NOT EXIT-COMPLETE; NOT PHASE-7 READY.
 
 The downstream Release 1 kernel is implemented, and exact-source host, package,
 artifact, Loader-v3, maximum-chunk, and actual-controller-SBF verification is
@@ -628,3 +632,6 @@ completed downstream SBF lifecycle uses a legacy unchecked sacrificial handoff
 and test-only bank mutation to Active, it is downstream evidence rather than
 proof of one fully production-reachable ceremony; Gate F remains open. Neither
 blocker may be downgraded to a warning.
+
+This decision is preserved as historical provenance, not as the status of the
+later `codex/release1-ceremony-closure` candidate.

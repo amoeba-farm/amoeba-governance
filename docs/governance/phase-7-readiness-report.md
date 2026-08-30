@@ -4,6 +4,10 @@
 
 **Branch:** `codex/release1-ceremony-closure`
 
+**Current local evidence boundary:** controller runtime source `9c1a452`; final
+integrated verification tip before report refresh `0771dd3`; Spread code/CI tip
+`12ff4e3` with integration-report commit `215f43d`.
+
 Phase 7 in this assignment means dry-run plans, immutable templates, and
 independent verification logic. It does not mean production readiness, a live
 controller identity, deployment, initialization, immutability, bridge
@@ -280,9 +284,10 @@ with a maximum of 1,136 bytes. Three legacy forms remain correctly rejected at
 
 ## 12. No-live attestation
 
-This report neither authorizes nor records a push, `main` update, production ID,
-real seat key, seed phrase, production KMS/wallet access, live or cluster-facing
-transaction signature, RPC write, deployment, initialization,
+Git-only feature-branch publication and pull-request creation are tracked
+separately. This report neither authorizes nor records a `main` update,
+production ID, real seat key, seed phrase, production KMS/wallet access, live
+or cluster-facing transaction signature, RPC write, deployment, initialization,
 ProgramData/buffer authority transfer, controller or target immutability, token
 voting, Devnet upgrade, service/timer/tunnel/Edge change, or frontend mutation.
 

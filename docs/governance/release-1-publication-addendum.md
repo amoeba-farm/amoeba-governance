@@ -4,9 +4,9 @@
 **Repository:** `SPACE999978/ameba_gov`  
 **Published branch:** `main`
 
-This addendum records the publication state after the local Release 1 reports
-were written. It does not rewrite those historical reports and does not claim a
-successful hosted verification run.
+This addendum records the historical `main` publication state at the observation
+time above. It does not rewrite those historical reports, describe later
+feature-branch publication, or claim a successful hosted verification run.
 
 ## Published identity
 
@@ -66,6 +66,8 @@ checks, at least one independent review, disabled force pushes and branch
 deletion, and a signed release tag. No repository setting is changed by this
 addendum.
 
-No push, merge, tag, release, deployment, live RPC write, authority change,
-immutability action, production identity selection, or service mutation is
-performed by this ceremony-closure branch.
+The historical observation performed no push, merge, tag, release, deployment,
+live RPC write, authority change, immutability action, production identity
+selection, or service mutation. Any later explicitly authorized Git-only
+feature-branch publication is recorded separately and does not alter the
+no-live-mutation boundary.

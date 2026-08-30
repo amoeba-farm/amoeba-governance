@@ -87,7 +87,7 @@ jobs:
             'No final production controller ID or real seat key is populated.' \
             docs/governance/release-1-completion-report.md
           grep --fixed-strings --quiet \
-            'This report neither authorizes nor records a push, `main` update' \
+            'This report neither authorizes nor records a `main` update' \
             docs/governance/phase-7-readiness-report.md
 
   sbpf-diagnostics:

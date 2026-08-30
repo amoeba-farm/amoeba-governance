@@ -239,13 +239,13 @@ duplicate or out-of-order append fails without a large bitmap.
 Host geometry and deterministic root tests cover the 16, 32, 64, and 128 KiB
 candidates. The actual-controller-SBF maximum-merge matrix now covers all four
 sizes on both engines at the 10,485,760-byte raw-account maximum. Full
-transaction costs are 158,883 / 251,878 / 428,915 / 790,676 compute units on
-SBPF v0 and 193,681 / 317,921 / 563,487 / 1,051,813 on SBPF v2 for 16 / 32 /
+transaction costs are 158,883 / 250,378 / 430,415 / 792,176 compute units on
+SBPF v0 and 192,181 / 317,921 / 561,987 / 1,051,813 on SBPF v2 for 16 / 32 /
 64 / 128 KiB respectively. Every sample repeated twice identically and no
 runtime stack fault occurred.
 
 The selected 16-KiB case is the only size below the pinned runtime's 200,000
-unit default on both engines. Its v2 margin is 6,319 units (3.16%), so that
+unit default on both engines. Its v2 margin is 7,819 units (3.91%), so that
 result is conditional on exact runtime/ELF reproduction and is not described
 as generous headroom. Normal Release 1 builds mechanically reject 32, 64, and
 128 KiB; the measurement-only feature changes no ABI or ordinary admission
