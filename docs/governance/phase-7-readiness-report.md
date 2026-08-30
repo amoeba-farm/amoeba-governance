@@ -2,7 +2,7 @@
 
 **Status:** NOT READY FOR CEREMONY — READ-ONLY EVIDENCE ONLY
 
-**Branch:** `codex/release1-completion`
+**Branch:** `codex/release1-ceremony-closure`
 
 Phase 7 in this assignment means dry-run plans, immutable templates, and
 independent verification logic. It does not mean production readiness, a live
@@ -12,13 +12,14 @@ activation, authority handoff, or any signed transaction.
 ## 1. Release 1 dependency
 
 The readiness pack is usable for review, but none of it may be executed as a
-ceremony until the completion report's security blockers are closed and Gates
-A–F pass through one production-reachable sequence at one clean exact commit.
+ceremony until the exact published candidate receives independent audit and
+the production trust inputs and explicit live authorizations exist.
 
-Current Release 1 decision: downstream implementation and exact-source local
-verification are complete. Phase 7 execution readiness is independently
-blocked by the missing typed checked authority-acceptance and governed
-bootstrap-activation paths described in Sections 6, 7, and 11.
+Current Release 1 decision: implementation and exact-source local verification
+are complete. Gates A-F pass through actual controller SBF and real Loader-v3
+against sacrificial local targets under both engines. Phase 7 execution remains
+blocked by external audit, production identities/capabilities, restored hosted
+CI, and the separately authorized live ceremony described in Section 11.
 
 Required Gate F evidence is a production-dispatch actual-controller-SBF
 lifecycle under both SBPF v0 and v2 through:
@@ -44,11 +45,13 @@ initialize
 A host processor delegate driving the real Loader is useful Gate E evidence but
 does not satisfy this Phase 7 prerequisite.
 
-The exact local v0 and v2 artifacts each pass the downstream
-actual-controller-SBF happy lifecycle and recoverable rollback paths. Those
-tests bank-patch the bootstrap-frozen gate to Active and use a legacy unchecked
-sacrificial authority handoff. They therefore verify the downstream kernel and
-Loader behavior but do not close the production-dispatch Gate F prerequisite.
+The exact local v0 and v2 artifacts each pass checked PDA-signed authority
+handoff, former-authority rejection, governed bootstrap activation, the full
+happy lifecycle, and recoverable V3 rollback. No gate activation or authority
+handoff is bank-patched. The rollback fault trigger is ProgramTest-only, while
+the recovery transitions and Loader-v3 Upgrade CPI execute through actual
+controller SBF. This closes the local Gate F prerequisite without claiming a
+live-cluster ceremony.
 
 ## 2. Readiness artifact inventory
 
@@ -116,9 +119,9 @@ handoff follows controller immutability and bridge verification because the
 target must never be entrusted to unreviewed mutable controller code. The gate
 begins frozen at nonzero epoch and no step creates an unverified Active interval.
 
-This ordering is a plan for a future independently audited controller version
-that contains both missing typed capabilities. It is not authorization to
-execute any step, and the current candidate cannot perform this sequence.
+This ordering is a plan for a future ceremony using the independently audited
+exact candidate. The current candidate implements the typed capabilities and
+passes them locally, but that is not authorization to execute any live step.
 
 ## 5. Controller deployment and initialization readiness
 
@@ -130,14 +133,14 @@ initialization template requires exact target graph,
 canonical PDAs, five unique equal seats, guardian and treasury separation,
 timing policy, `next_proposal_id = 1`, `target_nonce = 1`, gate epoch 1,
 bootstrap frozen status/reason, and canonical disabled token governance.
-It also rejects target ProgramData above the 1,572,909-byte complete raw-hash
-ceiling; the controller ProgramData is linkage/authority verified but is not
-subject to that target checkpoint-policy cap.
+It rejects target ProgramData above the pinned 10,485,760-byte raw-account
+runtime ceiling; the controller ProgramData is linkage/authority verified but
+is not subject to the target proposal's artifact-size ceiling.
 
 The controller's one-time initialization, reinitialization rejection, exact
-Program/ProgramData linkage, malformed seat/timing rejection, and canonical
-frozen bootstrap pass host and ProgramTest coverage. This does not solve the
-missing governed bootstrap-to-Active transition.
+Program/ProgramData linkage, malformed seat/timing rejection, canonical frozen
+bootstrap, and separate governed bootstrap-to-Active transition pass host and
+actual-controller-SBF coverage.
 
 ## 6. Controller immutability readiness
 
@@ -146,13 +149,13 @@ controller source/build/artifact identity, initialized state, canonical target
 pin, no arbitrary CPI, no target immutability instruction, and a finalized
 post-operation read proving controller ProgramData authority is `None`.
 
-This batch does not make any controller immutable. More importantly, the
-current candidate is not eligible to become immutable: it has no typed path to
-make the controller authority PDA sign a target `SetAuthorityChecked` CPI and
-no audited transition out of the initialization-only bootstrap freeze. A
-future explicit controller version must close both gaps before immutability;
-unchecked Loader authority transfer, a replacement external key, arbitrary CPI,
-or a test-only bank mutation is not an acceptable substitute.
+This batch does not make any controller immutable. The candidate now has the
+narrow typed PDA-signed target `SetAuthorityChecked` CPI and the governed
+transition out of the initialization-only bootstrap freeze, and both pass local
+actual-SBF rehearsal. Immutability nevertheless remains prohibited until the
+exact production identity, artifact, initialization state, and independent
+audit are fixed and reviewed. Unchecked authority transfer, a replacement
+external key, arbitrary CPI, or a bank mutation remains unacceptable.
 
 ## 7. Spread bridge and authority-handoff readiness
 
@@ -170,13 +173,11 @@ cluster/genesis, a frozen verified bridge, explicit arming, decoded display,
 injected signing, journal/lock protection, and an independent receipt.
 
 Loader-v3 `SetAuthorityChecked` requires the new authority to sign. Because the
-new authority is a PDA, the checked transfer must be performed as one narrowly
+new authority is a PDA, the candidate performs the transfer as one narrowly
 typed controller CPI with `invoke_signed`; a top-level Loader instruction cannot
-satisfy that signer contract. The current controller deliberately exposes no
-such instruction. The handoff planner therefore remains read-only and must
-report this candidate as not executable-ready. The local former-authority
-negative rehearsal remains useful Loader evidence but does not close the
-production ceremony gap.
+satisfy that signer contract. The planner remains read-only in this assignment,
+and the local former-authority negative rehearsal supplies sacrificial evidence
+without authorizing or performing the production handoff.
 
 ## 8. Rollback readiness
 
@@ -194,8 +195,10 @@ the expected primary artifact as its payload commitment and the actual failed
 raw ProgramData observation separately; it never asserts they are equal.
 
 The rollback model, processor, and actual-controller-SBF rehearsal pass from the
-exact clean v0 and v2 artifacts. The test-only Active patch and sacrificial
-legacy unchecked handoff mean this remains downstream evidence only.
+exact clean v0 and v2 artifacts after the checked handoff and governed bootstrap
+activation. Only the injected one-byte fault trigger is ProgramTest-only; the
+witness, activation, Loader rollback, deployed-byte verification, poststate,
+separate unfreeze, and final gated Spread mutation execute through actual SBF.
 
 ## 9. Receipt-v3 readiness
 
@@ -257,16 +260,21 @@ with a maximum of 1,136 bytes. Three legacy forms remain correctly rejected at
 
 ## 11. Open readiness blockers
 
-1. No typed checked PDA-accepted target-authority handoff exists in the current
-   dispatcher.
-2. No governed production transition can leave the canonical initialization
-   bootstrap freeze. Council rotation is reachable but leaves the gate frozen.
-3. Controller immutability would permanently preserve both omissions; this
-   candidate must not be used for the intended ceremony.
-4. No independent audit or branch-protection setting is recorded. Branch
+1. No independent external audit or branch-protection setting is recorded. Branch
    protection is recommended, but repository settings are outside this batch.
-5. No hosted CI run exists because the branch was not pushed.
-6. Production identity selection, production seat capabilities and recovery
+2. Hosted CI has not produced repository-step evidence; the inspected baseline
+   runs stopped at the GitHub billing/spending boundary.
+3. Production controller identity and reproducible artifact selection remain
+   intentionally unset.
+4. Five production seat capabilities, guardian, treasury, and their recovery
+   runbooks have not been established or reviewed.
+5. Controller deployment, frozen initialization, independent verification, and
+   immutability are separately authorized production ceremonies and were not
+   performed.
+6. Spread bridge installation, finalized live census/quiescence, target
+   authority handoff, former-authority rejection, and governed activation are
+   explicitly excluded live steps requiring separate authorization and review.
+7. Production identity selection, production seat capabilities and recovery
    runbooks, deployment approval, and live change windows require separate
    authorization and independent review.
 
@@ -283,7 +291,8 @@ signatures, and sacrificial Buffer/ProgramData authority transfers inside an
 ephemeral test bank. Those local test actions are not a live ceremony or cluster
 mutation.
 
-**Readiness decision:** NOT READY. Exact local downstream artifacts and tests
-are green, and planning/independent-verification artifacts are drafted. The
-checked handoff and governed bootstrap activation are still absent, so the
-ceremony is neither technically complete nor authorized.
+**Readiness decision:** NOT READY FOR A LIVE CEREMONY. Exact local artifacts,
+typed checked handoff, governed bootstrap activation, happy-path lifecycle, and
+rollback recovery are green, and planning/verification artifacts are drafted.
+External audit, production trust inputs, hosted CI, and explicit live authority
+remain absent, so no production or Devnet ceremony is authorized.

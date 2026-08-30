@@ -15,8 +15,9 @@ cluster or production evidence.
 | Item | Value |
 |---|---|
 | Starting governance commit | `a14f6bf6ef506532b4ed7ff57a35c6ecd4b5961c` |
-| Evidence-covered implementation tip | `4a67ebdfccdfd2830868b933d178b7c258e68d2f` |
-| Branch | `codex/release1-v3-rollback` |
+| Rollback implementation evidence tip | `4a67ebdfccdfd2830868b933d178b7c258e68d2f` |
+| Final integrated verification tip before report refresh | `4167b191f9d816f07a26abf428c2d8a49e2a60b8` |
+| Final branch | `codex/release1-ceremony-closure` |
 | Spread source used for the exact-artifact rehearsal | clean integrated Phase 3 commit `35f1aa5` |
 | Runtime version | V3 only; no V1/V2 lifecycle was revived |
 
@@ -102,12 +103,20 @@ dependencies.
 
 | Role | SBPF | Bytes | SHA-256 |
 |---|---:|---:|---|
-| controller | v0 | 1,114,480 | `a785732fb45fc5917eeb2e1e7b8707fc37422a6593063c46f96a055df99eb7e3` |
-| controller | v2 | 1,115,128 | `87c5c998182a9c5967a770427b6d693821b530d591ee9c6575e2130e7897ab1c` |
+| final integrated controller | v0 | 1,114,448 | `2864df9cb04363ee3acef8b6df50153cf1f7e6a468215aed76125fa6ff093f98` |
+| final integrated controller | v2 | 1,115,080 | `8f32e309db1b70581148b05fc1e3a287011f4888d5d487675a1882077b33f364` |
 | exact Phase 3 Spread | v0 | 1,154,184 | `7b29416cba304909b5546aa4726aedbf7fb7a9b4e506d7292f171f5afcb20749` |
 | exact Phase 3 Spread | v2 | 1,281,248 | `e93c70b96c398fde4029fd2e873c547858880d668489f25477721034c944a514` |
 | self-contained generic sacrificial target | v0 | 1,327,944 | `c5c5e7b3d4c1f47a4b09ed3fa37610aca9ddd5363bdb9b4dfbc0b06b91e12b4f` |
 | self-contained generic sacrificial target | v2 | 1,327,944 | `d876d6a63a896aedaea0d0f73464a31c058bde0a29041061056459a421b8328b` |
+
+The generic CI-equivalent runs used the earlier rollback-only controller
+artifacts: v0 1,114,480 bytes / SHA-256
+`a785732fb45fc5917eeb2e1e7b8707fc37422a6593063c46f96a055df99eb7e3`
+and v2 1,115,128 bytes / SHA-256
+`87c5c998182a9c5967a770427b6d693821b530d591ee9c6575e2130e7897ab1c`.
+The exact-Spread rows above were rerun after integration of the chunk matrix and
+lint cleanup, so the final artifact claim does not inherit the older hashes.
 
 The exact Spread artifacts pin the Phase 3 manifest controller
 `4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi`. Exact-Spread mode requires
@@ -121,7 +130,7 @@ self-contained generic CI mode uses local controller
 The common command was:
 
 ```bash
-CARGO_TARGET_DIR="$HOME/.cache/rb3-host-0d27c89" \
+CARGO_TARGET_DIR="$HOME/.cache/release1-final-host" \
 BPF_OUT_DIR="<exact-controller-deploy-directory>" \
 AMOEBA_V3_ROLLBACK_REHEARSAL=1 \
 AMOEBA_SBPF_TARGET="<v0-or-v2>" \
@@ -145,8 +154,8 @@ self-contained unstripped linked ELF.
 
 | Run | Result | Runtime evidence |
 |---|---|---|
-| exact Spread v0 | pass, 1/1, 60.76 s | witness, activation, Loader rollback, ProgramData verification, poststate, separate unfreeze, and first gated Spread mutation all true |
-| exact Spread v2 | pass, 1/1, 106.82 s | same complete recovery path and first gated Spread mutation all true |
+| exact final Spread v0 | pass, 1/1, 83.44 s | witness, activation, Loader rollback, ProgramData verification, poststate, separate unfreeze, and first gated Spread mutation all true |
+| exact final Spread v2 | pass, 1/1, 93.03 s | same complete recovery path and first gated Spread mutation all true |
 | generic sacrificial v0 | pass, 1/1, 105.37 s | same recovery path; intentionally no Spread-mutation claim |
 | generic sacrificial v2 | pass, 1/1, 102.63 s | same recovery path; intentionally no Spread-mutation claim |
 
@@ -183,7 +192,7 @@ and spill accounts. All remain byte-identical. The unit matrix enumerates all
 | Check | Result |
 |---|---|
 | `cargo fmt --all -- --check` | pass |
-| `cargo test --locked -p upgrade_controller --lib` | pass: 286 passed, 0 failed, 1 ignored |
+| `cargo test --locked --workspace --all-targets` | pass: 287 unit tests, 0 failed, 1 fixture generator ignored; capacity and golden suites pass |
 | `cargo clippy --locked -p upgrade_controller --all-targets -- -D warnings` | pass |
 | workflow parse with Python `yaml.safe_load` | pass |
 | obsolete `release1_model_differential_through_real_loader_and_separate_unfreeze` hosted step | removed |

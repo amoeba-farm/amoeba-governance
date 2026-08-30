@@ -1,8 +1,9 @@
 # Final predeployment audit scope
 
-Status: **NOT AUDIT-READY — REVIEW BOUNDARY DEFINED, ENGINEERING BLOCKERS OPEN**
+Status: **AUDIT PACKAGE READY — INDEPENDENT AUDIT NOT YET PERFORMED**
 
-Engineering code candidate: `1ff442252907a017913d47591c1857c2e4df3f0b`
+Integrated verification candidate before report refresh:
+`4167b191f9d816f07a26abf428c2d8a49e2a60b8`
 
 Production controller identity: intentionally unselected
 
@@ -10,30 +11,28 @@ This document defines the independent review that remains necessary before a
 future assignment may select a production controller identity or perform any
 live ceremony. It is not a deployment authorization.
 
-## Current pre-audit blockers
+## Current pre-audit status
 
-The branch must not be presented as an exit-complete audit candidate while any
-of these engineering gaps remains open:
+The three recorded engineering blockers are closed. Actual controller SBF
+measured the maximum-merge 16, 32, 64, and 128 KiB steps on both engines; only
+16 KiB fits the existing 200,000-unit gate, and normal builds continue to reject
+every larger size. The exact final integrated v2 selected case has only 6,319
+units (3.16%) of margin, so any source, dependency, toolchain, or runtime change
+still requires remeasurement rather than treating that result as generic
+headroom.
 
-1. the V3 happy path uses the real Loader, but an actual controller-SBF V3
-   rollback execution has not been demonstrated; the retained ignored V1/V2
-   rollback fixtures fail their obsolete configuration preflight if forced and
-   are not V3 Loader evidence; and
-2. the Spread repository's exact Clippy `-D warnings` gate reports 86
-   pre-existing errors outside the governance bridge. The gate source is absent
-   from that error set, but the repository-wide gate still fails.
-
-The ProgramData observation candidate-matrix gap is closed. Actual controller
-SBF measured the maximum-merge 16, 32, 64, and 128 KiB steps on both engines;
-only 16 KiB fits the existing 200,000-unit gate, and normal builds continue to
-reject every larger size. The v2 selected case has only 7,819 units (3.91%) of
-margin, so exact final-artifact remeasurement remains inside the future audit
-scope rather than being treated as generic headroom.
+The Spread repository's full locked workspace/all-targets Clippy gate passes
+with warnings denied. The exact final controller artifacts also complete the
+V3 rollback through actual controller SBF and Loader-v3 against the exact
+Spread v0 and v2 artifacts, including ProgramData verification, poststate, and
+separate unfreeze. The failure trigger is explicitly a ProgramTest-only
+one-byte payload corruption; the recovery lifecycle itself is actual SBF.
 
 Hosted CI also remains unavailable as evidence because the inspected baseline
 runs stopped before repository steps at the account billing/spending boundary.
-These gaps must be resolved and independently reproduced before production
-identity selection or a live ceremony can be proposed.
+Hosted CI must be restored and the exact published candidates independently
+reproduced before production identity selection or a live ceremony can be
+proposed.
 
 The complete local happy-path ceremony is no longer a blocker. Controller SBF
 completed checked handoff, former-authority rejection, bootstrap activation,
@@ -41,8 +40,9 @@ typed Loader upgrade, ProgramData verification, protected poststate, separate
 unfreeze, and the first gated Spread mutation on the sacrificial validator.
 Receipt v4 independently verified digest
 `faae42ced84225366d4ef5eb99bdfe69aaa1094e000756195382e08bd477cb11`,
-and two read-only CLI processes recovered one four-entry journal. That success
-does not substitute for the missing V3 rollback execution listed above.
+and two read-only CLI processes recovered one four-entry journal. The separate
+V3 rollback evidence is recorded in
+`docs/governance/evidence/release-1-v3-rollback-rehearsal.md`.
 
 ## In scope
 

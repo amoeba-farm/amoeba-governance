@@ -1,32 +1,33 @@
 # Amoeba Governance Release 1 ceremony-closure report
 
-Status: **NOT EXIT-COMPLETE — LOCAL EVIDENCE AND BLOCKERS RECORDED**
+Status: **LOCAL ENGINEERING GATES COMPLETE — EXTERNAL AUDIT AND PRODUCTION
+CEREMONY REMAIN OPEN**
 
 Branch: `codex/release1-ceremony-closure`
 
-Controller runtime-source candidate: `1ff442252907a017913d47591c1857c2e4df3f0b`
+Controller runtime-source candidate: `25e1244485339d272948cc4806ee75694909ebae`
 
-Governance test/evidence candidate before final reports:
-`5acd8906ee892bd07170f0e4b83d86d2d1b61ee0`
-(`d3f3e80` contains the durable-nonce authority correction)
+Governance integrated verification candidate before this report refresh:
+`4167b191f9d816f07a26abf428c2d8a49e2a60b8`
 
 Production controller identity: intentionally unselected
 
 This report records the engineering and local-rehearsal outcome defined by
 `Amoeba_Governance_Release_1_Ceremony_Closure_Agent_Spec.md`. It does not
-authorize a push, merge, tag, release, live deployment, production identity,
-signing ceremony, RPC mutation, authority transfer, immutability action, or
-service change.
+authorize a merge, tag, release, live deployment, production identity, signing
+ceremony, RPC mutation, authority transfer, immutability action, or service
+change. A later user instruction authorizes publication of the reviewed feature
+branches and pull requests only; it does not widen the live boundary.
 
 ## 1. Source and publication boundary
 
 | Item | Value |
 |---|---|
 | Governance starting commit | `c2771a7a74c895bbb9a81ba38273e19ac25931ea` |
-| Governance executable-source ending commit | `1ff442252907a017913d47591c1857c2e4df3f0b` |
-| Governance test/evidence ending commit before reports | `5acd8906ee892bd07170f0e4b83d86d2d1b61ee0` |
+| Governance executable-source ending commit | `25e1244485339d272948cc4806ee75694909ebae` |
+| Governance integrated verification commit before report refresh | `4167b191f9d816f07a26abf428c2d8a49e2a60b8` |
 | Spread starting commit | `88c067ae6f2901131698be1e12fdff6f259b361b` |
-| Spread final integration report commit | `99e9ac5e92a1e60571890629c27e66e430efc751` |
+| Spread integrated verification commit before report refresh | `486cf624797b9a28e2634b20e83380ec82ba3a53` |
 | Branches | `codex/release1-ceremony-closure` in both isolated worktrees |
 | Ceremony specification SHA-256 | `11b211c82a0662f8394e6719180b48be32cdabfcf9607f4f1a519e1fcb65ed20` |
 | Production identity | unselected; synthetic local identities are release-forbidden |
@@ -239,25 +240,25 @@ predeclared size against the same 10,485,760-byte ceiling:
 
 | Chunk | SBPF v0 full transaction CU | SBPF v2 full transaction CU | 200,000-unit gate |
 |---:|---:|---:|---|
-| 16 KiB | 160,383 | 192,181 | pass; selected |
-| 32 KiB | 257,878 | 314,921 | reject |
-| 64 KiB | 430,415 | 560,487 | reject |
-| 128 KiB | 790,676 | 1,059,313 | reject |
+| 16 KiB | 158,883 | 193,681 | pass; selected |
+| 32 KiB | 251,878 | 317,921 | reject |
+| 64 KiB | 428,915 | 563,487 | reject |
+| 128 KiB | 790,676 | 1,051,813 | reject |
 
 Each matrix sample repeated twice with identical compute. Controller execution
 is exactly 300 units below the full transaction because the envelope contains
 two 150-unit ComputeBudget instructions. The measurement transaction used an
 explicit 1,400,000-unit limit so the rejected candidates could be observed;
 the pinned runtime default for the one non-builtin instruction remains
-200,000 units. The v2 selected result retains only 7,819 units (3.91%) of
+200,000 units. The v2 selected result retains only 6,319 units (3.16%) of
 default-budget margin, so selection is conditional on exact runtime/ELF
 reproduction and pre-ceremony remeasurement; the report does not call that
 margin generous. Normal Release 1 builds still admit only 16 KiB.
 
 The complete matrix report is
 `docs/governance/programdata-observation-chunk-controller-sbf-matrix-v1.md`.
-Its JSON evidence hashes to
-`42c77a82b9a164f09f150f06b08b8d6d54e64df5bfa0945260e2c673ebf4fe11`.
+Its final integrated JSON evidence hashes to
+`48141ca03d65fc289e509f6effc654be63844c0dd6967932f57040b3d41b0278`.
 The missing-candidate measurement blocker is closed.
 The v0 and v2 maximum-geometry JSON evidence files hash respectively to
 `8ac1642582dd7f6743399694a5b545a77bf8085721ac48fbedb97ccee7638122`
@@ -294,7 +295,7 @@ before these proofs compose.
 | successful Loader CPI | proposal becomes UpgradeExecuted; gate remains frozen |
 | verified poststate plus separate unfreeze | proposal becomes Completed; gate becomes Active; epoch increments once; active proposal clears |
 
-## 7. Happy-path Gate F evidence; rollback Gate F remains open
+## 7. Complete Gate F happy-path and rollback evidence
 
 The actual controller-SBF happy path covers:
 
@@ -326,10 +327,30 @@ passes were recovered from the preserved ledger without replaying a ceremony
 transaction. Exact files, hashes, recovery diagnostics, and the four-entry
 journal are recorded in `release-1-local-ceremony-receipt.md`.
 
-The rollback proposal in that trace is sealed, approved, timelocked, and later
-retired after successful primary poststate. It is not executed. Consequently,
-this section is not evidence for the required recoverable V3 rollback trace;
-that remains one of the explicit exit blockers in Section 12.
+The independent V3 rollback rehearsal uses the exact final integrated
+controller and exact Phase 3 Spread artifacts under both engines. After a
+successful primary upgrade, the harness injects one ProgramData payload-byte
+fault through the ProgramTest bank fixture. That fault injection is explicitly
+test-only; it is not a controller instruction or production-reachable mutation
+claim. From that point onward, the actual controller SBF creates the immutable
+failure witness, activates the presealed rollback while continuously frozen,
+executes one typed Loader-v3 Upgrade CPI, mechanically verifies rollback
+ProgramData, accepts poststate with three seats, collects a separate unfreeze
+quorum, executes unfreeze, and admits the first gated Spread mutation only after
+the gate is Active.
+
+The exact final rollback artifacts and results are:
+
+| Engine | Controller artifact | Spread artifact | Result |
+|---|---|---|---|
+| SBPF v0 | 1,114,448 bytes; `2864df9cb04363ee3acef8b6df50153cf1f7e6a468215aed76125fa6ff093f98` | 1,154,184 bytes; `7b29416cba304909b5546aa4726aedbf7fb7a9b4e506d7292f171f5afcb20749` | pass, 83.44 s |
+| SBPF v2 | 1,115,080 bytes; `8f32e309db1b70581148b05fc1e3a287011f4888d5d487675a1882077b33f364` | 1,281,248 bytes; `e93c70b96c398fde4029fd2e873c547858880d668489f25477721034c944a514` | pass, 93.03 s |
+
+Wrong witness, observation/epoch drift, wrong accepted prestate, repaired
+mismatch, and mismatch-class drift all fail atomically before Loader execution.
+Only reprovable `ArtifactPayload` and `ZeroTail` mismatch classes can authorize
+rollback. The dedicated report is
+`docs/governance/evidence/release-1-v3-rollback-rehearsal.md`.
 
 ## 8. Packet and operator evidence
 
@@ -356,36 +377,25 @@ instruction fallback.
 
 ## 9. Artifact evidence
 
-The controller rebuild/linked-ELF evidence was produced from clean evidence
-commit `44c4fab`; later commits through `5acd890` alter only tests, the
-TypeScript verifier/package surface, documentation, and local-validator or
-attestation harness behavior. The controller runtime source remains the
-`1ff4422` candidate. The table does not claim that the final report commit
-itself was the artifact-build commit.
+The final controller artifacts were rebuilt from integrated verification commit
+`4167b191f9d816f07a26abf428c2d8a49e2a60b8` with platform-tools v1.53.
+The Spread artifacts are the exact governance-gated Phase 3 artifacts retained
+through the lint and TypeScript/package integration commits. These are
+synthetic local review artifacts, not production release identities.
 
 | Artifact | SBPF | Bytes | SHA-256 |
 |---|---|---:|---|
-| controller | v0 | 1,109,344 | `f7aefb5fad26836e0cb835fec728ba39ecb5e4d92aa38e2548c56b3c4137362f` |
-| controller | v2 | 1,109,432 | `4ee8bc7221f23d533d92eea797cd0b7ab67fb708603cf9ef7475f59a4ebd2c5d` |
-| Spread target | v0 | 1,155,088 | `4c9c5d791260016afd8decbd77b68625e89405f6a2e332fa5d3aeb6505ff56e5` |
-| Spread target | v2 | 1,282,184 | `efd4f8ce4fe8ca9d16d5b97247e6065e47ba3e65a862c6dccc61095cbe2032b2` |
+| controller | v0 | 1,114,448 | `2864df9cb04363ee3acef8b6df50153cf1f7e6a468215aed76125fa6ff093f98` |
+| controller | v2 | 1,115,080 | `8f32e309db1b70581148b05fc1e3a287011f4888d5d487675a1882077b33f364` |
+| Spread target | v0 | 1,154,184 | `7b29416cba304909b5546aa4726aedbf7fb7a9b4e506d7292f171f5afcb20749` |
+| Spread target | v2 | 1,281,248 | `e93c70b96c398fde4029fd2e873c547858880d668489f25477721034c944a514` |
 
-The identity-bound Spread rows are ceremony fixtures. A separate final Phase 3
-rebuild produced v0 `1,154,760` bytes / SHA-256
-`cb7e3b772ae442c9cfaf3e526c854ff1a86e7230f3b260c775f72d23b836ac16`
-and v2 `1,281,792` bytes / SHA-256
-`38f7244b6e695f4bc1f9d22503e83844e4e0d7b04c2da43b7c6f5126db058b21`;
-each passed 4/4 actual-SBF gate tests with zero stack, caller-overlap, or
-reachable-target diagnostics.
-
-The controller linked ELFs were 1,322,400 bytes / SHA-256
-`de80dd1163ff1cfc27eb94ed76b9ac0e9f27d7a92c4c79299b8a7dc23bcb1ce5`
-for v0 and 1,321,840 bytes / SHA-256
-`842b88b9f4ebb0ae759c2e660e3c17f7d8271d525ca56cc1d6861a6ac31159f2`
-for v2. Text equality held. The v0 analyzer classified 16 diagnostics as
-dependency-only with controller symbols absent; v2 reported zero diagnostics.
-These are synthetic local ceremony artifacts, not production release
-artifacts.
+The final unstripped controller linked ELFs were 1,328,840 bytes / SHA-256
+`1000095b4892850f1b3c4c1e71aacc96926af94636063549daf373fba0179e52`
+for v0 and 1,328,520 bytes / SHA-256
+`d67a96ad1f2e51f4c229076fa782cfbc64bf34e9cba7d341b753deec24a7468e`
+for v2. The v0 analyzer classified 16 diagnostics as dependency-only and proved
+every reported symbol absent from the linked ELF; v2 reported zero diagnostics.
 
 ## 10. Verification matrix
 
@@ -401,13 +411,14 @@ artifacts.
 | Full standalone local validator | pass: complete controller-SBF/real-Loader happy path, checked handoff, former-authority rejection, bootstrap activation, durable-nonce v0 upgrade, separate unfreeze, final epoch 4, and first gated Spread mutation |
 | Receipt v4 independent verifier | pass: actual receipt digest `faae42ced84225366d4ef5eb99bdfe69aaa1094e000756195382e08bd477cb11`; two read-only CLI processes, four-entry journal, lock absent |
 | Governance Rust format / Clippy `-D warnings` | pass |
-| Governance all host targets | pass: 285 unit tests plus capacity and golden suites; explicit manual/SBF cases remained ignored |
+| Governance all host targets | pass: 287 unit tests, 1 fixture generator ignored, plus capacity and golden suites; explicit manual/SBF cases remained ignored |
 | Governance release build | pass |
 | Controller SBF v0/v2 rebuild and linked-ELF stack analysis | pass with the dependency-only v0 qualification above |
 | Maximum-capacity actual controller-SBF lifecycle | pass v0 and v2; 640 raw chunks, final epoch 4, first gated Spread mutation succeeded |
-| Forced historical Loader rollback/differential tests | fail before Loader: retired V1/V2 fixtures reject current config; not V3 rollback evidence |
+| Final ProgramData chunk matrix | pass v0 and v2; 16 KiB selected at 158,883 / 193,681 CU; 32/64/128 KiB measured and rejected |
+| Actual controller-SBF V3 rollback | pass v0 and v2 against exact Spread artifacts; real Loader-v3 recovery, poststate, and separate unfreeze |
 | Spread format and host tests | final rerun recorded in Spread integration report |
-| Spread Clippy `-D warnings` | fail: 86 pre-existing/out-of-scope errors; governance gate absent from error list |
+| Spread Clippy `-D warnings` | pass: full locked workspace/all-targets, zero warnings |
 | Workflow syntax | pass: actionlint 1.7.12 and PyYAML parse across all three workflow files |
 | Changed shell scripts | pass: ShellCheck 0.11.0 and `bash -n` |
 | Hosted CI | not run on this unpushed branch; baseline runs blocked by billing before steps |
@@ -418,7 +429,11 @@ Exact inventory relative to
 `c2771a7a74c895bbb9a81ba38273e19ac25931ea` (`M` modified, `A` added):
 
 ```text
+M .github/workflows/governance-trust-root.yml
 M Cargo.lock
+A benchmarks/programdata_observation_chunk_controller_sbf/.gitignore
+A benchmarks/programdata_observation_chunk_controller_sbf/run-benchmark.sh
+A benchmarks/programdata_observation_chunk_controller_sbf/summarize_benchmark.py
 M clients/ts/package.json
 M clients/ts/tools/check-package-consumer.ts
 A clients/ts/tools/finalize-local-ceremony-receipt.ts
@@ -451,8 +466,11 @@ A clients/ts/upgradeGovernance/release1V3Builders.ts
 A clients/ts/upgradeGovernance/release1V3CustodyInstructions.ts
 A clients/ts/upgradeGovernance/release1V3Instructions.ts
 M clients/ts/upgradeGovernance/spreadGateBridgeV1.ts
+A docs/governance/evidence/programdata-observation-chunk-controller-sbf-matrix-v1.json
 M docs/governance/evidence/release-1-packet-surface-v1.json
+A docs/governance/evidence/release-1-v3-rollback-rehearsal.md
 A docs/governance/final-predeployment-audit-scope.md
+A docs/governance/programdata-observation-chunk-controller-sbf-matrix-v1.md
 A docs/governance/release-1-capacity-liveness-audit.md
 A docs/governance/release-1-ceremony-closure-report.md
 A docs/governance/release-1-local-ceremony-receipt.md
@@ -485,6 +503,7 @@ A programs/upgrade_controller/tests/capacity_liveness_regression.rs
 A programs/upgrade_controller/tests/ceremony_closure_program_test.rs
 M programs/upgrade_controller/tests/loader_program_test.rs
 M programs/upgrade_controller/tests/program_test.rs
+A programs/upgrade_controller/tests/programdata_observation_chunk_sbf.rs
 A programs/upgrade_controller/tests/release1_ceremony_golden.rs
 M scripts/build-sbpf-checked.sh
 ```
@@ -495,14 +514,11 @@ records its separate exact inventory.
 
 ## 12. Remaining inputs and blockers
 
-This branch is not exit-complete for two engineering reasons:
-
-1. the V3 happy path is real-Loader-rehearsed, but no actual controller-SBF V3
-   rollback execution exists; forcing the retained ignored V1/V2 rollback and
-   differential tests fails during their obsolete configuration preflight and
-   therefore supplies no Loader evidence; and
-2. Spread's exact Clippy gate still reports 86 unrelated pre-existing errors.
-   Those market/oracle/writer/DLMM/state paths were deliberately not changed.
+The three previously recorded local engineering blockers are closed: the full
+four-size ProgramData chunk matrix passes its stated gate, the exact Spread
+workspace is Clippy-clean with warnings denied, and the V3 rollback completes
+through actual controller SBF and Loader-v3 on both engines. No known local
+engineering blocker remains from that closure list.
 
 Engineering completion also cannot supply the external production trust
 inputs. The remaining production items are the final controller identity and
@@ -512,9 +528,10 @@ identity manifest, immutable-controller receipt, live compatibility census,
 operator ALT/nonce plan, and separate authorization for each live signature
 and mutation.
 
-Hosted CI must also execute successfully after a future authorized push; branch
-protection and required checks are recommended. The present GitHub billing
-failure must not be described as a repository test result.
+Hosted CI must still execute successfully after feature-branch publication;
+branch protection and required checks are recommended. The present GitHub
+billing failure must not be described as a repository test result or source
+failure.
 
 ## 13. Safety statement
 
