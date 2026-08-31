@@ -214,7 +214,8 @@ const COMPUTE_UNIT_LIMIT = 1_400_000;
 const COMPUTE_UNIT_PRICE = 1n;
 const PLAN_TTL_SLOTS = 100_000;
 const CEREMONY_SEAT_TERM_SAFETY_SLOTS = 10_000n;
-const CEREMONY_TRANSITION_SLOT_ALLOWANCE = 64n;
+const CEREMONY_FINALIZED_SLOTS_PER_TRANSACTION_ALLOWANCE = 128n;
+const CEREMONY_TRANSITION_SLOT_ALLOWANCE = 2_048n;
 const PROGRAMDATA_HEADER_LEN = 45;
 const PROGRAM_ACCOUNT_LEN = 36;
 const MAX_PACKET_BYTES = 1_232;
@@ -243,6 +244,12 @@ const PLAN_KEYS = [
   "planValidUntilSlot", "identities", "baseAccountFingerprints", "artifact", "evidence",
   "gate", "governance", "programdata", "observation", "handoff", "transactionBlueprints",
   "toolSha256",
+];
+const APPROVAL_SEAT_RUNWAY_KEYS = [
+  "cycleCount", "reviewSlotsPerCycle", "majorDelaySlotsPerCycle",
+  "observationTransactionAllowance", "finalizedSlotsPerTransactionAllowance",
+  "observationSlotAllowance", "transitionSlotAllowance", "safetyMarginSlots",
+  "requiredTermEndSlot", "approvalSeatTermEndSlots",
 ];
 
 const FROZEN_GATE_CENSUS_KEYS = [
@@ -2194,10 +2201,12 @@ function approvalSeatRunway(state, cycleCount, observationTransactionCount, labe
   const reviewSlots = state.config.voteReviewSlots;
   const majorDelaySlots = state.config.majorDelaySlots;
   assert(reviewSlots > 0n && majorDelaySlots > 0n, `${label} timing policy is invalid`);
+  const observationSlotAllowance = BigInt(observationTransactionCount)
+    * CEREMONY_FINALIZED_SLOTS_PER_TRANSACTION_ALLOWANCE;
   const requiredTermEndSlot = BigInt(state.slot)
     + (BigInt(cycleCount) * (reviewSlots + majorDelaySlots))
     + CEREMONY_TRANSITION_SLOT_ALLOWANCE
-    + BigInt(observationTransactionCount)
+    + observationSlotAllowance
     + CEREMONY_SEAT_TERM_SAFETY_SLOTS;
   const approvalSeatTermEndSlots = state.council.seats.slice(0, 3).map((seat, index) => {
     assert.equal(seat.active, true, `${label} approval seat ${index} is inactive`);
@@ -2210,6 +2219,8 @@ function approvalSeatRunway(state, cycleCount, observationTransactionCount, labe
     reviewSlotsPerCycle: reviewSlots.toString(),
     majorDelaySlotsPerCycle: majorDelaySlots.toString(),
     observationTransactionAllowance: observationTransactionCount,
+    finalizedSlotsPerTransactionAllowance: CEREMONY_FINALIZED_SLOTS_PER_TRANSACTION_ALLOWANCE.toString(),
+    observationSlotAllowance: observationSlotAllowance.toString(),
     transitionSlotAllowance: CEREMONY_TRANSITION_SLOT_ALLOWANCE.toString(),
     safetyMarginSlots: CEREMONY_SEAT_TERM_SAFETY_SLOTS.toString(),
     requiredTermEndSlot: requiredTermEndSlot.toString(),
@@ -2217,14 +2228,49 @@ function approvalSeatRunway(state, cycleCount, observationTransactionCount, labe
   };
 }
 
-function assertApprovalSeatRunway(plan, state, label) {
+function assertApprovalSeatRunway(
+  plan,
+  state,
+  label,
+  { expectedCycleCount },
+) {
   const runway = plan.governance.approvalSeatRunway;
   assert(runway && typeof runway === "object", `${label} approval-seat runway is absent`);
-  assert([1, 2].includes(runway.cycleCount), `${label} approval-seat cycle count changed`);
+  assertExactKeys(runway, APPROVAL_SEAT_RUNWAY_KEYS, `${label} approval-seat runway`);
+  assert([1, 2].includes(expectedCycleCount), `${label} expected cycle count is invalid`);
+  assert(Number.isSafeInteger(plan.observation.rawChunkCount) && plan.observation.rawChunkCount >= 1, `${label} raw observation count is invalid`);
+  assert(Number.isSafeInteger(plan.artifact.chunkCount) && plan.artifact.chunkCount >= 1, `${label} artifact observation count is invalid`);
+  const canonicalObservationTransactionCount = 2
+    + plan.observation.rawChunkCount
+    + plan.artifact.chunkCount;
+  assert(Array.isArray(plan.transactionBlueprints.observation), `${label} observation blueprints are absent`);
+  assert.equal(plan.transactionBlueprints.observation.length, canonicalObservationTransactionCount, `${label} observation blueprint count changed`);
+  const expectedObservationTransactionCount = canonicalObservationTransactionCount * expectedCycleCount;
+  assert.equal(runway.cycleCount, expectedCycleCount, `${label} approval-seat cycle count changed`);
   assert.equal(runway.reviewSlotsPerCycle, state.config.voteReviewSlots.toString(), `${label} review timing changed`);
   assert.equal(runway.majorDelaySlotsPerCycle, state.config.majorDelaySlots.toString(), `${label} major delay changed`);
+  assert.equal(runway.observationTransactionAllowance, expectedObservationTransactionCount, `${label} observation transaction allowance changed`);
+  assert.equal(runway.finalizedSlotsPerTransactionAllowance, CEREMONY_FINALIZED_SLOTS_PER_TRANSACTION_ALLOWANCE.toString(), `${label} finalized-slot allowance changed`);
+  assert.equal(
+    runway.observationSlotAllowance,
+    (BigInt(runway.observationTransactionAllowance) * CEREMONY_FINALIZED_SLOTS_PER_TRANSACTION_ALLOWANCE).toString(),
+    `${label} observation slot allowance changed`,
+  );
   assert.equal(runway.transitionSlotAllowance, CEREMONY_TRANSITION_SLOT_ALLOWANCE.toString(), `${label} transition allowance changed`);
   assert.equal(runway.safetyMarginSlots, CEREMONY_SEAT_TERM_SAFETY_SLOTS.toString(), `${label} safety margin changed`);
+  assert(Number.isSafeInteger(plan.plannedAtSlot) && plan.plannedAtSlot > 0, `${label} planned slot is invalid`);
+  assert.equal(
+    plan.planValidUntilSlot,
+    (BigInt(plan.plannedAtSlot) + BigInt(PLAN_TTL_SLOTS)).toString(),
+    `${label} plan expiry changed`,
+  );
+  const requiredTermEndSlot = BigInt(plan.plannedAtSlot)
+    + (BigInt(expectedCycleCount) * (state.config.voteReviewSlots + state.config.majorDelaySlots))
+    + BigInt(runway.observationSlotAllowance)
+    + CEREMONY_TRANSITION_SLOT_ALLOWANCE
+    + CEREMONY_SEAT_TERM_SAFETY_SLOTS;
+  assert.equal(runway.requiredTermEndSlot, requiredTermEndSlot.toString(), `${label} required term end changed`);
+  assert(requiredTermEndSlot < BigInt(plan.planValidUntilSlot), `${label} seat-term runway does not fit before plan expiry`);
   assert(Array.isArray(runway.approvalSeatTermEndSlots) && runway.approvalSeatTermEndSlots.length === 3, `${label} approval-seat term vector changed`);
   state.council.seats.slice(0, 3).forEach((seat, index) => {
     assert.equal(runway.approvalSeatTermEndSlots[index], seat.termEndSlot.toString(), `${label} approval seat ${index} term changed`);
@@ -2925,7 +2971,9 @@ async function readActivationLiveState(
   assert.equal(state.council.setHash.toString("hex"), plan.governance.councilHash, "activation council hash changed");
   assert.equal(state.policy.policyHash.toString("hex"), plan.governance.policyHash, "activation policy hash changed");
   if (proofBufferCloseReceipt?.replanning !== true) {
-    assertApprovalSeatRunway(plan, state, "bootstrap activation plan");
+    assertApprovalSeatRunway(plan, state, "bootstrap activation plan", {
+      expectedCycleCount: 1,
+    });
   }
   assert.equal(state.targetProgramdata.deployedSlot.toString(), plan.programdata.deployedSlot, "target deployed slot changed");
   assert.equal(state.targetProgramdata.raw.length, plan.programdata.rawBytes, "target raw length changed");
@@ -3909,7 +3957,9 @@ function assertPlanBase(plan, inputs, state, { postHandoff = false } = {}) {
   assert.equal(plan.governance.councilVersion, state.council.version.toString());
   assert.equal(plan.governance.councilHash, state.council.setHash.toString("hex"));
   assert.equal(plan.governance.policyHash, state.policy.policyHash.toString("hex"));
-  assertApprovalSeatRunway(plan, state, "handoff plan");
+  assertApprovalSeatRunway(plan, state, "handoff plan", {
+    expectedCycleCount: 2,
+  });
   assert.equal(plan.programdata.deployedSlot, state.targetProgramdata.deployedSlot.toString());
   assert.equal(plan.programdata.rawBytes, state.targetProgramdata.raw.length);
   assert.equal(plan.programdata.capacity, state.targetProgramdata.payload.length);
@@ -7451,15 +7501,56 @@ async function selfTest() {
       seats: Array.from({ length: 5 }, () => ({ active: true, termStartSlot: 0n, termEndSlot: 20_000n })),
     },
   };
-  const runway = approvalSeatRunway(runwayState, 2, 3, "self-test two-cycle runway");
+  const runway = approvalSeatRunway(runwayState, 2, 8, "self-test two-cycle runway");
   assert.equal(runway.cycleCount, 2);
-  assert.equal(runway.requiredTermEndSlot, "10227");
-  assertApprovalSeatRunway({ governance: { approvalSeatRunway: runway } }, runwayState, "self-test runway");
+  assert.equal(runway.requiredTermEndSlot, "13232");
+  const runwayPlan = {
+    plannedAtSlot: runwayState.slot,
+    planValidUntilSlot: "100100",
+    observation: { rawChunkCount: 1 },
+    artifact: { chunkCount: 1 },
+    transactionBlueprints: { observation: Array.from({ length: 4 }, () => ({})) },
+    governance: { approvalSeatRunway: runway },
+  };
+  const runwayExpectation = { expectedCycleCount: 2 };
+  assertApprovalSeatRunway(runwayPlan, runwayState, "self-test runway", runwayExpectation);
   const shortRunwayState = structuredClone(runwayState);
   shortRunwayState.council.seats[0].termEndSlot = BigInt(runway.requiredTermEndSlot);
   assert.throws(
-    () => assertApprovalSeatRunway({ governance: { approvalSeatRunway: runway } }, shortRunwayState, "self-test short runway"),
+    () => assertApprovalSeatRunway(runwayPlan, shortRunwayState, "self-test short runway", runwayExpectation),
     /does not cover|term changed/u,
+  );
+  assert.throws(
+    () => assertApprovalSeatRunway({ ...runwayPlan, governance: { approvalSeatRunway: { ...runway, cycleCount: 1 } } }, runwayState, "self-test cycle tamper", runwayExpectation),
+    /cycle count changed/u,
+  );
+  assert.throws(
+    () => assertApprovalSeatRunway({ ...runwayPlan, governance: { approvalSeatRunway: { ...runway, observationTransactionAllowance: 2 } } }, runwayState, "self-test count tamper", runwayExpectation),
+    /observation transaction allowance changed/u,
+  );
+  assert.throws(
+    () => assertApprovalSeatRunway({ ...runwayPlan, transactionBlueprints: { observation: Array.from({ length: 3 }, () => ({})) }, governance: { approvalSeatRunway: { ...runway, observationTransactionAllowance: 6, observationSlotAllowance: "768" } } }, runwayState, "self-test coordinated count tamper", runwayExpectation),
+    /observation blueprint count changed/u,
+  );
+  assert.throws(
+    () => assertApprovalSeatRunway({ ...runwayPlan, governance: { approvalSeatRunway: { ...runway, requiredTermEndSlot: "13233" } } }, runwayState, "self-test deadline tamper", runwayExpectation),
+    /required term end changed/u,
+  );
+  assert.throws(
+    () => assertApprovalSeatRunway({ ...runwayPlan, planValidUntilSlot: runway.requiredTermEndSlot }, runwayState, "self-test ttl boundary", runwayExpectation),
+    /plan expiry changed/u,
+  );
+  const longRunwayState = structuredClone(runwayState);
+  longRunwayState.config.majorDelaySlots = 50_000n;
+  longRunwayState.council.seats.forEach((seat) => { seat.termEndSlot = 1_000_000n; });
+  const longRunway = approvalSeatRunway(longRunwayState, 2, 8, "self-test long runway");
+  assert.throws(
+    () => assertApprovalSeatRunway({ ...runwayPlan, governance: { approvalSeatRunway: longRunway } }, longRunwayState, "self-test long runway", runwayExpectation),
+    /does not fit before plan expiry/u,
+  );
+  assert.throws(
+    () => assertApprovalSeatRunway({ ...runwayPlan, governance: { approvalSeatRunway: { ...runway, extra: true } } }, runwayState, "self-test runway key", runwayExpectation),
+    /keys changed/u,
   );
   const recovery = {
     source: {
