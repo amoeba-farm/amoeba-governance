@@ -219,6 +219,10 @@ const PROGRAMDATA_HEADER_LEN = 45;
 const PROGRAM_ACCOUNT_LEN = 36;
 const MAX_PACKET_BYTES = 1_232;
 const FINALIZED_STATUS_POLL_INTERVAL_MS = 30_000;
+const FINALIZED_CONNECTION_CONFIG = Object.freeze({
+  commitment: "finalized",
+  disableRetryOnRateLimit: true,
+});
 const ZERO_32 = Buffer.alloc(32);
 const SIGNER_TOOL = fileURLToPath(new URL("./gcp-kms-ed25519-signer.mjs", import.meta.url));
 const CEREMONY_BUILD_RECEIPT_FILE = "spread-governance-bridge-ceremony-build-receipt-v1.json";
@@ -3454,7 +3458,7 @@ async function planHandoff() {
   await withCeremonyRpcOwnerLock(inputs.runDir, planningId, async () => {
     const journal = await openJournal(inputs.runDir, PLANNING_JOURNAL_NAME, planningId);
     try {
-      const rawConnection = new Connection(inputs.rpcConfiguration.stateRpcUrl, { commitment: "finalized" });
+      const rawConnection = new Connection(inputs.rpcConfiguration.stateRpcUrl, FINALIZED_CONNECTION_CONFIG);
       const connection = guardRpcConnection(rawConnection, journal, "spread-handoff-plan");
       const genesis = await connection.getGenesisHash();
       assert.equal(genesis, EXPECTED_GENESIS, "state RPC genesis changed");
@@ -3614,7 +3618,7 @@ async function planActivation() {
   await withCeremonyRpcOwnerLock(inputs.runDir, planningId, async () => {
     const journal = await openJournal(inputs.runDir, activationPlanningJournalName(planningId), planningId);
     try {
-      const rawConnection = new Connection(inputs.rpcConfiguration.stateRpcUrl, { commitment: "finalized" });
+      const rawConnection = new Connection(inputs.rpcConfiguration.stateRpcUrl, FINALIZED_CONNECTION_CONFIG);
       const connection = guardRpcConnection(rawConnection, journal, "bootstrap-activation-plan");
       assert.equal(await connection.getGenesisHash(), EXPECTED_GENESIS, "state RPC genesis changed");
       const handoff = await validatedLiveState(connection, inputs, handoffPlan);
@@ -6871,7 +6875,7 @@ async function executeHandoff() {
   await withCeremonyRpcOwnerLock(inputs.runDir, plan.operationId, async () => {
     const journal = await openJournal(inputs.runDir, JOURNAL_NAME, plan.operationId);
     try {
-      const rawConnection = new Connection(inputs.rpcConfiguration.stateRpcUrl, { commitment: "finalized" });
+      const rawConnection = new Connection(inputs.rpcConfiguration.stateRpcUrl, FINALIZED_CONNECTION_CONFIG);
       const connection = guardRpcConnection(rawConnection, journal, "spread-handoff-execute");
       await journal.append("session-started", {
         command: "execute-handoff",
@@ -6928,7 +6932,7 @@ async function statusHandoff() {
   await withCeremonyRpcOwnerLock(inputs.runDir, plan.operationId, async () => {
     const journal = await openJournal(inputs.runDir, JOURNAL_NAME, plan.operationId);
     try {
-      const rawConnection = new Connection(inputs.rpcConfiguration.stateRpcUrl, { commitment: "finalized" });
+      const rawConnection = new Connection(inputs.rpcConfiguration.stateRpcUrl, FINALIZED_CONNECTION_CONFIG);
       const connection = guardRpcConnection(rawConnection, journal, "spread-handoff-status");
       assert.equal(await connection.getGenesisHash(), EXPECTED_GENESIS, "state RPC genesis changed");
       const validated = await validatedLiveState(connection, inputs, plan);
@@ -6962,7 +6966,7 @@ async function executeActivation() {
   await withCeremonyRpcOwnerLock(inputs.runDir, plan.operationId, async () => {
     const journal = await openJournal(inputs.runDir, activationJournalName(plan.operationId), plan.operationId);
     try {
-      const rawConnection = new Connection(inputs.rpcConfiguration.stateRpcUrl, { commitment: "finalized" });
+      const rawConnection = new Connection(inputs.rpcConfiguration.stateRpcUrl, FINALIZED_CONNECTION_CONFIG);
       const connection = guardRpcConnection(rawConnection, journal, "spread-bootstrap-activation-execute");
       await journal.append("session-started", {
         command: "execute-activation",
@@ -7199,7 +7203,7 @@ async function statusActivation() {
   await withCeremonyRpcOwnerLock(inputs.runDir, plan.operationId, async () => {
     const journal = await openJournal(inputs.runDir, activationJournalName(plan.operationId), plan.operationId);
     try {
-      const rawConnection = new Connection(inputs.rpcConfiguration.stateRpcUrl, { commitment: "finalized" });
+      const rawConnection = new Connection(inputs.rpcConfiguration.stateRpcUrl, FINALIZED_CONNECTION_CONFIG);
       const connection = guardRpcConnection(rawConnection, journal, "spread-bootstrap-activation-status");
       assert.equal(await connection.getGenesisHash(), EXPECTED_GENESIS, "state RPC genesis changed");
       const negativeProof = proofEvidence.negativeProof;
@@ -7293,6 +7297,11 @@ async function selfTest() {
     FINALIZED_STATUS_POLL_INTERVAL_MS,
     30_000,
     "finalized status polling is faster than 30 seconds",
+  );
+  assert.deepEqual(
+    FINALIZED_CONNECTION_CONFIG,
+    { commitment: "finalized", disableRetryOnRateLimit: true },
+    "Solana Web3 rate-limit retries are not disabled",
   );
   const ids = derivedIdentities(1n);
   const identityValues = [
@@ -7529,6 +7538,7 @@ async function selfTest() {
     controllerAuthority: ids.authority.toBase58(),
     protocolGate: ids.gate.toBase58(),
     finalizedStatusPollIntervalMs: FINALIZED_STATUS_POLL_INTERVAL_MS,
+    web3RateLimitRetriesDisabled: FINALIZED_CONNECTION_CONFIG.disableRetryOnRateLimit,
     sharedCeremonyRpcOwnerLock: runtimeSafety.ceremonyRpcOwnerLockName,
     runtimeFinalizedTransactionPollIntervalMs: runtimeSafety.finalizedTransactionPollIntervalMs,
     runtimeMinimumRpcRateLimitBackoffMs: runtimeSafety.minimumRpcRateLimitBackoffMs,
