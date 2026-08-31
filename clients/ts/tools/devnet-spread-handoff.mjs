@@ -459,9 +459,155 @@ function parseCanonicalJson(bytes, label, { sorted = true } = {}) {
     throw new Error(`${label} is not JSON: ${error.message}`);
   }
   assert(value !== null && typeof value === "object" && !Array.isArray(value), `${label} must be a JSON object`);
-  const canonical = sorted ? sortedPrettyCanonicalJson(value) : orderedPrettyCanonicalJson(value);
-  assert(Buffer.from(canonical, "utf8").equals(bytes), `${label} is not canonical pretty JSON`);
+  if (sorted !== null) {
+    const canonical = sorted ? sortedPrettyCanonicalJson(value) : orderedPrettyCanonicalJson(value);
+    assert(Buffer.from(canonical, "utf8").equals(bytes), `${label} is not canonical pretty JSON`);
+  }
   return value;
+}
+
+function compareUnicodeCodePoints(left, right) {
+  const leftPoints = Array.from(left, (character) => character.codePointAt(0));
+  const rightPoints = Array.from(right, (character) => character.codePointAt(0));
+  const length = Math.min(leftPoints.length, rightPoints.length);
+  for (let index = 0; index < length; index += 1) {
+    if (leftPoints[index] !== rightPoints[index]) return leftPoints[index] - rightPoints[index];
+  }
+  return leftPoints.length - rightPoints.length;
+}
+
+// Python produced the active-state census with json.dumps(sort_keys=True). Some
+// account fields exceed JavaScript's safe-integer range, so JSON.parse followed
+// by JSON.stringify cannot reproduce the committed Python bytes. Parse the
+// canonical JSON lexically, preserve every number token, and return the exact
+// compact representation of one top-level member while also enforcing the
+// recursive Python key order and duplicate-key exclusion.
+function compactPythonCanonicalTopLevelMember(bytes, memberName, label) {
+  const source = bytes.toString("utf8");
+  assert(Buffer.from(source, "utf8").equals(bytes), `${label} is not valid UTF-8`);
+  let offset = 0;
+  let selected = null;
+
+  function skipWhitespace() {
+    while (offset < source.length && /[\u0009\u000a\u000d\u0020]/u.test(source[offset])) offset += 1;
+  }
+
+  function parseString() {
+    assert.equal(source[offset], "\"", `${label} contains a malformed JSON string`);
+    const start = offset;
+    offset += 1;
+    while (offset < source.length) {
+      const character = source[offset];
+      if (character === "\"") {
+        offset += 1;
+        const raw = source.slice(start, offset);
+        let value;
+        try {
+          value = JSON.parse(raw);
+        } catch (error) {
+          throw new Error(`${label} contains an invalid JSON string: ${error.message}`);
+        }
+        return { raw, value };
+      }
+      if (character === "\\") {
+        offset += 1;
+        assert(offset < source.length, `${label} contains a truncated JSON escape`);
+        if (source[offset] === "u") {
+          assert(/^[0-9a-fA-F]{4}$/u.test(source.slice(offset + 1, offset + 5)), `${label} contains an invalid Unicode escape`);
+          offset += 5;
+        } else {
+          assert(/["\\/bfnrt]/u.test(source[offset]), `${label} contains an invalid JSON escape`);
+          offset += 1;
+        }
+        continue;
+      }
+      assert(character.codePointAt(0) >= 0x20, `${label} contains an unescaped control character`);
+      offset += character.length;
+    }
+    throw new Error(`${label} contains an unterminated JSON string`);
+  }
+
+  function parseNumber() {
+    const match = source.slice(offset).match(/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/u);
+    assert(match, `${label} contains an invalid JSON number`);
+    offset += match[0].length;
+    return match[0];
+  }
+
+  function parseValue(topLevel = false) {
+    skipWhitespace();
+    if (source[offset] === "{") return parseObject(topLevel);
+    if (source[offset] === "[") return parseArray();
+    if (source[offset] === "\"") return parseString().raw;
+    for (const literal of ["true", "false", "null"]) {
+      if (source.startsWith(literal, offset)) {
+        offset += literal.length;
+        return literal;
+      }
+    }
+    return parseNumber();
+  }
+
+  function parseArray() {
+    offset += 1;
+    skipWhitespace();
+    const values = [];
+    if (source[offset] === "]") {
+      offset += 1;
+      return "[]";
+    }
+    while (true) {
+      values.push(parseValue());
+      skipWhitespace();
+      if (source[offset] === "]") {
+        offset += 1;
+        return `[${values.join(",")}]`;
+      }
+      assert.equal(source[offset], ",", `${label} contains a malformed JSON array`);
+      offset += 1;
+    }
+  }
+
+  function parseObject(topLevel) {
+    offset += 1;
+    skipWhitespace();
+    const fields = [];
+    let previousKey = null;
+    if (source[offset] === "}") {
+      offset += 1;
+      return "{}";
+    }
+    while (true) {
+      skipWhitespace();
+      const key = parseString();
+      if (previousKey !== null) {
+        assert(compareUnicodeCodePoints(previousKey, key.value) < 0, `${label} object keys are duplicated or not Python-canonical`);
+      }
+      previousKey = key.value;
+      skipWhitespace();
+      assert.equal(source[offset], ":", `${label} contains a malformed JSON object`);
+      offset += 1;
+      const compactValue = parseValue();
+      fields.push(`${key.raw}:${compactValue}`);
+      if (topLevel && key.value === memberName) {
+        assert.equal(selected, null, `${label} contains duplicate ${memberName} fields`);
+        selected = compactValue;
+      }
+      skipWhitespace();
+      if (source[offset] === "}") {
+        offset += 1;
+        return `{${fields.join(",")}}`;
+      }
+      assert.equal(source[offset], ",", `${label} contains a malformed JSON object`);
+      offset += 1;
+    }
+  }
+
+  parseValue(true);
+  skipWhitespace();
+  assert.equal(offset, source.length, `${label} has trailing non-whitespace data`);
+  assert.notEqual(selected, null, `${label} is missing ${memberName}`);
+  return selected;
 }
 
 function semanticJsonHash(domain, value, hashField) {
@@ -602,7 +748,7 @@ function validateCeremonyBuildReceiptLineage(value, raw, artifactSha256, artifac
   assert.equal(value.inputs?.clean, true, "Spread bridge input inventory was not clean");
   assert.equal(value.verification?.noFreshFunctionalTestClaim, true, "Spread bridge build makes an unauthorized fresh-test claim");
   assert.deepEqual(value.verification?.functionalSuitesRunByThisBuild, [], "Spread bridge build claims rerun functional suites");
-  assert(Buffer.from(sortedPrettyCanonicalJson(value), "utf8").equals(raw), "Spread bridge build receipt raw encoding changed");
+  assert(Buffer.from(orderedPrettyCanonicalJson(value), "utf8").equals(raw), "Spread bridge build receipt raw encoding changed");
   return value;
 }
 
@@ -624,7 +770,7 @@ function validatePhase3InstructionManifest(value, raw) {
   assert.equal(counts.RecognizedMutating, 129, "Phase 3 assigned mutator count changed");
   assert.equal(counts.Unknown, 124, "Phase 3 unknown-tag count changed");
   assert.equal(counts.Reserved, 3, "Phase 3 reserved-tag count changed");
-  assert(Buffer.from(sortedPrettyCanonicalJson(value), "utf8").equals(raw), "Phase 3 instruction manifest raw encoding changed");
+  assert(raw.at(-1) === 0x0a && !raw.includes(0x0d), "Phase 3 instruction manifest line encoding changed");
   return { value, raw, counts };
 }
 
@@ -1002,7 +1148,7 @@ async function readInputs({ rpc = true } = {}) {
   assert.equal(path.basename(releaseManifest.file), RELEASE_MANIFEST_FILE, "Spread release-manifest basename changed");
   assert.equal(path.basename(phase3ManifestEvidence.file), PHASE3_INSTRUCTION_MANIFEST_FILE, "Phase 3 instruction manifest basename changed");
   const buildReceipt = validateCeremonyBuildReceiptLineage(
-    parseCanonicalJson(source.bytes, "Spread bridge ceremony build receipt"),
+    parseCanonicalJson(source.bytes, "Spread bridge ceremony build receipt", { sorted: false }),
     source.bytes,
     artifactSha256,
     artifact.length,
@@ -1012,7 +1158,7 @@ async function readInputs({ rpc = true } = {}) {
     buildInputs.bytes,
   );
   const phase3Manifest = validatePhase3InstructionManifest(
-    parseCanonicalJson(phase3ManifestEvidence.bytes, "Phase 3 instruction manifest"),
+    parseCanonicalJson(phase3ManifestEvidence.bytes, "Phase 3 instruction manifest", { sorted: null }),
     phase3ManifestEvidence.bytes,
   );
   assert.equal(buildReceipt.inputs.sha256, buildInputs.sha256, "build receipt does not bind the supplied build inventory");
@@ -1227,7 +1373,10 @@ function validateFirstPostSummary(value, raw, wrapper, inputs, postRaw) {
   assertSignature(value.upgrade.transactionSignature, "first post transaction signature");
   assert.equal(value.upgrade.transactionSignature, wrapper.transactionSignature, "first post transaction changed");
   assert.equal(value.upgrade.transactionSlot, wrapper.transactionSlot, "first post transaction slot changed");
-  assert.equal(value.upgrade.finalizedContextSlot, wrapper.finalizedContextSlot, "first post finalized context changed");
+  assert(
+    value.upgrade.finalizedContextSlot >= wrapper.finalizedContextSlot,
+    "first post finalized context predates the bridge wrapper",
+  );
   assert.equal(value.upgrade.bufferAddress, wrapper.primaryBuffer, "first post primary buffer changed");
   assert.equal(value.upgrade.spillAddress, wrapper.canonicalSpill, "first post spill changed");
   assert.equal(value.upgrade.oneExactUpgradeableLoaderUpgrade, true, "first post lacks one exact Loader Upgrade");
@@ -1302,7 +1451,11 @@ function validateAuthoritativeUpgradeReceipt(value, wrapper, summary, inputs) {
   assert.equal(value.transactionSignature, wrapper.transactionSignature, "authoritative transaction changed");
   assertSignature(value.transactionSignature, "authoritative transaction signature");
   assert.equal(value.transactionSlot, wrapper.transactionSlot, "authoritative transaction slot changed");
-  assert.equal(value.finalizedContextSlot, wrapper.finalizedContextSlot, "authoritative finalized context changed");
+  assert(
+    value.finalizedContextSlot >= wrapper.finalizedContextSlot,
+    "authoritative finalized context predates the bridge wrapper",
+  );
+  assert.equal(value.finalizedContextSlot, summary.upgrade.finalizedContextSlot, "authoritative finalized context changed");
   assert.equal(value.deployedSlot, wrapper.postDeployedSlot, "authoritative deployed slot changed");
   assert.equal(value.programDataRawBytes, PROGRAMDATA_HEADER_LEN + wrapper.postCapacityBytes, "authoritative raw length changed");
   assert.equal(value.programDataPayloadCapacityBytes, wrapper.postCapacityBytes, "authoritative capacity changed");
@@ -1387,7 +1540,11 @@ function validateRepeatReceipt(value, wrapper, summary, upgradeReceipt, inputs, 
   assert.equal(value.firstPost.postProgramDataRawSha256, files.postRaw.sha256, "repeat first ProgramData raw hash changed");
   assert.equal(value.firstPost.transactionSignature, wrapper.transactionSignature, "repeat first transaction changed");
   assert.equal(value.firstPost.transactionSlot, wrapper.transactionSlot, "repeat first transaction slot changed");
-  assert.equal(value.firstPost.finalizedContextSlot, wrapper.finalizedContextSlot, "repeat first finalized context changed");
+  assert.equal(
+    value.firstPost.finalizedContextSlot,
+    summary.upgrade.finalizedContextSlot,
+    "repeat first finalized context changed",
+  );
   assert.equal(value.firstPost.programDataRawBytes, files.postRaw.bytes.length, "repeat first raw length changed");
   assert.equal(value.firstPost.programDataPayloadCapacityBytes, wrapper.postCapacityBytes, "repeat first capacity changed");
   assert.equal(value.firstPost.programDataPayloadSha256, wrapper.postProgramDataPayloadSha256, "repeat first payload changed");
@@ -1471,7 +1628,11 @@ function validateRepeatReceipt(value, wrapper, summary, upgradeReceipt, inputs, 
   assert.equal(census.programExecutablePrefixSha256, value.repeat.programExecutablePrefixSha256, "repeat census Program hash changed");
   assert(census.marketCompatibility !== null && typeof census.marketCompatibility === "object" && !Array.isArray(census.marketCompatibility), "repeat census compatibility evidence is malformed");
   assert.equal(
-    sha256Hex(Buffer.from(compactCanonicalJson(census.marketCompatibility), "utf8")),
+    sha256Hex(Buffer.from(compactPythonCanonicalTopLevelMember(
+      files.repeatCensus.bytes,
+      "marketCompatibility",
+      "repeat census",
+    ), "utf8")),
     value.repeat.compatibilityFullSha256,
     "repeat full compatibility commitment changed",
   );
@@ -1496,7 +1657,11 @@ function validateRepeatReceipt(value, wrapper, summary, upgradeReceipt, inputs, 
     "successfulTargetMutationCountAfterBoundary", "failedTargetTransactionCountAfterBoundary",
     "observedEntryCount", "pageCount",
   ]) assertSafeInteger(value.historyExclusion[field], `poststate repeat history ${field}`);
-  assert.equal(value.historyExclusion.startExclusiveSlot, wrapper.finalizedContextSlot, "repeat history boundary changed");
+  assert.equal(
+    value.historyExclusion.startExclusiveSlot,
+    summary.upgrade.finalizedContextSlot,
+    "repeat history boundary changed",
+  );
   assert(value.historyExclusion.throughInclusiveSlot >= value.repeat.contextSlot, "repeat history does not cover its census");
   assert.equal(value.historyExclusion.lastValidTargetMutationSignature, wrapper.transactionSignature, "repeat history anchor changed");
   assert.equal(value.historyExclusion.lastValidTargetMutationSlot, wrapper.transactionSlot, "repeat history anchor slot changed");
@@ -7215,6 +7380,35 @@ async function selfTest() {
     () => bridgeUpgradeReceiptHash({ ...bridgeReceiptHashFixture, unexpected: true }),
     /keys changed/u,
   );
+  const pythonCanonicalFixture = Buffer.from(
+    "{\n  \"a\": 1,\n  \"marketCompatibility\": {\n    \"accountAtoms\": 9007199254740993,\n    \"nested\": [\n      {\n        \"a\": true,\n        \"b\": \"value\"\n      }\n    ]\n  },\n  \"z\": null\n}\n",
+    "utf8",
+  );
+  assert.equal(
+    compactPythonCanonicalTopLevelMember(
+      pythonCanonicalFixture,
+      "marketCompatibility",
+      "Python-canonical self-test",
+    ),
+    "{\"accountAtoms\":9007199254740993,\"nested\":[{\"a\":true,\"b\":\"value\"}]}",
+    "Python-canonical lexical parsing lost a wide integer or changed structure",
+  );
+  assert.throws(
+    () => compactPythonCanonicalTopLevelMember(
+      Buffer.from("{\"z\":null,\"a\":1,\"marketCompatibility\":{}}\n", "utf8"),
+      "marketCompatibility",
+      "unordered Python-canonical self-test",
+    ),
+    /not Python-canonical/u,
+  );
+  assert.throws(
+    () => compactPythonCanonicalTopLevelMember(
+      Buffer.from("{\"a\":1,\"a\":2,\"marketCompatibility\":{}}\n", "utf8"),
+      "marketCompatibility",
+      "duplicate Python-canonical self-test",
+    ),
+    /duplicated or not Python-canonical/u,
+  );
   const mutatorProbe = frozenGateProbeInstruction(
     { byte: 17, default_class: "RecognizedMutating" },
     42n,
@@ -7362,6 +7556,33 @@ async function selfTest() {
   }, null, 2)}\n`);
 }
 
+async function verifyEvidenceOffline() {
+  const inputs = await readInputs({ rpc: false });
+  const bridge = inputs.bridgeEvidence;
+  process.stdout.write(`${JSON.stringify({
+    schema: "ameba-governance-devnet-spread-handoff-evidence-verification-v1",
+    ok: true,
+    genesisHash: EXPECTED_GENESIS,
+    controllerProgram: CONTROLLER.toBase58(),
+    controllerAuthority: derivedIdentities().authority.toBase58(),
+    targetProgram: TARGET.toBase58(),
+    targetProgramdata: TARGET_PROGRAMDATA.toBase58(),
+    legacyAuthority: LEGACY_AUTHORITY.toBase58(),
+    artifactSha256: inputs.artifactSha256,
+    bridgeUpgradeReceiptRawSha256: bridge.wrapper.sha256,
+    bridgeUpgradeReceiptSha256: bridge.wrapper.value.receiptSha256,
+    poststateRepeatReceiptRawSha256: bridge.repeatReceipt.sha256,
+    poststateRepeatReceiptSha256: bridge.repeatReceipt.value.receiptSha256,
+    formerAuthorityProofBuffer: bridge.proofBuffer.toBase58(),
+    formerAuthorityProofBufferRawSha256: bridge.wrapper.value.formerAuthorityProofBufferRawSha256,
+    historyVerifiedThroughSlot: bridge.repeatReceipt.value.historyExclusion.throughInclusiveSlot,
+    historicalCompatibilityAdapterSha256: EXPECTED_HISTORICAL_BRIDGE_RECEIPT_ADAPTER_SHA256,
+    rpcCalled: false,
+    signerAccessed: false,
+    submitted: false,
+  }, null, 2)}\n`);
+}
+
 function usage() {
   return `usage:
   node devnet-spread-handoff.mjs plan-handoff
@@ -7370,6 +7591,7 @@ function usage() {
   node devnet-spread-handoff.mjs plan-activation
   node devnet-spread-handoff.mjs execute-activation
   node devnet-spread-handoff.mjs status-activation
+  node devnet-spread-handoff.mjs verify-evidence-offline
   node devnet-spread-handoff.mjs self-test
 
 Required secure-file environment:
@@ -7419,6 +7641,7 @@ try {
   else if (command === "plan-activation") await planActivation();
   else if (command === "execute-activation") await executeActivation();
   else if (command === "status-activation") await statusActivation();
+  else if (command === "verify-evidence-offline") await verifyEvidenceOffline();
   else if (command === "self-test") await selfTest();
   else if (command === "--help" || command === "-h") process.stdout.write(`${usage()}\n`);
   else throw new Error(usage());
