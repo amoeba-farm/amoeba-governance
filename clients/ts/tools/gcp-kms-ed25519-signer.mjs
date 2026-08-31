@@ -274,10 +274,10 @@ async function signWithGcloud({ kms, messageBytes }) {
 
     await chmod(signatureFile, 0o600);
     await assertSecureTemporaryPath(signatureFile, "file", 0o600);
-    const encoded = (await readFile(signatureFile, "utf8")).trim();
-    assert(/^[A-Za-z0-9+/]+={0,2}$/u.test(encoded), "KMS signature file is not canonical base64 text");
-    const signature = Buffer.from(encoded, "base64");
-    assert.equal(signature.toString("base64"), encoded, "KMS signature base64 is noncanonical");
+    // Cloud SDK 439 writes the Ed25519 signature as the exact raw 64-byte
+    // value. Base64 is used only in this helper's JSON output boundary.
+    const signature = await readFile(signatureFile);
+    assert.equal(signature.length, 64, "gcloud KMS Ed25519 signature is not exactly 64 raw bytes");
     return signature;
   } finally {
     await removeSecureTemporaryDirectory(temporary);
