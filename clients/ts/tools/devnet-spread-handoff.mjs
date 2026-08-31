@@ -255,7 +255,7 @@ const BRIDGE_DEPLOYMENT_PLAN_FILE = "spread-reviewed-bridge-deployment-plan-v1.j
 const BRIDGE_UPGRADE_RECEIPT_FILE = "spread-reviewed-bridge-upgrade-receipt-v1.json";
 const BRIDGE_UPGRADE_RECEIPT_SCHEMA = "ameba-spread-reviewed-governance-bridge-upgrade-receipt-v1";
 const BRIDGE_UPGRADE_RECEIPT_DOMAIN = "AMOEBA_SPREAD_REVIEWED_BRIDGE_UPGRADE_RECEIPT_V1";
-const EXPECTED_COMPATIBILITY_ADAPTER_SHA256 = "29ec9aad15fbb32bcad25a7e4bd50508fe93c2c9027514adcc40e77f83811033";
+const EXPECTED_HISTORICAL_BRIDGE_RECEIPT_ADAPTER_SHA256 = "a66eb9a120386992f4e45cbbbb095d701f938c986959a05de6f07060035f33a0";
 const FIRST_POST_SUMMARY_SCHEMA = "ameba-spread-governance-bridge-ceremony-validation-summary-v1";
 const FIRST_POST_SUMMARY_DOMAIN = "ameba-spread-governance-bridge-ceremony-validation-summary-v1\0";
 const UPGRADE_RECEIPT_DOMAIN = "ameba-spread-programdata-upgrade-receipt-v2\0";
@@ -293,6 +293,26 @@ const BRIDGE_UPGRADE_RECEIPT_KEYS = [
   "postProgramDataPayloadSha256", "deployedArtifactSha256", "trailingBytes",
   "trailingBytesSha256", "trailingBytesAllZero", "primaryBufferClosed",
   "formerAuthorityProofBufferPreserved", "formerAuthorityProofBufferRawSha256", "receiptSha256",
+];
+// This exact order is the frozen historical JavaScript locale-order encoding
+// used to create the immutable bridge receipt. It is explicit so validation is
+// independent of the current host language and locale.
+const BRIDGE_UPGRADE_RECEIPT_HASH_KEY_ORDER = [
+  "artifactBytes", "artifactSha256", "authoritativePostProgramDataRawFile",
+  "authoritativePostProgramDataRawSha256", "authoritativePostSummaryFile",
+  "authoritativeUpgradeReceiptFile", "authoritativeUpgradeReceiptRawSha256",
+  "canonicalSpill", "compatibilityAdapterSha256", "deployedArtifactSha256",
+  "extensionInstructionCount", "finalizedContextSlot", "formerAuthorityProofBuffer",
+  "formerAuthorityProofBufferPreserved", "formerAuthorityProofBufferRawSha256",
+  "genesisHash", "legacyUpgradeAuthority", "loader", "loaderUpgradeInstructionCount",
+  "operationId", "planningCompatibilitySummaryRawSha256", "planSha256",
+  "postCapacityBytes", "postCompatibilitySummaryRawSha256", "postDeployedSlot",
+  "postProgramDataPayloadSha256", "postProgramDataRawSha256", "postUpgradeAuthority",
+  "preSignCapacityReportRawSha256", "preSignCompatibilitySummaryRawSha256",
+  "primaryBuffer", "primaryBufferClosed", "primaryBufferEvidenceRawSha256", "schema",
+  "siblingInstructionCount", "targetProgram", "targetProgramdata", "topLevelInstructionCount",
+  "trailingBytes", "trailingBytesAllZero", "trailingBytesSha256", "transactionSignature",
+  "transactionSlot",
 ];
 const FIRST_POST_SUMMARY_KEYS = [
   "schema", "schemaVersion", "phase", "evidenceMode", "planningSummaryRawSha256",
@@ -450,6 +470,19 @@ function semanticJsonHash(domain, value, hashField) {
   return sha256Hex(Buffer.concat([
     Buffer.from(domain, "utf8"),
     Buffer.from(compactCanonicalJson(unsigned), "utf8"),
+  ]));
+}
+
+function bridgeUpgradeReceiptHash(value) {
+  const unsigned = { ...value };
+  delete unsigned.receiptSha256;
+  assertExactKeys(unsigned, BRIDGE_UPGRADE_RECEIPT_HASH_KEY_ORDER, "unsigned reviewed bridge upgrade receipt");
+  const ordered = Object.fromEntries(
+    BRIDGE_UPGRADE_RECEIPT_HASH_KEY_ORDER.map((field) => [field, unsigned[field]]),
+  );
+  return sha256Hex(Buffer.concat([
+    Buffer.from(BRIDGE_UPGRADE_RECEIPT_DOMAIN, "utf8"),
+    Buffer.from(JSON.stringify(ordered), "utf8"),
   ]));
 }
 
@@ -1083,7 +1116,7 @@ function validateBridgeUpgradeReceipt(value, raw, inputs) {
   ]) assertLowerHash(value[field], `bridge receipt ${field}`);
   assert.equal(
     value.compatibilityAdapterSha256,
-    EXPECTED_COMPATIBILITY_ADAPTER_SHA256,
+    EXPECTED_HISTORICAL_BRIDGE_RECEIPT_ADAPTER_SHA256,
     "bridge receipt does not bind the frozen poststate-repeat adapter",
   );
   assert.equal(value.artifactBytes, inputs.artifact.length, "bridge receipt artifact length changed");
@@ -1111,7 +1144,7 @@ function validateBridgeUpgradeReceipt(value, raw, inputs) {
   assertCanonicalBasename(value.authoritativePostSummaryFile, FIRST_POST_FILE_PATTERN, "bridge post summary filename");
   assertCanonicalBasename(value.authoritativeUpgradeReceiptFile, FIRST_POST_FILE_PATTERN, "bridge upgrade receipt filename");
   assertCanonicalBasename(value.authoritativePostProgramDataRawFile, FIRST_POST_FILE_PATTERN, "bridge post ProgramData filename");
-  assertSemanticHash(value, BRIDGE_UPGRADE_RECEIPT_DOMAIN, "receiptSha256", "bridge receipt");
+  assert.equal(value.receiptSha256, bridgeUpgradeReceiptHash(value), "bridge receipt semantic hash changed");
   assert.equal(raw.length > 0, true);
 }
 
@@ -7153,7 +7186,35 @@ async function selfTest() {
     assertCanonicalBasename("spread-bridge-poststate-repeat-attempt-0001-census.json", POSTSTATE_REPEAT_CENSUS_PATTERN, "repeat self-test census")[1],
     "0001",
   );
-  assert.equal(EXPECTED_COMPATIBILITY_ADAPTER_SHA256, "29ec9aad15fbb32bcad25a7e4bd50508fe93c2c9027514adcc40e77f83811033");
+  assert.equal(
+    EXPECTED_HISTORICAL_BRIDGE_RECEIPT_ADAPTER_SHA256,
+    "a66eb9a120386992f4e45cbbbb095d701f938c986959a05de6f07060035f33a0",
+  );
+  const bridgeReceiptHashFixture = Object.fromEntries(
+    BRIDGE_UPGRADE_RECEIPT_HASH_KEY_ORDER.map((field, index) => [field, index]),
+  );
+  assert.equal(
+    bridgeUpgradeReceiptHash(bridgeReceiptHashFixture),
+    "5c9539ffac1f2d589216567e2246795c9a1f8c027637d4c5f4a1a6d3360e90e7",
+    "historical bridge receipt hash parity vector changed",
+  );
+  assert.equal(
+    bridgeUpgradeReceiptHash(Object.fromEntries(Object.entries(bridgeReceiptHashFixture).reverse())),
+    "5c9539ffac1f2d589216567e2246795c9a1f8c027637d4c5f4a1a6d3360e90e7",
+    "historical bridge receipt hash depends on insertion order",
+  );
+  assert.notEqual(
+    bridgeUpgradeReceiptHash({ ...bridgeReceiptHashFixture, artifactBytes: 999 }),
+    "5c9539ffac1f2d589216567e2246795c9a1f8c027637d4c5f4a1a6d3360e90e7",
+    "historical bridge receipt hash did not bind a mutation",
+  );
+  const missingBridgeReceiptField = { ...bridgeReceiptHashFixture };
+  delete missingBridgeReceiptField.artifactBytes;
+  assert.throws(() => bridgeUpgradeReceiptHash(missingBridgeReceiptField), /keys changed/u);
+  assert.throws(
+    () => bridgeUpgradeReceiptHash({ ...bridgeReceiptHashFixture, unexpected: true }),
+    /keys changed/u,
+  );
   const mutatorProbe = frozenGateProbeInstruction(
     { byte: 17, default_class: "RecognizedMutating" },
     42n,
@@ -7287,7 +7348,7 @@ async function selfTest() {
     proofBufferCloseTamperedPreparedRejected: proofBufferCloseRecoverySafety.tamperedPreparedRejected,
     proofBufferCloseMalformedDriftRejected: proofBufferCloseRecoverySafety.malformedDriftRejected,
     handoffAndActivationPreSubmitSlotsPropagated: true,
-    compatibilityAdapterSha256: EXPECTED_COMPATIBILITY_ADAPTER_SHA256,
+    compatibilityAdapterSha256: EXPECTED_HISTORICAL_BRIDGE_RECEIPT_ADAPTER_SHA256,
     frozenGateCensusReceiptDigestVector: frozenDigestVector.receiptSha256,
     twoCycleSeatRunwayRequiredTermEndSlot: runway.requiredTermEndSlot,
     activationRecoveryEvidenceMutationRejected: true,
