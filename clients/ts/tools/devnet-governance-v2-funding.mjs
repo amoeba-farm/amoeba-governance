@@ -586,7 +586,10 @@ async function executeDirection(options, direction) {
         feePayerLamports: prestate.feePayerLamports.toString(),
       });
       const latest = await connection.getLatestBlockhashAndContext({
-        commitment: "finalized",
+        // Governance state remains finalized. The transaction lifetime is not
+        // state evidence, so use a fresh processed blockhash to leave enough
+        // runway for the hardware-backed KMS signature.
+        commitment: "processed",
         minContextSlot: prestate.contextSlot,
       });
       assert(latest.context.slot >= prestate.contextSlot, "funding blockhash context regressed below prestate");
@@ -595,6 +598,7 @@ async function executeDirection(options, direction) {
         amountLamports: loaded.amountLamports,
         blockhash: latest.value.blockhash,
         lastValidBlockHeight: latest.value.lastValidBlockHeight,
+        blockhashCommitment: "processed",
       });
       const identities = transferIdentities(direction);
       const decodedAction = {
@@ -635,7 +639,7 @@ async function executeDirection(options, direction) {
       try {
         returnedSignature = await sendExactlyOnce(connection, wire, {
           skipPreflight: false,
-          preflightCommitment: "finalized",
+          preflightCommitment: "processed",
           maxRetries: 0,
           minContextSlot: prestate.contextSlot,
         });
