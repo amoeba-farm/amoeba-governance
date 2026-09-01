@@ -1214,10 +1214,10 @@ async function executeNext() {
         );
         if (selected.plan.stage === NEGATIVE_STAGE) {
           assert(currentStage.stage === NEGATIVE_STAGE || findNegativePrepared(journal), "negative-proof stage is no longer current");
-          return executeNegative(bundle, selected, connection, journal);
+          return await executeNegative(bundle, selected, connection, journal);
         }
         assert.equal(currentStage.stage, CLOSE_STAGE, "proof-buffer Close stage is no longer current");
-        return executeClose(bundle, selected, connection, journal, currentStage.negative);
+        return await executeClose(bundle, selected, connection, journal, currentStage.negative);
       } finally {
         await journal.close();
       }
