@@ -216,25 +216,11 @@ test("CLI exposes the complete required command set and marks Phase 7 commands r
   assert.equal(RELEASE1_PUBLIC_SCHEMA_V1.tokenGovernanceEnabled, false);
   assert.deepEqual(RELEASE1_PUBLIC_SCHEMA_V1.instructionTags, {
     CreateCandidateCouncilSetV1: 18,
-    CreateCouncilRotationV1: 19,
-    ApproveCouncilRotationV1: 20,
-    ActivateCouncilRotationV1: 21,
-    QueueCouncilRotationV1: 22,
-    CancelCouncilRotationV1: 24,
-    ExpireCouncilRotationV1: 25,
     BeginProgramDataObservationV1: 39,
     AppendProgramDataObservationChunkV1: 40,
     VerifyObservedArtifactChunkV1: 41,
     FinalizeProgramDataObservationV1: 42,
     RecordControllerImmutabilityV1: 43,
-    CreateTargetAuthorityHandoffV1: 44,
-    ApproveTargetAuthorityHandoffV1: 45,
-    QueueTargetAuthorityHandoffV1: 46,
-    AcceptTargetAuthorityCheckedV1: 47,
-    CreateBootstrapActivationV1: 49,
-    ApproveBootstrapActivationV1: 50,
-    QueueBootstrapActivationV1: 51,
-    ExecuteBootstrapActivationV1: 52,
     InitializeControllerV2: 53,
     CreateProposalV3: 54,
     ApproveProposalV3: 55,
@@ -292,7 +278,7 @@ test("CLI exposes the complete required command set and marks Phase 7 commands r
     ExecuteBootstrapActivationProposalV2: 107,
   });
   assert.deepEqual(RELEASE1_PUBLIC_SCHEMA_V1.executableInstructionTagRanges, [
-    [18, 22], [24, 25], [39, 47], [49, 52], [53, 81], [82, 107],
+    [18, 18], [39, 43], [53, 81], [82, 107],
   ]);
   assert.deepEqual({
     GovernanceLifecycleRegistryV2: RELEASE1_PUBLIC_SCHEMA_V1.accountLengths.GovernanceLifecycleRegistryV2,
@@ -311,7 +297,8 @@ test("CLI exposes the complete required command set and marks Phase 7 commands r
   });
   assert.deepEqual(RELEASE1_PUBLIC_SCHEMA_V1.rejectedInstructionTags, [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
-    23, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 48,
+    19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
+    44, 45, 46, 47, 48, 49, 50, 51, 52,
   ]);
 });
 

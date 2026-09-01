@@ -123,11 +123,6 @@ const proposalManifest: v3.ProposalManifestV3 = {
 type CodecCase = readonly [number, number, unknown, (value: never) => Buffer, (data: Buffer) => unknown];
 const cases: readonly CodecCase[] = [
   [43, 161, { expectedCapacityPolicyDigest: h(1), expectedReleaseDigest: h(2), expectedPreObservationDigest: h(3), expectedPostObservationDigest: h(4), expectedReceiptDigest: h(5) }, authority.encodeRecordControllerImmutabilityV1 as never, authority.decodeRecordControllerImmutabilityV1],
-  [44, 161, { expectedGateEpoch: 1n, expectedTargetNonce: 2n, expectedCouncilVersion: 3n, bridgeSourceCommitment: h(1), bridgeBuildInputsCommitment: h(2), bridgePackageCommitment: h(3), bridgeReleaseManifestCommitment: h(4), planValidUntilSlot: 5n }, authority.encodeCreateTargetAuthorityHandoffV1 as never, authority.decodeCreateTargetAuthorityHandoffV1],
-  ...([45, 46, 50, 51] as const).map((tag): CodecCase => [tag, 57, { expectedProposalDigest: h(1), expectedCouncilVersion: 2n, expectedGateEpoch: 3n, expectedTargetNonce: 4n }, ({ 45: authority.encodeApproveTargetAuthorityHandoffV1, 46: authority.encodeQueueTargetAuthorityHandoffV1, 50: authority.encodeApproveBootstrapActivationV1, 51: authority.encodeQueueBootstrapActivationV1 } as const)[tag] as never, ({ 45: authority.decodeApproveTargetAuthorityHandoffV1, 46: authority.decodeQueueTargetAuthorityHandoffV1, 50: authority.decodeApproveBootstrapActivationV1, 51: authority.decodeQueueBootstrapActivationV1 } as const)[tag]]),
-  [47, 159, { expectedProposalDigest: h(1), expectedBridgeObservationDigest: h(2), expectedGateEpoch: 3n, expectedTargetNonce: 4n, envelope }, authority.encodeAcceptTargetAuthorityCheckedV1 as never, authority.decodeAcceptTargetAuthorityCheckedV1],
-  [49, 129, { expectedControllerImmutabilityDigest: h(1), expectedHandoffReceiptDigest: h(2), expectedBridgeObservationDigest: h(3), expectedGateEpoch: 4n, expectedTargetNonce: 5n, expectedCouncilVersion: 6n, planValidUntilSlot: 7n }, authority.encodeCreateBootstrapActivationV1 as never, authority.decodeCreateBootstrapActivationV1],
-  [52, 223, { expectedProposalDigest: h(1), expectedBridgeObservationDigest: h(2), expectedGateEpoch: 3n, expectedTargetNonce: 4n, expectedDeploymentPlanDigest: h(5), expectedReceiptPlanDigest: h(6), envelope }, authority.encodeExecuteBootstrapActivationV1 as never, authority.decodeExecuteBootstrapActivationV1],
   [53, 633, initialize, v3.encodeInitializeControllerV2 as never, v3.decodeInitializeControllerV2],
   [54, 694, { manifest: proposalManifest }, v3.encodeCreateProposalV3 as never, v3.decodeCreateProposalV3],
   [55, 165, { expected: guard(ProposalStateV2.BufferVerified, GateStatusV1.Active), expectedCreationCouncilVersion: 1n, expectedCreationCouncilHash: h(4), expectedApprovalBitset: 0, expectedApprovalCount: 0 }, v3.encodeApproveProposalV3 as never, v3.decodeApproveProposalV3],
@@ -159,8 +154,8 @@ const cases: readonly CodecCase[] = [
   [81, 410, { expectedPrimary: guard(ProposalStateV2.UpgradeExecuted), expectedRollback: guard(ProposalStateV2.Timelocked), expectedFailureEvidenceDigest: h(7), expectedPrimaryVerificationGeneration: 0n, expectedProgramdataObservationStateHash: h(8), expectedProgramdataObservationGeneration: 1n, expectedRollbackBufferVerificationStatus: BufferVerificationStatusV1.Verified, expectedRollbackVerifiedChunkBitmap: bitmap, expectedRollbackVerifiedChunkCount: 1, expectedRollbackBufferFinalizedSlot: 10n, expectedNextGateEpoch: 4n }, custody.encodeActivateRollbackV2 as never, custody.decodeActivateRollbackV2],
 ];
 
-test("tags 43-81 round-trip exact Rust fixed lengths and reject all framing drift", () => {
-  assert.equal(cases.length, 38);
+test("current tags 43 and 53-81 round-trip exact Rust fixed lengths and reject all framing drift", () => {
+  assert.equal(cases.length, 30);
   for (const [tag, length, value, encode, decode] of cases) {
     const data = encode(value as never);
     assert.equal(data[0], tag, `tag ${tag}`);
@@ -175,7 +170,7 @@ test("tags 43-81 round-trip exact Rust fixed lengths and reject all framing drif
 });
 
 test("current decoder advertises retained council, ceremony/V3, and governance-liveness V2 tags", () => {
-  assert.equal(CURRENT_RELEASE1_INSTRUCTION_TAGS.length, 75);
+  assert.equal(CURRENT_RELEASE1_INSTRUCTION_TAGS.length, 61);
   for (const [index, instruction] of governanceLivenessV2Instructions().entries()) {
     const tag = 82 + index;
     assert.equal(instruction[0], tag);
@@ -183,7 +178,7 @@ test("current decoder advertises retained council, ceremony/V3, and governance-l
     assert.equal("kind" in decoded, true);
     if ("kind" in decoded) assert.equal(decoded.kind, governanceV2.decodeRelease1GovernanceV2Instruction(instruction).kind);
   }
-  for (const tag of [...Array.from({ length: 18 }, (_, index) => index), 23, ...Array.from({ length: 13 }, (_, index) => 26 + index), 48, 108, 255]) {
+  for (const tag of [...Array.from({ length: 18 }, (_, index) => index), ...Array.from({ length: 20 }, (_, index) => 19 + index), ...Array.from({ length: 9 }, (_, index) => 44 + index), 108, 255]) {
     assert.throws(() => decodeRelease1CurrentInstruction(Buffer.from([tag])));
   }
 });
@@ -220,14 +215,6 @@ function materializeAccounts(fields: readonly string[]): { accounts: Record<stri
 
 const builderCases: readonly BuilderCase[] = [
   { tag: 43, builder: authority.buildRecordControllerImmutabilityV1Instruction as AnyBuilder, fields: fieldList("payer controllerProgram controllerProgramdata controllerConfig capacityPolicy controllerRelease preObservation postObservation immutabilityReceipt upgradeableLoader systemProgram"), modes: modeList("ws r r r r r r r w r r") },
-  { tag: 44, builder: authority.buildCreateTargetAuthorityHandoffV1Instruction as AnyBuilder, fields: fieldList("payer creator controllerProgram controllerProgramdata controllerConfig governancePolicy council protocolGate capacityPolicy immutabilityReceipt bridgeObservation targetProgram targetProgramdata legacyAuthority controllerAuthority proposal upgradeableLoader systemProgram"), modes: modeList("ws rs r r r r r r r r r r r r r w r r") },
-  { tag: 45, builder: authority.buildApproveTargetAuthorityHandoffV1Instruction as AnyBuilder, fields: fieldList("controllerProgram controllerProgramdata controllerConfig governancePolicy council protocolGate capacityPolicy immutabilityReceipt bridgeObservation targetProgram targetProgramdata legacyAuthority controllerAuthority proposal upgradeableLoader seatAuthority"), modes: modeList("r r r r r r r r r r r r r w r rs") },
-  { tag: 46, builder: authority.buildQueueTargetAuthorityHandoffV1Instruction as AnyBuilder, fields: fieldList("controllerProgram controllerProgramdata controllerConfig governancePolicy council protocolGate capacityPolicy immutabilityReceipt bridgeObservation targetProgram targetProgramdata legacyAuthority controllerAuthority proposal upgradeableLoader"), modes: modeList("r r r r r r r r r r r r r w r") },
-  { tag: 47, builder: authority.buildAcceptTargetAuthorityCheckedV1Instruction as AnyBuilder, fields: fieldList("payer controllerProgram controllerProgramdata controllerConfig governancePolicy council protocolGate capacityPolicy immutabilityReceipt proposal bridgeObservation targetProgram targetProgramdata legacyAuthority controllerAuthority upgradeableLoader handoffReceipt systemProgram instructionsSysvar"), modes: modeList("ws r r r r r r r r w r r w rs r r w r r") },
-  { tag: 49, builder: authority.buildCreateBootstrapActivationV1Instruction as AnyBuilder, fields: fieldList("payer creator controllerProgram controllerProgramdata controllerConfig governancePolicy council protocolGate capacityPolicy immutabilityReceipt handoffReceipt bridgeObservation targetProgram targetProgramdata controllerAuthority proposal activationReceipt currentDeployment upgradeableLoader systemProgram"), modes: modeList("ws rs r r r r r r r r r r r r r w w w r r") },
-  { tag: 50, builder: authority.buildApproveBootstrapActivationV1Instruction as AnyBuilder, fields: fieldList("controllerProgram controllerProgramdata controllerConfig governancePolicy council protocolGate capacityPolicy immutabilityReceipt handoffReceipt bridgeObservation targetProgram targetProgramdata controllerAuthority proposal upgradeableLoader seatAuthority"), modes: modeList("r r r r r r r r r r r r r w r rs") },
-  { tag: 51, builder: authority.buildQueueBootstrapActivationV1Instruction as AnyBuilder, fields: fieldList("controllerProgram controllerProgramdata controllerConfig governancePolicy council protocolGate capacityPolicy immutabilityReceipt handoffReceipt bridgeObservation targetProgram targetProgramdata controllerAuthority proposal upgradeableLoader"), modes: modeList("r r r r r r r r r r r r r w r") },
-  { tag: 52, builder: authority.buildExecuteBootstrapActivationV1Instruction as AnyBuilder, fields: fieldList("controllerProgram controllerProgramdata controllerConfig governancePolicy council protocolGate capacityPolicy immutabilityReceipt handoffReceipt proposal bridgeObservation targetProgram targetProgramdata controllerAuthority upgradeableLoader activationReceipt currentDeployment instructionsSysvar"), modes: modeList("r r r r r w r r r w r r r r r w w r") },
   { tag: 53, builder: builders.buildInitializeControllerV2Instruction as AnyBuilder, fields: fieldList("payer initializer controllerProgram controllerProgramdata targetProgram targetProgramdata upgradeableLoader controllerConfig authorityPda protocolGate policy council capacityPolicy controllerRelease canonicalSpillTreasury guardian seatAuthorities:5 systemProgram"), modes: modeList("ws rs r r r r r w r w w w w w r r r r r r r r") },
   { tag: 54, builder: builders.buildCreateProposalV3Instruction as AnyBuilder, fields: fieldList("payer creatorSeatAuthority controllerConfig policy council protocolGate capacityPolicy currentDeployment targetProgram targetProgramdata upgradeableLoader authorityPda canonicalSpillTreasury buffer bufferUploaderAuthority proposal systemProgram"), modes: modeList("ws rs w r r r r r r r r r r r r w r") },
   { tag: 55, builder: builders.buildApproveProposalV3Instruction as AnyBuilder, fields: fieldList("controllerConfig policy creationCouncil protocolGate capacityPolicy currentDeployment proposal bufferVerification seatAuthority"), modes: modeList("r r r r r r w r rs") },
@@ -259,7 +246,7 @@ const builderCases: readonly BuilderCase[] = [
   { tag: 81, builder: custody.buildActivateRollbackV2Instruction as AnyBuilder, fields: fieldList("controllerConfig policy protocolGate primaryProposal rollbackProposal rollbackBufferVerification primaryProgramdataVerification failureObservation capacityPolicy currentDeployment programdataObservation targetProgram targetProgramdata authorityPda upgradeableLoader"), modes: modeList("r r w r w r r r r r r r r r r") },
 ];
 
-test("every tag 43-81 builder has the exact Rust account order and privileges", () => {
+test("every current tag 43 and 53-81 builder has the exact Rust account order and privileges", () => {
   assert.equal(builderCases.length, cases.length);
   for (const entry of builderCases) {
     const value = cases.find(([tag]) => tag === entry.tag)?.[2];

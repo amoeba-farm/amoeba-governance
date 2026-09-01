@@ -66,14 +66,6 @@ function approveAccounts() {
 test("operator exposes every typed emergency and rollback mutation route", () => {
   assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["observe-programdata"], [39, 40, 41, 42]);
   assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["record-controller-immutability"], [43]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["create-handoff"], [44]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["approve-handoff"], [45]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["queue-handoff"], [46]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["accept-target-authority"], [47]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["create-bootstrap-activation"], [49]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["approve-bootstrap-activation"], [50]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["queue-bootstrap-activation"], [51]);
-  assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["execute-bootstrap-activation"], [52]);
   assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["create-emergency-resolution"], [62]);
   assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["approve-emergency-resolution"], [63]);
   assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["queue-emergency-resolution"], [64]);
