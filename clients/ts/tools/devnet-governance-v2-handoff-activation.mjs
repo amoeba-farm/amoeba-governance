@@ -11,6 +11,7 @@ import {
   PublicKey,
   SYSVAR_INSTRUCTIONS_PUBKEY,
   SystemProgram,
+  TransactionInstruction,
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
@@ -235,6 +236,24 @@ function instructionManifest(instruction) {
       isWritable: entry.isWritable,
     })),
     dataHex: Buffer.from(instruction.data).toString("hex"),
+  };
+}
+
+function actionFromPlan(plan) {
+  return {
+    signers: plan.signers.map((value) => new PublicKey(value)),
+    instructions: plan.instructions.map((instruction) => {
+      assert(/^(?:[0-9a-f]{2})*$/u.test(instruction.dataHex), "planned instruction data is not canonical hex");
+      return new TransactionInstruction({
+        programId: new PublicKey(instruction.programId),
+        keys: instruction.accounts.map((account) => ({
+          pubkey: new PublicKey(account.pubkey),
+          isSigner: account.isSigner,
+          isWritable: account.isWritable,
+        })),
+        data: Buffer.from(instruction.dataHex, "hex"),
+      });
+    }),
   };
 }
 
@@ -794,7 +813,7 @@ async function readBaseState(connection, bundle, minContextSlot = 0, phase = "ha
   };
 }
 
-function observationModel(bundle, state, phase) {
+function observationModel(bundle, state, phase, programdataRaw = state.targetProgramdata.raw) {
   const { ids } = bundle;
   const purpose = phase === "handoff"
     ? ProgramDataObservationPurposeV1.TargetHandoffBridge
@@ -843,7 +862,8 @@ function observationModel(bundle, state, phase) {
     observation,
     upgradeableLoader: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
   };
-  const rawGeometry = programDataObservationGeometryV1(state.targetProgramdata.raw.length, state.capacity.observationChunkSize);
+  assert.equal(programdataRaw.length, state.targetProgramdata.raw.length, "observation ProgramData raw length changed");
+  const rawGeometry = programDataObservationGeometryV1(programdataRaw.length, state.capacity.observationChunkSize);
   const artifactChunks = artifactChunkCount(bundle.artifact.length, RELEASE1_ARTIFACT_CHUNK_SIZE_V1);
   const tailBytes = BigInt(state.targetProgramdata.payload.length - bundle.artifact.length);
   const begin = buildBeginProgramDataObservationV1Instruction(ids.controller, {
@@ -893,9 +913,38 @@ function observationModel(bundle, state, phase) {
     purpose, subject, generation, subjectDigest, observation, bump, guard,
     rawGeometry, artifactChunks, tailBytes, begin, append, verify,
     finalize: finalizeInstruction,
-    rawRoot: programDataObservationMerkleRootV1(state.targetProgramdata.raw, subjectDigest, state.capacity.observationChunkSize),
-    rawSha256: programDataRawSha256ReceiptV1(state.targetProgramdata.raw),
+    rawRoot: programDataObservationMerkleRootV1(programdataRaw, subjectDigest, state.capacity.observationChunkSize),
+    rawSha256: programDataRawSha256ReceiptV1(programdataRaw),
   };
+}
+
+function completedHandoffPreObservationRaw(bundle, state, handoff) {
+  assert(handoff, "completed handoff lacks its finalized receipt");
+  const current = state.targetProgramdata;
+  assert(current.authority?.equals(bundle.ids.authority), "completed handoff did not install the controller authority");
+  assert.equal(current.deployedSlot, handoff.deployedSlot, "handoff changed the ProgramData deployed slot");
+  assert.equal(BigInt(current.raw.length), handoff.rawProgramdataLength, "handoff changed the ProgramData raw length");
+  assert.equal(BigInt(current.payload.length), handoff.programdataCapacity, "handoff changed the ProgramData capacity");
+  assert(current.header.equals(handoff.postProgramdataHeaderSnapshot), "current ProgramData header differs from the finalized handoff receipt");
+  const preRaw = Buffer.from(current.raw);
+  Buffer.from(handoff.preProgramdataHeaderSnapshot).copy(preRaw, 0);
+  assert(preRaw.subarray(0, 13).equals(current.raw.subarray(0, 13)), "handoff changed ProgramData metadata outside authority bytes");
+  assert(preRaw.subarray(PROGRAMDATA_HEADER_LEN).equals(current.raw.subarray(PROGRAMDATA_HEADER_LEN)), "handoff changed ProgramData payload bytes");
+  return preRaw;
+}
+
+function assertCompletedHandoffObservation(value, model, bundle, state, handoff, preRaw) {
+  assert(value.upgradeAuthority.present && value.upgradeAuthority.value.equals(bundle.ids.legacyAuthority), "pre-handoff observation authority changed");
+  assert(value.programdataHeaderSnapshot.equals(handoff.preProgramdataHeaderSnapshot), "pre-handoff observation header changed");
+  assert.equal(value.deployedSlot, state.targetProgramdata.deployedSlot, "handoff changed the observed deployed slot");
+  assert.equal(value.rawDataLength, BigInt(state.targetProgramdata.raw.length), "handoff changed the observed raw length");
+  assert.equal(value.actualCapacity, BigInt(state.targetProgramdata.payload.length), "handoff changed the observed capacity");
+  assert(handoff.preObservation.equals(model.observation), "handoff receipt pre-observation address changed");
+  assert.equal(handoff.preObservationGeneration, value.generation, "handoff receipt pre-observation generation changed");
+  assert(handoff.preObservationRoot.equals(value.finalRawMerkleRoot), "handoff receipt pre-observation root changed");
+  assert(handoff.preObservationDigest.equals(value.observationDigest), "handoff receipt pre-observation digest changed");
+  const normalizedRoot = programDataObservationMerkleRootV1(preRaw, value.subjectDigest, value.rawChunkSize);
+  assert(normalizedRoot.equals(value.finalRawMerkleRoot), "current ProgramData differs outside the exact authority transition");
 }
 
 function validateObservation(value, model, state, bundle) {
@@ -994,6 +1043,84 @@ function selfTestProposalTiming() {
     handoff: check(GovernanceTimingClassV1.Constitutional),
     activation: check(GovernanceTimingClassV1.Routine),
   };
+}
+
+function selfTestCompletedHandoffObservation() {
+  const legacyAuthority = selfTestKey("transition-legacy-authority");
+  const controllerAuthority = selfTestKey("transition-controller-authority");
+  const observationAddress = selfTestKey("transition-observation");
+  const deployedSlot = 123n;
+  const header = (authority) => {
+    const value = Buffer.alloc(PROGRAMDATA_HEADER_LEN);
+    value.writeUInt32LE(3, 0);
+    value.writeBigUInt64LE(deployedSlot, 4);
+    value[12] = 1;
+    authority.toBuffer().copy(value, 13);
+    return value;
+  };
+  const preHeader = header(legacyAuthority);
+  const postHeader = header(controllerAuthority);
+  const payload = createHash("sha256").update("completed-handoff-payload").digest();
+  const preRaw = Buffer.concat([preHeader, payload]);
+  const postRaw = Buffer.concat([postHeader, payload]);
+  const bundle = { ids: { legacyAuthority, authority: controllerAuthority } };
+  const state = {
+    targetProgramdata: {
+      raw: postRaw,
+      header: postHeader,
+      payload,
+      deployedSlot,
+      authority: controllerAuthority,
+    },
+  };
+  const subjectDigest = createHash("sha256").update("completed-handoff-subject").digest();
+  const observationDigest = createHash("sha256").update("completed-handoff-observation").digest();
+  const finalRawMerkleRoot = programDataObservationMerkleRootV1(
+    preRaw,
+    subjectDigest,
+    PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB_V1,
+  );
+  const handoff = {
+    deployedSlot,
+    rawProgramdataLength: BigInt(preRaw.length),
+    programdataCapacity: BigInt(payload.length),
+    preProgramdataHeaderSnapshot: preHeader,
+    postProgramdataHeaderSnapshot: postHeader,
+    preObservation: observationAddress,
+    preObservationGeneration: 1n,
+    preObservationRoot: finalRawMerkleRoot,
+    preObservationDigest: observationDigest,
+  };
+  const observation = {
+    upgradeAuthority: { present: true, value: legacyAuthority },
+    programdataHeaderSnapshot: preHeader,
+    deployedSlot,
+    rawDataLength: BigInt(preRaw.length),
+    actualCapacity: BigInt(payload.length),
+    generation: 1n,
+    finalRawMerkleRoot,
+    observationDigest,
+    subjectDigest,
+    rawChunkSize: PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB_V1,
+  };
+  const normalized = completedHandoffPreObservationRaw(bundle, state, handoff);
+  assert(normalized.equals(preRaw), "completed handoff normalization changed the pre-observation bytes");
+  assertCompletedHandoffObservation(observation, { observation: observationAddress }, bundle, state, handoff, normalized);
+  const tamperedPayload = Buffer.from(payload);
+  tamperedPayload[0] ^= 1;
+  const tamperedState = {
+    targetProgramdata: {
+      ...state.targetProgramdata,
+      raw: Buffer.concat([postHeader, tamperedPayload]),
+      payload: tamperedPayload,
+    },
+  };
+  const tamperedNormalized = completedHandoffPreObservationRaw(bundle, tamperedState, handoff);
+  assert.throws(
+    () => assertCompletedHandoffObservation(observation, { observation: observationAddress }, bundle, tamperedState, handoff, tamperedNormalized),
+    /differs outside the exact authority transition/u,
+  );
+  return { deployedSlot: deployedSlot.toString(), payloadBytes: payload.length, payloadTamperRejected: true };
 }
 
 function assertProposalEvidence(proposal, phase, bundle, state, model) {
@@ -1421,8 +1548,15 @@ async function currentAction(connection, bundle, phase, minContextSlot = 0) {
     validateHandoffReceipt(handoff, bundle, state);
   }
   if (phase === "activation") assert(handoff, "activation requires finalized handoff receipt");
-  const model = observationModel(bundle, state, phase);
+  const preObservationRaw = statePhase === "handoff-complete"
+    ? completedHandoffPreObservationRaw(bundle, state, handoff)
+    : state.targetProgramdata.raw;
+  const model = observationModel(bundle, state, phase, preObservationRaw);
   const observation = await readObservation(connection, bundle, state, model, state.slot);
+  if (statePhase === "handoff-complete") {
+    assert(observation.value && observation.value.status === ProgramDataObservationStatusV1.Finalized, "completed handoff lacks its finalized pre-handoff observation");
+    assertCompletedHandoffObservation(observation.value, model, bundle, state, handoff, preObservationRaw);
+  }
   const observationAction = observationNextAction(model, observation, bundle);
   if (observationAction) return { phase, kind: "mutation", state, model, observation, proposal: null, handoff, ...observationAction };
   assert(observation.value, "finalized observation is absent");
@@ -1820,9 +1954,9 @@ async function executeNext(phase) {
         const lookup = await loadLookup(connection, bundle, selected.plan.observedSlot);
         assert.equal(lookup.address.toBase58(), selected.plan.lookupTable, "lookup address changed after planning");
         assert.deepEqual(lookup.account.state.addresses.map((value) => value.toBase58()), selected.plan.lookupAddresses, "lookup addresses changed after planning");
+        const plannedAction = actionFromPlan(selected.plan);
+        const dummy = compilePacket(plannedAction, lookup, PublicKey.default.toBase58());
         let action = await currentAction(connection, bundle, phase, selected.plan.observedSlot);
-        assertActionMatchesPlan(action, selected.plan, bundle);
-        const dummy = compilePacket(action, lookup, PublicKey.default.toBase58());
         const verifyCurrent = async (minimumSlot) => {
           const current = await currentAction(connection, bundle, phase, minimumSlot);
           assertActionMatchesPlan(current, selected.plan, bundle);
@@ -1843,6 +1977,7 @@ async function executeNext(phase) {
           assert.notEqual(post.stage, selected.plan.stage, "finalized transaction did not advance its stage");
           return writeStageReceipt(bundle, selected, reconciled, post);
         }
+        assertActionMatchesPlan(action, selected.plan, bundle);
         assert(slot <= selected.plan.validUntilSlot, "plan expired");
         const blockhash = await connection.getLatestBlockhashAndContext("finalized");
         assert(blockhash.context.slot >= selected.plan.observedSlot, "blockhash predates plan");
@@ -2017,7 +2152,15 @@ function selfTestEnvelope(kind) {
   });
   const action = { instructions, signers };
   const packet = compilePacket(action, { account: lookup }, selfTestKey(`${kind}-blockhash`).toBase58());
-  return { tag: instruction.data[0], accounts: instruction.keys.length, packetBytes: packet.packetBytes };
+  const restored = actionFromPlan({
+    signers: signers.map((value) => value.toBase58()),
+    instructions: instructions.map(instructionManifest),
+  });
+  assert.deepEqual(restored.signers.map((value) => value.toBase58()), signers.map((value) => value.toBase58()), `${kind} planned signer restoration changed`);
+  assert.deepEqual(restored.instructions.map(instructionManifest), instructions.map(instructionManifest), `${kind} planned instruction restoration changed`);
+  const restoredPacket = compilePacket(restored, { account: lookup }, selfTestKey(`${kind}-blockhash`).toBase58());
+  assert.equal(restoredPacket.packetBytes, packet.packetBytes, `${kind} restored plan packet length changed`);
+  return { tag: instruction.data[0], accounts: instruction.keys.length, packetBytes: packet.packetBytes, planRestored: true };
 }
 
 async function selfTest() {
@@ -2034,6 +2177,7 @@ async function selfTest() {
   assert(!source.includes(["buildCreateBootstrapActivation", "V1Instruction"].join("")), "tool imported the V1 activation builder");
   assert(!source.includes(["loadSecure", "Keypair"].join("")), "tool contains a keypair fallback");
   const proposalTiming = selfTestProposalTiming();
+  const completedHandoffObservation = selfTestCompletedHandoffObservation();
   const runtime = await selfTestCeremonyRuntime();
   const result = {
     schema: "ameba-governance-devnet-v2-handoff-activation-self-test-v1",
@@ -2046,6 +2190,8 @@ async function selfTest() {
     oldV1LifecycleBuildersAbsent: true,
     authorityFinalAndOnchainRecordEvidenceSeparated: true,
     proposalTiming,
+    completedHandoffObservation,
+    finalizedJournalPlanRestoredWithoutLiveAction: handoff.planRestored && activation.planRestored,
     runtime,
   };
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

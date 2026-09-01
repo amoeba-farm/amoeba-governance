@@ -36,6 +36,12 @@ test("V2 handoff/activation tool self-test pins exact execute tags and packet re
       expiryDurationSlots: "2592000",
     },
   });
+  assert.deepEqual(value.completedHandoffObservation, {
+    deployedSlot: "123",
+    payloadBytes: 32,
+    payloadTamperRejected: true,
+  });
+  assert.equal(value.finalizedJournalPlanRestoredWithoutLiveAction, true);
   assert.equal(value.runtime.firstRateLimitCallCount, 1);
   assert.equal(value.runtime.ambiguousPreparedTransactionSendCalls, 0);
 });
@@ -67,6 +73,10 @@ test("V2 handoff/activation tool exposes only the narrow plan/execute surface", 
   assert(source.includes("signTransactionWithProvider"));
   assert(source.includes("submitOneFinalized"));
   assert(source.includes("reconcileOneFinalized"));
+  const executeNext = source.indexOf("async function executeNext");
+  const reconcileFinalized = source.indexOf("const reconciled = await reconcileOneFinalized", executeNext);
+  const requireLivePrestate = source.indexOf("assertActionMatchesPlan(action, selected.plan, bundle)", reconcileFinalized);
+  assert(executeNext >= 0 && reconcileFinalized > executeNext && requireLivePrestate > reconcileFinalized, "finalized journal reconciliation must precede live-prestate enforcement");
   assert(!source.includes(["loadSecure", "Keypair"].join("")));
   assert(!source.includes(["buildCreateTargetAuthorityHandoff", "V1Instruction"].join("")));
   assert(!source.includes(["buildCreateBootstrapActivation", "V1Instruction"].join("")));
