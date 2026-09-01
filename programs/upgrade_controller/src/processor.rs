@@ -2,9 +2,10 @@
 //!
 //! The historical tag-0 approval codec remains decodable for regression
 //! vectors, but it is deliberately non-executable. The capacity-fragile
-//! historical lifecycle and custody tags 1-17, 23, and 27-38 are likewise
-//! decode-only scaffolds. Only the immutable council-rotation tags 18-22 and
-//! 24-25 remain executable from the published range; tag 26 stays reserved.
+//! historical lifecycle and custody tags 1-17, 19-38, and 44-52 are likewise
+//! decode-only scaffolds. Tag 18 remains executable because V2 rotation reuses
+//! its immutable candidate-council account; tags 39-43 remain the observation
+//! and controller-immutability surface.
 
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, program_error::ProgramError,
@@ -42,19 +43,8 @@ use crate::{
         process_initialize_governance_lifecycle_registry_v2,
         process_queue_council_rotation_proposal_v2, process_queue_timing_policy_change_proposal_v1,
     },
-    release1_processor_authority::{
-        process_accept_target_authority_checked_v1, process_approve_bootstrap_activation_v1,
-        process_approve_target_authority_handoff_v1, process_create_bootstrap_activation_v1,
-        process_create_target_authority_handoff_v1, process_execute_bootstrap_activation_v1,
-        process_queue_bootstrap_activation_v1, process_queue_target_authority_handoff_v1,
-        process_record_controller_immutability_v1,
-    },
-    release1_processor_checkpoint::{
-        process_activate_council_rotation_v1, process_approve_council_rotation_v1,
-        process_cancel_council_rotation_v1, process_create_candidate_council_set_v1,
-        process_create_council_rotation_v1, process_expire_council_rotation_v1,
-        process_queue_council_rotation_v1,
-    },
+    release1_processor_authority::process_record_controller_immutability_v1,
+    release1_processor_checkpoint::process_create_candidate_council_set_v1,
     release1_processor_initialize_v2::process_initialize_controller_v2,
     release1_processor_observation::{
         process_append_programdata_observation_chunk_v1, process_begin_programdata_observation_v1,
@@ -198,36 +188,6 @@ typed_dispatch!(
     CreateCandidateCouncilSetV1,
     process_create_candidate_council_set_v1
 );
-typed_dispatch!(
-    dispatch_create_council_rotation_v1,
-    CreateCouncilRotationV1,
-    process_create_council_rotation_v1
-);
-typed_dispatch!(
-    dispatch_approve_council_rotation_v1,
-    ApproveCouncilRotationV1,
-    process_approve_council_rotation_v1
-);
-typed_dispatch!(
-    dispatch_activate_council_rotation_v1,
-    ActivateCouncilRotationV1,
-    process_activate_council_rotation_v1
-);
-typed_dispatch!(
-    dispatch_queue_council_rotation_v1,
-    QueueCouncilRotationV1,
-    process_queue_council_rotation_v1
-);
-typed_dispatch!(
-    dispatch_cancel_council_rotation_v1,
-    CancelCouncilRotationV1,
-    process_cancel_council_rotation_v1
-);
-typed_dispatch!(
-    dispatch_expire_council_rotation_v1,
-    ExpireCouncilRotationV1,
-    process_expire_council_rotation_v1
-);
 ceremony_dispatch!(
     dispatch_begin_programdata_observation_v1,
     BeginProgramDataObservationV1,
@@ -252,46 +212,6 @@ authority_dispatch!(
     dispatch_record_controller_immutability_v1,
     RecordControllerImmutabilityV1,
     process_record_controller_immutability_v1
-);
-authority_dispatch!(
-    dispatch_create_target_authority_handoff_v1,
-    CreateTargetAuthorityHandoffV1,
-    process_create_target_authority_handoff_v1
-);
-authority_dispatch!(
-    dispatch_approve_target_authority_handoff_v1,
-    ApproveTargetAuthorityHandoffV1,
-    process_approve_target_authority_handoff_v1
-);
-authority_dispatch!(
-    dispatch_queue_target_authority_handoff_v1,
-    QueueTargetAuthorityHandoffV1,
-    process_queue_target_authority_handoff_v1
-);
-authority_dispatch!(
-    dispatch_accept_target_authority_checked_v1,
-    AcceptTargetAuthorityCheckedV1,
-    process_accept_target_authority_checked_v1
-);
-authority_dispatch!(
-    dispatch_create_bootstrap_activation_v1,
-    CreateBootstrapActivationV1,
-    process_create_bootstrap_activation_v1
-);
-authority_dispatch!(
-    dispatch_approve_bootstrap_activation_v1,
-    ApproveBootstrapActivationV1,
-    process_approve_bootstrap_activation_v1
-);
-authority_dispatch!(
-    dispatch_queue_bootstrap_activation_v1,
-    QueueBootstrapActivationV1,
-    process_queue_bootstrap_activation_v1
-);
-authority_dispatch!(
-    dispatch_execute_bootstrap_activation_v1,
-    ExecuteBootstrapActivationV1,
-    process_execute_bootstrap_activation_v1
 );
 v3_boxed_dispatch!(
     dispatch_initialize_controller_v2,
@@ -578,30 +498,14 @@ pub fn process_instruction(
         return Err(ProgramError::InvalidInstructionData);
     }
     match instruction_data[0] {
-        // Historical capacity-fragile schemas stay regression-decodable in
+        // Historical and policy-bypassing schemas stay regression-decodable in
         // their defining modules, but production dispatch rejects them before
-        // payload decoding or account access. This also keeps tag 26 reserved.
-        0..=17 | 23 | 26..=38 => Err(ProgramError::InvalidInstructionData),
+        // payload decoding or account access. V2 owns rotation, authority
+        // handoff, and bootstrap activation proposal liveness. Tag 18 remains
+        // because V2 rotation reuses its immutable candidate council account.
+        0..=17 | 19..=38 | 44..=52 => Err(ProgramError::InvalidInstructionData),
         instruction::CREATE_CANDIDATE_COUNCIL_SET_V1_TAG => {
             dispatch_create_candidate_council_set_v1(program_id, accounts, instruction_data)
-        }
-        instruction::CREATE_COUNCIL_ROTATION_V1_TAG => {
-            dispatch_create_council_rotation_v1(program_id, accounts, instruction_data)
-        }
-        instruction::APPROVE_COUNCIL_ROTATION_V1_TAG => {
-            dispatch_approve_council_rotation_v1(program_id, accounts, instruction_data)
-        }
-        instruction::ACTIVATE_COUNCIL_ROTATION_V1_TAG => {
-            dispatch_activate_council_rotation_v1(program_id, accounts, instruction_data)
-        }
-        instruction::QUEUE_COUNCIL_ROTATION_V1_TAG => {
-            dispatch_queue_council_rotation_v1(program_id, accounts, instruction_data)
-        }
-        instruction::CANCEL_COUNCIL_ROTATION_V1_TAG => {
-            dispatch_cancel_council_rotation_v1(program_id, accounts, instruction_data)
-        }
-        instruction::EXPIRE_COUNCIL_ROTATION_V1_TAG => {
-            dispatch_expire_council_rotation_v1(program_id, accounts, instruction_data)
         }
         release1_ceremony_instruction::BEGIN_PROGRAMDATA_OBSERVATION_V1_TAG => {
             dispatch_begin_programdata_observation_v1(program_id, accounts, instruction_data)
@@ -617,30 +521,6 @@ pub fn process_instruction(
         }
         release1_authority_instruction::RECORD_CONTROLLER_IMMUTABILITY_V1_TAG => {
             dispatch_record_controller_immutability_v1(program_id, accounts, instruction_data)
-        }
-        release1_authority_instruction::CREATE_TARGET_AUTHORITY_HANDOFF_V1_TAG => {
-            dispatch_create_target_authority_handoff_v1(program_id, accounts, instruction_data)
-        }
-        release1_authority_instruction::APPROVE_TARGET_AUTHORITY_HANDOFF_V1_TAG => {
-            dispatch_approve_target_authority_handoff_v1(program_id, accounts, instruction_data)
-        }
-        release1_authority_instruction::QUEUE_TARGET_AUTHORITY_HANDOFF_V1_TAG => {
-            dispatch_queue_target_authority_handoff_v1(program_id, accounts, instruction_data)
-        }
-        release1_authority_instruction::ACCEPT_TARGET_AUTHORITY_CHECKED_V1_TAG => {
-            dispatch_accept_target_authority_checked_v1(program_id, accounts, instruction_data)
-        }
-        release1_authority_instruction::CREATE_BOOTSTRAP_ACTIVATION_V1_TAG => {
-            dispatch_create_bootstrap_activation_v1(program_id, accounts, instruction_data)
-        }
-        release1_authority_instruction::APPROVE_BOOTSTRAP_ACTIVATION_V1_TAG => {
-            dispatch_approve_bootstrap_activation_v1(program_id, accounts, instruction_data)
-        }
-        release1_authority_instruction::QUEUE_BOOTSTRAP_ACTIVATION_V1_TAG => {
-            dispatch_queue_bootstrap_activation_v1(program_id, accounts, instruction_data)
-        }
-        release1_authority_instruction::EXECUTE_BOOTSTRAP_ACTIVATION_V1_TAG => {
-            dispatch_execute_bootstrap_activation_v1(program_id, accounts, instruction_data)
         }
         release1_v3_instruction::INITIALIZE_CONTROLLER_V2_TAG => {
             dispatch_initialize_controller_v2(program_id, accounts, instruction_data)
@@ -1110,7 +990,7 @@ mod tests {
 
     #[test]
     fn every_deprecated_lifecycle_tag_rejects_before_payload_decode() {
-        for tag in (0..=17).chain([23]).chain(26..=38) {
+        for tag in (0..=17).chain(19..=38).chain(44..=52) {
             assert_eq!(
                 process_instruction(&Pubkey::new_unique(), &[], &[tag]),
                 Err(ProgramError::InvalidInstructionData),
