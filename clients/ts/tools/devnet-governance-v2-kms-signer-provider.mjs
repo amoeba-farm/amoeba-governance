@@ -217,7 +217,14 @@ function transactionSurface(transaction) {
 
 function assertStageSigner(stage, authority) {
   if (authority.role === "legacy-target-authority") {
-    assert.equal(stage, "proposal-execute", "legacy target authority may sign only handoff proposal execution");
+    assert(
+      [
+        "proposal-execute",
+        "former-authority-negative",
+        "former-authority-proof-buffer-close",
+      ].includes(stage),
+      "legacy target authority may sign only handoff execution or the exact former-authority proof/close boundary",
+    );
     return;
   }
   const seatIndex = Number(authority.role.slice("seat-".length));
@@ -381,6 +388,8 @@ async function selfTest() {
   const byAddress = new Map(KMS_AUTHORITIES.map((entry) => [entry.address, entry]));
   assertExpectedSignerSet([PAYER_ADDRESS], [PAYER_ADDRESS], byAddress, "proposal-queue");
   assertExpectedSignerSet([PAYER_ADDRESS, KMS_AUTHORITIES[0].address], [PAYER_ADDRESS, KMS_AUTHORITIES[0].address], byAddress, "proposal-execute");
+  assertExpectedSignerSet([PAYER_ADDRESS, KMS_AUTHORITIES[0].address], [PAYER_ADDRESS, KMS_AUTHORITIES[0].address], byAddress, "former-authority-negative");
+  assertExpectedSignerSet([PAYER_ADDRESS, KMS_AUTHORITIES[0].address], [PAYER_ADDRESS, KMS_AUTHORITIES[0].address], byAddress, "former-authority-proof-buffer-close");
   for (let index = 1; index <= 3; index += 1) {
     assertExpectedSignerSet(
       [PAYER_ADDRESS, KMS_AUTHORITIES[index].address],

@@ -45,6 +45,9 @@ test("V2 handoff/activation tool exposes only the narrow plan/execute surface", 
     "buildExecuteBootstrapActivationProposalV2Instruction",
   ]) assert(source.includes(builder), `missing V2 builder ${builder}`);
   assert(source.includes("AMEBA_GOVERNANCE_V2_SIGNER_PROVIDER"));
+  assert(source.includes("AMEBA_GOVERNANCE_V2_FORMER_AUTHORITY_CLOSE_RECEIPT"));
+  assert(source.includes("formerAuthorityBoundaryReceiptSha256"));
+  assert(source.includes("AMOEBA_GOVERNANCE_V2_FORMER_AUTHORITY_PROOF_BUFFER_CLOSE_V1"));
   assert(source.includes("controller-immutability-authority-final-receipt-v1.json"));
   assert(source.includes("controllerAuthorityFinal.sha256"));
   assert(source.includes("immutabilityRecord.sha256"));

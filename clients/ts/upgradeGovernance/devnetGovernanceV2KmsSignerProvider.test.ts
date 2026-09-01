@@ -42,6 +42,8 @@ test("governance V2 signer-provider exposes no raw authority-key or raw-signatur
   ]) assert(source.includes(environment), `missing ${environment}`);
   assert(source.includes("gcp-kms-ed25519-signature-v1"));
   assert(source.includes("single-use"));
+  assert(source.includes("former-authority-negative"));
+  assert(source.includes("former-authority-proof-buffer-close"));
   assert(!source.includes("AUTHORITY_PRIVATE_KEY"));
   assert(!source.includes("RAW_SIGNATURE"));
   assert(!source.includes("sendRawTransaction"));

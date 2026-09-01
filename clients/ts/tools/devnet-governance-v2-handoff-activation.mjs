@@ -215,6 +215,16 @@ function canonicalBytes(value) {
   return Buffer.from(`${JSON.stringify(JSON.parse(stable(value)), null, 2)}\n`, "utf8");
 }
 
+function semanticReceiptHash(domain, receipt) {
+  const material = { ...receipt };
+  delete material.receiptSha256;
+  return createHash("sha256")
+    .update(domain, "ascii")
+    .update(Buffer.from([0]))
+    .update(stable(material), "utf8")
+    .digest("hex");
+}
+
 function instructionManifest(instruction) {
   return {
     programId: instruction.programId.toBase58(),
@@ -537,6 +547,86 @@ async function loadBundle({ requireArtifact = true } = {}) {
       releaseManifest: Buffer.from(evidence.releaseManifest.sha256, "hex"),
     },
   };
+}
+
+async function bindFormerAuthorityBoundary(bundle, phase) {
+  if (phase !== "activation") return bundle;
+  const minimal = await secureJsonFile(
+    path.join(bundle.bridgeRunDir, "spread-former-authority-minimal-proof-buffer-receipt-v2.json"),
+    "minimal former-authority proof-buffer receipt",
+  );
+  assert.equal(minimal.value.schema, "ameba-spread-former-authority-minimal-proof-buffer-receipt-v2");
+  assert.equal(minimal.value.mainnetAllowed, false);
+  assert.equal(minimal.value.genesisHash, EXPECTED_GENESIS);
+  assert.equal(minimal.value.targetProgram, bundle.ids.target.toBase58());
+  assert.equal(minimal.value.targetProgramData, bundle.ids.targetProgramdata.toBase58());
+  assert.equal(minimal.value.loader, BPF_LOADER_UPGRADEABLE_PROGRAM_ID.toBase58());
+  assert.equal(minimal.value.bufferAuthority, bundle.ids.legacyAuthority.toBase58());
+  assert.equal(minimal.value.spillTreasury, bundle.ids.treasury.toBase58());
+  assert.equal(minimal.value.payloadBytes, 1);
+  assert.equal(minimal.value.bufferRawBytes, 38);
+  assert.equal(minimal.value.sourceDeploymentReceiptSha256, bundle.evidence.package.sha256);
+  const receipt = await secureJson(
+    "AMEBA_GOVERNANCE_V2_FORMER_AUTHORITY_CLOSE_RECEIPT",
+    "former-authority proof-buffer close receipt",
+  );
+  const negative = await secureJsonFile(
+    path.join(path.dirname(receipt.file), "v2-former-authority-negative-proof-v1.json"),
+    "former-authority negative proof receipt",
+  );
+  assert.equal(negative.value.schema, "ameba-governance-devnet-v2-former-authority-negative-proof-v1");
+  assert.equal(negative.value.descriptorSha256, bundle.descriptorSha256);
+  assert.equal(negative.value.baseDescriptorSha256, bundle.baseDescriptorSha256);
+  assert.equal(negative.value.controllerProgram, bundle.ids.controller.toBase58());
+  assert.equal(negative.value.controllerAuthority, bundle.ids.authority.toBase58());
+  assert.equal(negative.value.targetProgram, bundle.ids.target.toBase58());
+  assert.equal(negative.value.targetProgramdata, bundle.ids.targetProgramdata.toBase58());
+  assert.equal(negative.value.formerAuthority, bundle.ids.legacyAuthority.toBase58());
+  assert.equal(negative.value.proofBuffer, minimal.value.proofBuffer);
+  assert.equal(negative.value.expectedInstructionError, "IncorrectAuthority");
+  assert.deepEqual(negative.value.finalizedError?.InstructionError, [0, "IncorrectAuthority"]);
+  assert(Array.isArray(negative.value.finalizedLogs) && negative.value.finalizedLogs.some((entry) => entry.includes("Incorrect authority provided")), "former-authority finalized logs do not prove IncorrectAuthority");
+  assert.equal(negative.value.targetMutationObserved, false);
+  assert.equal(negative.value.proofBufferMutationObserved, false);
+  assert.equal(negative.value.activationBoundaryMutationObserved, false);
+  assert.equal(
+    negative.value.receiptSha256,
+    semanticReceiptHash("AMOEBA_GOVERNANCE_V2_FORMER_AUTHORITY_NEGATIVE_PROOF_V1", negative.value),
+    "former-authority negative semantic receipt hash changed",
+  );
+  const value = receipt.value;
+  assert.equal(value.schema, "ameba-governance-devnet-v2-former-authority-proof-buffer-close-v1");
+  assert.equal(value.mainnetAllowed, false);
+  assert.equal(value.genesisHash, EXPECTED_GENESIS);
+  assert.equal(value.descriptorSha256, bundle.descriptorSha256);
+  assert.equal(value.baseDescriptorSha256, bundle.baseDescriptorSha256);
+  assert.equal(value.stage, "former-authority-proof-buffer-close");
+  assert.equal(value.controllerProgram, bundle.ids.controller.toBase58());
+  assert.equal(value.controllerAuthority, bundle.ids.authority.toBase58());
+  assert.equal(value.targetProgram, bundle.ids.target.toBase58());
+  assert.equal(value.targetProgramdata, bundle.ids.targetProgramdata.toBase58());
+  assert.equal(value.formerAuthority, bundle.ids.legacyAuthority.toBase58());
+  assert.equal(value.proofBuffer, minimal.value.proofBuffer);
+  assert.equal(value.treasury, bundle.ids.treasury.toBase58());
+  assert.equal(value.minimalProofBufferReceiptSha256, minimal.sha256);
+  assert.equal(value.negativeProofReceiptSha256, negative.sha256);
+  assert.equal(value.negativeFailureSignature, negative.value.signature);
+  assert.equal(bs58.decode(value.negativeFailureSignature).length, 64, "former-authority failure signature is invalid");
+  assert.equal(value.targetMutationObserved, false);
+  assert.equal(value.activationBoundaryMutationObserved, false);
+  assert.equal(value.bufferClosed, true);
+  assert.equal(value.stateAfter?.proofBuffer, null, "former-authority proof buffer remains live");
+  assert.equal(value.stateAfter?.boundary?.targetProgramdata?.authority, bundle.ids.authority.toBase58(), "former-authority close receipt has the wrong target authority");
+  assert.equal(value.stateAfter?.boundary?.gateStatus, GateStatusV1.EmergencyFrozen, "former-authority close receipt crossed the frozen activation boundary");
+  assert.equal(value.stateAfter?.boundary?.activationProposal, null, "activation proposal predates former-authority proof closure");
+  assert.equal(value.stateAfter?.boundary?.activationReceipt, null, "activation receipt predates former-authority proof closure");
+  assert.equal(value.stateAfter?.boundary?.currentDeployment, null, "current deployment predates former-authority proof closure");
+  const expectedSemanticHash = semanticReceiptHash(
+    "AMOEBA_GOVERNANCE_V2_FORMER_AUTHORITY_PROOF_BUFFER_CLOSE_V1",
+    value,
+  );
+  assert.equal(value.receiptSha256, expectedSemanticHash, "former-authority close semantic receipt hash changed");
+  return { ...bundle, formerAuthorityBoundary: receipt, formerAuthorityNegative: negative, minimalProofBuffer: minimal };
 }
 
 function finalized(minContextSlot = 0) {
@@ -1497,6 +1587,7 @@ function actionBindings(action, bundle) {
     observation: action.model?.observation.toBase58() ?? null,
     observationDigest: action.observation?.value?.observationDigest.toString("hex") ?? null,
     proposal: proposalSummary(action.proposal),
+    formerAuthorityBoundaryReceiptSha256: bundle.formerAuthorityBoundary?.sha256 ?? null,
     baseAccountFingerprints: Object.fromEntries(Object.entries(action.state.accounts).map(([field, account]) => [field, accountFingerprint(account)])),
   };
 }
@@ -1531,6 +1622,7 @@ async function writePlan(bundle, phase, action, lookup, rpcSelection) {
     tag53ReceiptSha256: bundle.tag53.sha256,
     tag82ReceiptSha256: bundle.tag82.sha256,
     controllerImmutabilityRecordSha256: bundle.immutabilityRecord.sha256,
+    formerAuthorityBoundaryReceiptSha256: bundle.formerAuthorityBoundary?.sha256 ?? null,
     phase,
     stage: action.stage,
     genesisHash: EXPECTED_GENESIS,
@@ -1558,7 +1650,7 @@ async function writePlan(bundle, phase, action, lookup, rpcSelection) {
 }
 
 async function planNext(phase) {
-  const bundle = await loadBundle();
+  const bundle = await bindFormerAuthorityBoundary(await loadBundle(), phase);
   const planningOperation = operationId({ schema: "ameba-v2-handoff-activation-planning-v1", descriptor: bundle.descriptorSha256, phase, timestampBucket: Math.floor(Date.now() / 1_000) });
   return withCeremonyRpcOwnerLock(bundle.runDir, planningOperation, async () => {
     const journal = await openJournal(bundle.runDir, `v2-${phase}-planning-${planningOperation.slice(0, 12)}`, planningOperation);
@@ -1591,6 +1683,7 @@ async function loadPlan(bundle, phase) {
   assert.equal(plan.tag53ReceiptSha256, bundle.tag53.sha256);
   assert.equal(plan.tag82ReceiptSha256, bundle.tag82.sha256);
   assert.equal(plan.controllerImmutabilityRecordSha256, bundle.immutabilityRecord.sha256);
+  assert.equal(plan.formerAuthorityBoundaryReceiptSha256, bundle.formerAuthorityBoundary?.sha256 ?? null);
   assert.equal(plan.artifactSha256, bundle.artifactSha256);
   assert.equal(plan.artifactBytes, bundle.artifact.length);
   assert(/^[0-9a-f]{64}$/u.test(plan.operationId), "plan operation ID is invalid");
@@ -1612,6 +1705,7 @@ async function writeStageReceipt(bundle, selected, landed, post) {
     operationId: selected.plan.operationId,
     planFile: path.basename(selected.file),
     planSha256: selected.planSha256,
+    formerAuthorityBoundaryReceiptSha256: bundle.formerAuthorityBoundary?.sha256 ?? null,
     proposalId: selected.plan.bindings.proposal?.id ?? (selected.plan.stage === "proposal-create" ? selected.plan.bindings.nextProposalId : null),
     finalizedTransaction: landed,
     postObservedSlot: post.state.slot,
@@ -1649,6 +1743,7 @@ async function writeStageReceipt(bundle, selected, landed, post) {
       handoffReceiptSha256: post.state.accounts.handoffReceipt ? sha256Hex(post.state.accounts.handoffReceipt.data) : null,
       activationReceiptSha256: post.state.accounts.activationReceipt ? sha256Hex(post.state.accounts.activationReceipt.data) : null,
       currentDeploymentSha256: post.state.accounts.currentDeployment ? sha256Hex(post.state.accounts.currentDeployment.data) : null,
+      formerAuthorityBoundaryReceiptSha256: bundle.formerAuthorityBoundary?.sha256 ?? null,
       artifactSha256: bundle.artifactSha256,
       evidenceSha256: Object.fromEntries(Object.entries(bundle.evidence).map(([field, value]) => [field, value.sha256])),
       finalizedObservationSlot: post.state.slot,
@@ -1668,7 +1763,7 @@ async function writeStageReceipt(bundle, selected, landed, post) {
 }
 
 async function executeNext(phase) {
-  const bundle = await loadBundle();
+  const bundle = await bindFormerAuthorityBoundary(await loadBundle(), phase);
   const selected = await loadPlan(bundle, phase);
   return withExecutionLock(bundle.runDir, `v2-${phase}-${selected.plan.operationId.slice(0, 12)}`, selected.plan.operationId, async () => (
     withCeremonyRpcOwnerLock(bundle.runDir, selected.plan.operationId, async () => {
@@ -1745,7 +1840,7 @@ async function executeNext(phase) {
 }
 
 async function status(phase) {
-  const bundle = await loadBundle();
+  const bundle = await bindFormerAuthorityBoundary(await loadBundle(), phase);
   const statusId = operationId({ schema: "ameba-v2-handoff-activation-status-v1", descriptor: bundle.descriptorSha256, phase, timestampBucket: Math.floor(Date.now() / 1_000) });
   return withCeremonyRpcOwnerLock(bundle.runDir, statusId, async () => {
     const journal = await openJournal(bundle.runDir, `v2-${phase}-status-${statusId.slice(0, 12)}`, statusId);
