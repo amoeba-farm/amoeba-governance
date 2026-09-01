@@ -16,6 +16,7 @@ import {
 import {
   assertRunDirectoryBackoffElapsed,
   loadInjectedSignerProvider,
+  openJournal,
   signTransactionWithProvider,
 } from "./devnet-ceremony-runtime.mjs";
 
@@ -90,6 +91,7 @@ import {
   deriveCouncilPda,
   deriveGatePda,
   derivePolicyPda,
+  deriveUpgradeableProgramdataAddress,
   deserializeProtocolGateV1,
 } from "../dist/upgradeGovernance/v1.js";
 import {
@@ -108,16 +110,16 @@ process.umask(0o077);
 const bs58 = bs58Module.default ?? bs58Module;
 
 const EXPECTED_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
-const CONTROLLER = new PublicKey("CzyGUEVtLg2FTWdZmQ6KZCydw73KutLtE6c5PJgnxQqa");
-const CONTROLLER_PROGRAMDATA = new PublicKey("H9zckD4ukjmKQL6tF5G9uZWixKomxeXxW2CPA3MkgPN9");
-const TARGET = new PublicKey("9ipkBCjEfeJDMF6AFrezRmDDHmbnmeyv45cfXNqAnWsH");
-const TARGET_PROGRAMDATA = new PublicKey("2DBN762WGdNc85xiVdvQX7Lo4TXAq3WhVz9mBQcaU3a3");
-const LEGACY_TARGET_AUTHORITY = new PublicKey("D5jhTM3kYHdKixrc52Kn657gBHytQLhQqsTmJBcNFVdq");
-const PAYER = new PublicKey("G2f6Fv477ZyFbmRFtVr21jf9VufXpiRCxf1e91J6SxxT");
-const INITIALIZER = new PublicKey("7wHuwk8DkqCN7vuEWzLhfLDQeiUUKKYfocjjDL5mxQvZ");
-const TREASURY = new PublicKey("8XUjnzVzR71DaVuqbSHaNev5H4vrxofyFP4iZt2FXa1j");
-const GUARDIAN = new PublicKey("9DREu4USpbCHzLHD9whKHnRud8KDMhPswU4jZMbJP3ab");
-const SEATS = [
+let CONTROLLER = new PublicKey("CzyGUEVtLg2FTWdZmQ6KZCydw73KutLtE6c5PJgnxQqa");
+let CONTROLLER_PROGRAMDATA = new PublicKey("H9zckD4ukjmKQL6tF5G9uZWixKomxeXxW2CPA3MkgPN9");
+let TARGET = new PublicKey("9ipkBCjEfeJDMF6AFrezRmDDHmbnmeyv45cfXNqAnWsH");
+let TARGET_PROGRAMDATA = new PublicKey("2DBN762WGdNc85xiVdvQX7Lo4TXAq3WhVz9mBQcaU3a3");
+let LEGACY_TARGET_AUTHORITY = new PublicKey("D5jhTM3kYHdKixrc52Kn657gBHytQLhQqsTmJBcNFVdq");
+let PAYER = new PublicKey("G2f6Fv477ZyFbmRFtVr21jf9VufXpiRCxf1e91J6SxxT");
+let INITIALIZER = new PublicKey("7wHuwk8DkqCN7vuEWzLhfLDQeiUUKKYfocjjDL5mxQvZ");
+let TREASURY = new PublicKey("8XUjnzVzR71DaVuqbSHaNev5H4vrxofyFP4iZt2FXa1j");
+let GUARDIAN = new PublicKey("9DREu4USpbCHzLHD9whKHnRud8KDMhPswU4jZMbJP3ab");
+let SEATS = [
   "pSutXCyMTkwvzG1kpiHXULkVKyzz8NPSNgnjLgwNcTu",
   "4vrxWeSfCoJA8KvzCcWGgG4C5S4gPYrLaRWysycJeVpz",
   "DgMGtSjUg1wXPZuPBT6HqGN3qRLVBJCqYrv31XtcwcBR",
@@ -127,8 +129,8 @@ const SEATS = [
 
 const SOLANA = "/home/space/.local/share/solana/install/active_release/bin/solana";
 const EXPECTED_SOLANA_VERSION = "solana-cli 4.0.0 (src:2a165e7a; feat:dda54cf7, client:Agave)";
-const EXPECTED_ARTIFACT_SHA256 = "0c107bce1ec34d3badf72b69161f0cae0b82a7b85ea714770f3876c08e6c1b18";
-const EXPECTED_ARTIFACT_BYTES = 1_114_592;
+let EXPECTED_ARTIFACT_SHA256 = "0c107bce1ec34d3badf72b69161f0cae0b82a7b85ea714770f3876c08e6c1b18";
+let EXPECTED_ARTIFACT_BYTES = 1_114_592;
 const PLAN_TTL_SLOTS = 100_000;
 const FINALIZED_STATUS_POLL_INTERVAL_MS = 30_000;
 const MINIMUM_CONTEXT_CATCH_UP_MAX_ATTEMPTS = 20;
@@ -151,8 +153,15 @@ const TERMINAL_DELAY_SLOTS = 9_000n;
 const VOTE_REVIEW_SLOTS = 450n;
 const PROPOSAL_EXPIRY_SLOTS = 432_000n;
 const U64_MAX = 0xffff_ffff_ffff_ffffn;
-const SOURCE_COMMIT = "9f3414315d53f70fe029c7f3480c9d45b8674da2";
-const SOURCE_TREE = "854f20940fd701c2c5a9716b7a71dc174dd7c8c2";
+let SOURCE_COMMIT = "9f3414315d53f70fe029c7f3480c9d45b8674da2";
+let SOURCE_TREE = "854f20940fd701c2c5a9716b7a71dc174dd7c8c2";
+const GOVERNANCE_V2_DESCRIPTOR_SCHEMA = "ameba-governance-devnet-controller-v2-descriptor-v1";
+const GOVERNANCE_V2_PLAN_SCHEMA = "ameba-governance-devnet-controller-v2-plan-v1";
+const GOVERNANCE_V2_RECEIPT_SCHEMA = "ameba-governance-devnet-controller-v2-receipt-v1";
+const GOVERNANCE_V2_TAG53_RECEIPT_PATTERN = /^governance-v2-initialize-tag53-receipt-([0-9a-f]{64})\.json$/u;
+const GOVERNANCE_V2_TAG82_RECEIPT_PATTERN = /^governance-v2-initialize-tag82-receipt-([0-9a-f]{64})\.json$/u;
+let GOVERNANCE_V2_DESCRIPTOR = null;
+let GOVERNANCE_V2_DESCRIPTOR_SHA256 = null;
 const RAW_CHUNK_SIZE = PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB_V1;
 const ARTIFACT_CHUNK_SIZE = RELEASE1_ARTIFACT_CHUNK_SIZE_V1;
 const PRE_GENERATION = 1n;
@@ -411,6 +420,244 @@ function assertSha256(value, label) {
   assert(typeof value === "string" && /^[0-9a-f]{64}$/u.test(value), `${label} is not a lowercase SHA-256`);
 }
 
+function descriptorPublicKey(value, label) {
+  assert(typeof value === "string", `${label} must be base58`);
+  const key = new PublicKey(value);
+  assert(!key.equals(PublicKey.default), `${label} must be nondefault`);
+  return key;
+}
+
+function assertDescriptorCommit(value, label) {
+  assert(typeof value === "string" && /^[0-9a-f]{40}$/u.test(value), `${label} must be a lowercase Git object ID`);
+}
+
+function validateGovernanceV2Descriptor(value) {
+  assert(value && typeof value === "object" && !Array.isArray(value), "governance V2 descriptor is malformed");
+  assert.equal(value.schema, GOVERNANCE_V2_DESCRIPTOR_SCHEMA, "governance V2 descriptor schema changed");
+  assert.equal(value.cluster?.name, "devnet", "governance V2 descriptor cluster changed");
+  assert.equal(value.cluster?.genesisHash, EXPECTED_GENESIS, "governance V2 descriptor genesis changed");
+  assert.equal(value.authorization?.devnetOnly, true, "governance V2 descriptor is not Devnet-only");
+  assert.equal(value.authorization?.mainnetAllowed, false, "governance V2 descriptor permits Mainnet");
+  assert.equal(value.authorization?.writerRestartAllowed, false, "governance V2 descriptor permits writer restart");
+  assert.equal(value.authorization?.mainBranchMergeAllowed, false, "governance V2 descriptor permits a main-branch merge");
+  assertDescriptorCommit(value.source?.commit, "governance V2 source commit");
+  assertDescriptorCommit(value.source?.tree, "governance V2 source tree");
+  assert(Number.isSafeInteger(value.artifact?.bytes) && value.artifact.bytes > 0, "governance V2 artifact length is invalid");
+  assertSha256(value.artifact?.sha256, "governance V2 artifact SHA-256");
+  assert(typeof value.artifact?.file === "string" && path.basename(value.artifact.file) === value.artifact.file, "governance V2 artifact filename is invalid");
+  assert.equal(value.artifact.programDataRawBytes, value.artifact.bytes + Number(LOADER_V3_PROGRAMDATA_METADATA_LEN_V1), "governance V2 ProgramData length changed");
+
+  const controller = descriptorPublicKey(value.identities?.controllerProgram, "governance V2 controller");
+  const controllerProgramdata = descriptorPublicKey(value.identities?.controllerProgramData, "governance V2 controller ProgramData");
+  const target = descriptorPublicKey(value.identities?.targetProgram, "governance V2 target");
+  const targetProgramdata = descriptorPublicKey(value.identities?.targetProgramData, "governance V2 target ProgramData");
+  assert(deriveUpgradeableProgramdataAddress(controller)[0].equals(controllerProgramdata), "governance V2 controller ProgramData is not canonical");
+  assert(deriveUpgradeableProgramdataAddress(target)[0].equals(targetProgramdata), "governance V2 target ProgramData is not canonical");
+  for (const field of ["legacyTargetAuthority", "feePayer", "initializer", "treasury", "guardian"]) {
+    descriptorPublicKey(value.identities?.[field], `governance V2 ${field}`);
+  }
+  assert(Array.isArray(value.identities?.seats) && value.identities.seats.length === 5, "governance V2 descriptor must contain five seats");
+  const seats = value.identities.seats.map((entry, index) => descriptorPublicKey(entry, `governance V2 seat ${index}`));
+  assert.equal(new Set(seats.map((entry) => entry.toBase58())).size, 5, "governance V2 seats must be distinct");
+  assert.equal(value.governanceLivenessV2?.initialTimingProfileVersion, 1, "governance V2 timing-profile version changed");
+  assertSha256(value.governanceLivenessV2?.initialTimingProfileHash, "governance V2 timing-profile hash");
+  assert.equal(value.governanceLivenessV2?.initialNextProposalId, 1, "governance V2 initial proposal ID changed");
+  assert.equal(value.governanceLivenessV2?.initialRotationNonce, 1, "governance V2 initial rotation nonce changed");
+  assert.equal(value.governanceLivenessV2?.routineQuorum, 3, "governance V2 routine quorum changed");
+  assert.equal(value.governanceLivenessV2?.terminalQuorumReserved, 4, "governance V2 reserved terminal quorum changed");
+  assert.equal(value.governanceLivenessV2?.tokenGovernanceEnabled, false, "governance V2 descriptor enabled token governance");
+  return value;
+}
+
+function configureGovernanceV2Descriptor(value, descriptorSha256) {
+  validateGovernanceV2Descriptor(value);
+  assertSha256(descriptorSha256, "governance V2 descriptor SHA-256");
+  CONTROLLER = new PublicKey(value.identities.controllerProgram);
+  CONTROLLER_PROGRAMDATA = new PublicKey(value.identities.controllerProgramData);
+  TARGET = new PublicKey(value.identities.targetProgram);
+  TARGET_PROGRAMDATA = new PublicKey(value.identities.targetProgramData);
+  LEGACY_TARGET_AUTHORITY = new PublicKey(value.identities.legacyTargetAuthority);
+  PAYER = new PublicKey(value.identities.feePayer);
+  INITIALIZER = new PublicKey(value.identities.initializer);
+  TREASURY = new PublicKey(value.identities.treasury);
+  GUARDIAN = new PublicKey(value.identities.guardian);
+  SEATS = value.identities.seats.map((entry) => new PublicKey(entry));
+  EXPECTED_ARTIFACT_SHA256 = value.artifact.sha256;
+  EXPECTED_ARTIFACT_BYTES = value.artifact.bytes;
+  SOURCE_COMMIT = value.source.commit;
+  SOURCE_TREE = value.source.tree;
+  GOVERNANCE_V2_DESCRIPTOR = value;
+  GOVERNANCE_V2_DESCRIPTOR_SHA256 = descriptorSha256;
+
+  const ids = identities();
+  const expectedPdas = {
+    controllerConfig: ids.config,
+    controllerAuthority: ids.authority,
+    protocolGate: ids.gate,
+    governancePolicyV1: ids.policy,
+    governanceCouncilSetV1: ids.council,
+    capacityPolicy: ids.capacityPolicy,
+    controllerReleaseCommitment: ids.controllerRelease,
+    controllerImmutabilityReceipt: ids.immutabilityReceipt,
+  };
+  for (const [field, expected] of Object.entries(expectedPdas)) {
+    assert.equal(value.pdas?.[field], expected.toBase58(), `governance V2 descriptor ${field} changed`);
+  }
+}
+
+async function loadGovernanceV2Descriptor(fileInput) {
+  const file = await requireSecureRegularFile(path.resolve(fileInput), "governance V2 descriptor");
+  const bytes = await readFile(file);
+  const value = validateGovernanceV2Descriptor(JSON.parse(bytes.toString("utf8")));
+  assert(bytes.equals(Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8")), "governance V2 descriptor is not canonical JSON");
+  const descriptorSha256 = sha256Hex(bytes);
+  configureGovernanceV2Descriptor(value, descriptorSha256);
+  return { bytes, descriptorSha256, file, value };
+}
+
+async function selectGovernanceV2Receipt(runDir, environmentName, pattern, label) {
+  const configured = process.env[environmentName]?.trim();
+  if (configured) {
+    const file = await requireSecureRegularFile(path.resolve(configured), label);
+    assert.equal(path.dirname(file), path.resolve(runDir), `${label} must be directly inside the ceremony run directory`);
+    assert(pattern.test(path.basename(file)), `${label} filename changed`);
+    return file;
+  }
+  const matches = (await readdir(runDir)).filter((name) => pattern.test(name)).sort();
+  assert.equal(matches.length, 1, `${label} must have exactly one successful receipt or an explicit ${environmentName}`);
+  return requireSecureRegularFile(fileInRunDir(runDir, matches[0]), label);
+}
+
+async function loadGovernanceV2ActionAttestation(runDir, descriptor, action, receiptEnvironment, receiptPattern) {
+  const receiptFile = await selectGovernanceV2Receipt(
+    runDir,
+    receiptEnvironment,
+    receiptPattern,
+    `governance V2 ${action} receipt`,
+  );
+  const receiptBytes = await readFile(receiptFile);
+  const receipt = JSON.parse(receiptBytes.toString("utf8"));
+  assert.equal(receipt.schema, GOVERNANCE_V2_RECEIPT_SCHEMA, `${action} receipt schema changed`);
+  assert.equal(receipt.descriptorSha256, GOVERNANCE_V2_DESCRIPTOR_SHA256, `${action} receipt descriptor changed`);
+  assert.equal(receipt.action, action, `${action} receipt action changed`);
+  assert.equal(receipt.genesisHash, EXPECTED_GENESIS, `${action} receipt genesis changed`);
+  assert(typeof receipt.planFile === "string" && path.basename(receipt.planFile) === receipt.planFile, `${action} receipt plan filename changed`);
+  assert.equal(receipt.operationId, receiptPattern.exec(path.basename(receiptFile))?.[1], `${action} receipt filename operation changed`);
+  assert(typeof receipt.signature === "string" && receipt.signature.length > 0, `${action} receipt signature is absent`);
+  assert(Number.isSafeInteger(receipt.finalizedSlot) && receipt.finalizedSlot > 0, `${action} finalized slot is invalid`);
+  assert(Number.isSafeInteger(receipt.observedSlot) && receipt.observedSlot >= receipt.finalizedSlot, `${action} observed slot is invalid`);
+
+  const planFile = await requireSecureRegularFile(fileInRunDir(runDir, receipt.planFile), `governance V2 ${action} plan`);
+  const planBytes = await readFile(planFile);
+  const plan = JSON.parse(planBytes.toString("utf8"));
+  assert.equal(plan.schema, GOVERNANCE_V2_PLAN_SCHEMA, `${action} plan schema changed`);
+  assert.equal(plan.descriptorSha256, GOVERNANCE_V2_DESCRIPTOR_SHA256, `${action} plan descriptor changed`);
+  assert.equal(plan.action, action, `${action} plan action changed`);
+  assert.equal(plan.genesisHash, EXPECTED_GENESIS, `${action} plan genesis changed`);
+  assert.equal(plan.operationId, receipt.operationId, `${action} plan operation changed`);
+  assert.equal(receipt.planSha256, sha256Hex(planBytes), `${action} receipt plan hash changed`);
+  assert(planBytes.equals(Buffer.from(`${JSON.stringify(plan, null, 2)}\n`, "utf8")), `${action} plan is not canonical JSON`);
+
+  const journalName = `governance-v2-${action}-${receipt.operationId.slice(0, 12)}`;
+  await requireSecureRegularFile(fileInRunDir(runDir, `${journalName}.jsonl`), `governance V2 ${action} journal`);
+  const journal = await openJournal(runDir, journalName, receipt.operationId);
+  let finalized;
+  try {
+    finalized = journal.entries.findLast((entry) => entry.event === "finalized" && entry.stage === action);
+  } finally {
+    await journal.close();
+  }
+  assert(finalized, `${action} journal lacks its finalized transaction`);
+  assert.equal(finalized.signature, receipt.signature, `${action} journal signature changed`);
+  assert.equal(finalized.slot, receipt.finalizedSlot, `${action} journal finalized slot changed`);
+  assertSha256(finalized.messageSha256, `${action} finalized message SHA-256`);
+  return {
+    descriptor,
+    finalizedMessageSha256: finalized.messageSha256,
+    plan,
+    planBytes,
+    receipt,
+    receiptBytes,
+  };
+}
+
+async function loadGovernanceV2InitializationAttestation(runDir, artifact, descriptor) {
+  const tag53 = await loadGovernanceV2ActionAttestation(
+    runDir,
+    descriptor,
+    "initialize-tag53",
+    "AMEBA_GOVERNANCE_V2_TAG53_RECEIPT",
+    GOVERNANCE_V2_TAG53_RECEIPT_PATTERN,
+  );
+  const tag82 = await loadGovernanceV2ActionAttestation(
+    runDir,
+    descriptor,
+    "initialize-tag82",
+    "AMEBA_GOVERNANCE_V2_TAG82_RECEIPT",
+    GOVERNANCE_V2_TAG82_RECEIPT_PATTERN,
+  );
+  assert(tag82.receipt.finalizedSlot >= tag53.receipt.finalizedSlot, "tag82 finalized before tag53");
+  const details = tag53.plan.details;
+  assert(Number.isSafeInteger(details.controllerCapacity) && details.controllerCapacity === artifact.length, "tag53 controller capacity changed");
+  assert.equal(details.policyActivationSlot, tag53.plan.observedSlot, "tag53 policy activation slot changed");
+  assert.equal(details.artifactMerkleRoot, artifactMerkleRoot(artifact).toString("hex"), "tag53 artifact Merkle root changed");
+  for (const field of ["policyHash", "councilHash", "capacityPolicyDigest", "controllerReleaseDigest"]) {
+    assertSha256(details[field], `tag53 ${field}`);
+  }
+  assert.equal(tag82.plan.details.lifecycleRegistry, descriptor.value.pdas.governanceLifecycleRegistryV2, "tag82 lifecycle registry changed");
+  assert.equal(tag82.plan.details.initialTimingProfile, descriptor.value.pdas.governanceTimingProfileV1, "tag82 timing profile changed");
+  assert.equal(tag82.plan.details.initialTimingProfileHash, descriptor.value.governanceLivenessV2.initialTimingProfileHash, "tag82 timing profile hash changed");
+  assert.equal(tag82.receipt.lifecycleRegistry, tag82.plan.details.lifecycleRegistry, "tag82 receipt lifecycle registry changed");
+  assert.equal(tag82.receipt.timingProfile, tag82.plan.details.initialTimingProfile, "tag82 receipt timing profile changed");
+  assert.equal(tag82.receipt.timingProfileHash, tag82.plan.details.initialTimingProfileHash, "tag82 receipt timing hash changed");
+
+  const plan = {
+    policyActivationSlot: details.policyActivationSlot,
+    policyHash: details.policyHash,
+    councilHash: details.councilHash,
+    capacityPolicyDigest: details.capacityPolicyDigest,
+    controllerReleaseDigest: details.controllerReleaseDigest,
+  };
+  const receipt = {
+    mode: "governance-v2",
+    signature: tag53.receipt.signature,
+    messageSha256: tag53.finalizedMessageSha256,
+    slot: tag53.receipt.finalizedSlot,
+    finalizedObservationSlot: tag53.receipt.observedSlot,
+    freezeSlot: tag53.receipt.finalizedSlot,
+    accountRawSha256: null,
+  };
+  const transactions = [tag53, tag82].map((entry) => ({
+    action: entry.receipt.action,
+    signature: entry.receipt.signature,
+    messageSha256: entry.finalizedMessageSha256,
+    slot: entry.receipt.finalizedSlot,
+  }));
+  return {
+    mode: "governance-v2",
+    plan,
+    receipt,
+    transactions,
+    snapshot: {
+      mode: "governance-v2",
+      descriptorSha256: descriptor.descriptorSha256,
+      tag53PlanSha256: sha256Hex(tag53.planBytes),
+      tag53ReceiptSha256: sha256Hex(tag53.receiptBytes),
+      tag53Signature: tag53.receipt.signature,
+      tag53Slot: tag53.receipt.finalizedSlot,
+      tag82PlanSha256: sha256Hex(tag82.planBytes),
+      tag82ReceiptSha256: sha256Hex(tag82.receiptBytes),
+      tag82Signature: tag82.receipt.signature,
+      tag82Slot: tag82.receipt.finalizedSlot,
+      policyHash: details.policyHash,
+      councilHash: details.councilHash,
+      capacityPolicyDigest: details.capacityPolicyDigest,
+      controllerReleaseDigest: details.controllerReleaseDigest,
+      timingProfileHash: tag82.receipt.timingProfileHash,
+    },
+  };
+}
+
 function assertInitializationPlan(plan, ids, artifact) {
   assert.equal(plan.schema, "ameba-governance-devnet-controller-initialize-plan-v3", "initialization plan schema changed");
   const { operationId: storedOperationId, ...material } = plan;
@@ -581,9 +828,26 @@ function assertStateRpcSelection(selection) {
 async function inputs() {
   const { rpcSelection, stateRpcOrigin, stateRpcUrl } = await loadDevnetRpcConfiguration();
   assertStateRpcSelection(rpcSelection);
-  const runDir = await requireSecureDirectory(requiredEnvironment("AMEBA_CEREMONY_RUN_DIR"), "ceremony run directory");
-  const { artifact, file: artifactPath } = await loadArtifact(requiredEnvironment("AMEBA_CONTROLLER_ARTIFACT"));
-  const initializationAttestation = await loadInitializationAttestation(runDir, artifact);
+  const descriptorInput = process.env.AMEBA_GOVERNANCE_V2_DESCRIPTOR?.trim();
+  const descriptor = descriptorInput ? await loadGovernanceV2Descriptor(descriptorInput) : null;
+  const descriptorRunDir = descriptor ? path.dirname(descriptor.file) : null;
+  const configuredRunDir = process.env.AMEBA_CEREMONY_RUN_DIR?.trim();
+  const runDir = await requireSecureDirectory(
+    configuredRunDir ?? descriptorRunDir ?? requiredEnvironment("AMEBA_CEREMONY_RUN_DIR"),
+    "ceremony run directory",
+  );
+  if (descriptorRunDir !== null) assert.equal(path.resolve(runDir), path.resolve(descriptorRunDir), "governance V2 descriptor must be directly inside its ceremony run directory");
+  const descriptorArtifact = descriptor ? fileInRunDir(runDir, descriptor.value.artifact.file) : null;
+  const configuredArtifact = process.env.AMEBA_CONTROLLER_ARTIFACT?.trim();
+  if (descriptorArtifact !== null && configuredArtifact) {
+    assert.equal(path.resolve(configuredArtifact), path.resolve(descriptorArtifact), "AMEBA_CONTROLLER_ARTIFACT differs from the governance V2 descriptor");
+  }
+  const { artifact, file: artifactPath } = await loadArtifact(
+    configuredArtifact ?? descriptorArtifact ?? requiredEnvironment("AMEBA_CONTROLLER_ARTIFACT"),
+  );
+  const initializationAttestation = descriptor
+    ? await loadGovernanceV2InitializationAttestation(runDir, artifact, descriptor)
+    : await loadInitializationAttestation(runDir, artifact);
   const connection = new Connection(stateRpcUrl, {
     commitment: "finalized",
     confirmTransactionInitialTimeout: 120_000,
@@ -741,14 +1005,17 @@ async function executionAwareRpc(method, stage, callback) {
 
 async function ensureInitializationTransaction(value) {
   if (value.initializationTransactionVerified) return;
-  const receipt = value.initializationAttestation.receipt;
-  const landed = await executionAwareRpc(
-    "getTransaction",
-    "finalized-read:initialization-transaction",
-    () => finalizedTransaction(value, receipt.signature, receipt.messageSha256, receipt.slot),
-  );
-  assert(landed, "controller initialization transaction is not finalized and retrievable");
-  assert.equal(landed.slot, receipt.slot, "controller initialization transaction slot changed");
+  const transactions = value.initializationAttestation.transactions
+    ?? [value.initializationAttestation.receipt];
+  for (const transaction of transactions) {
+    const landed = await executionAwareRpc(
+      "getTransaction",
+      `finalized-read:initialization-transaction:${transaction.action ?? "initialize"}`,
+      () => finalizedTransaction(value, transaction.signature, transaction.messageSha256, transaction.slot),
+    );
+    assert(landed, "controller initialization transaction is not finalized and retrievable");
+    assert.equal(landed.slot, transaction.slot, "controller initialization transaction slot changed");
+  }
   value.initializationTransactionVerified = true;
 }
 
@@ -762,12 +1029,14 @@ function assertInitializationState(value, ids, accounts, config, gate, policy, c
     [ids.capacityPolicy, accounts.capacity],
     [ids.controllerRelease, accounts.release],
   ];
-  for (const [address, account] of accountEntries) {
-    assert.equal(
-      sha256Hex(account.data),
-      receipt.accountRawSha256[address.toBase58()],
-      `initialized account ${address.toBase58()} bytes differ from the initialization receipt`,
-    );
+  if (value.initializationAttestation.mode !== "governance-v2") {
+    for (const [address, account] of accountEntries) {
+      assert.equal(
+        sha256Hex(account.data),
+        receipt.accountRawSha256[address.toBase58()],
+        `initialized account ${address.toBase58()} bytes differ from the initialization receipt`,
+      );
+    }
   }
 
   assert(config.clusterDomain.equals(clusterDomainFromGenesisHashV1(EXPECTED_GENESIS)), "controller config cluster domain changed");
@@ -2849,6 +3118,109 @@ async function selfTest() {
     );
   }
 
+  const runtimeBeforeDescriptorTest = {
+    CONTROLLER,
+    CONTROLLER_PROGRAMDATA,
+    TARGET,
+    TARGET_PROGRAMDATA,
+    LEGACY_TARGET_AUTHORITY,
+    PAYER,
+    INITIALIZER,
+    TREASURY,
+    GUARDIAN,
+    SEATS,
+    EXPECTED_ARTIFACT_SHA256,
+    EXPECTED_ARTIFACT_BYTES,
+    SOURCE_COMMIT,
+    SOURCE_TREE,
+    GOVERNANCE_V2_DESCRIPTOR,
+    GOVERNANCE_V2_DESCRIPTOR_SHA256,
+  };
+  const descriptorVector = {
+    schema: GOVERNANCE_V2_DESCRIPTOR_SCHEMA,
+    cluster: { name: "devnet", genesisHash: EXPECTED_GENESIS },
+    source: {
+      commit: "b54648cf4753a8093ac0e21a0dceb0db8eebb29b",
+      tree: "65faf68128e4def7777e85d8b634536277effa40",
+    },
+    artifact: {
+      file: "upgrade_controller-v2-fastlane.so",
+      bytes: 1_211_984,
+      sha256: "6c833854f4d7b9b37264c214673a321b4ef62b59fd7fd4733c26eaaa3bd2e157",
+      programDataRawBytes: 1_212_029,
+    },
+    identities: {
+      controllerProgram: "J4ugyomki2MpGTbXMJ38w4h8ZybYQHUkiFC7FqxoQ6RW",
+      controllerProgramData: "8WqJonLtgtw6tswhtGQ5RuQSzhfv1njSLuAnnYDsoh7x",
+      targetProgram: "9ipkBCjEfeJDMF6AFrezRmDDHmbnmeyv45cfXNqAnWsH",
+      targetProgramData: "2DBN762WGdNc85xiVdvQX7Lo4TXAq3WhVz9mBQcaU3a3",
+      legacyTargetAuthority: "D5jhTM3kYHdKixrc52Kn657gBHytQLhQqsTmJBcNFVdq",
+      feePayer: "G2f6Fv477ZyFbmRFtVr21jf9VufXpiRCxf1e91J6SxxT",
+      initializer: "7wHuwk8DkqCN7vuEWzLhfLDQeiUUKKYfocjjDL5mxQvZ",
+      treasury: "8XUjnzVzR71DaVuqbSHaNev5H4vrxofyFP4iZt2FXa1j",
+      guardian: "9DREu4USpbCHzLHD9whKHnRud8KDMhPswU4jZMbJP3ab",
+      seats: [
+        "pSutXCyMTkwvzG1kpiHXULkVKyzz8NPSNgnjLgwNcTu",
+        "4vrxWeSfCoJA8KvzCcWGgG4C5S4gPYrLaRWysycJeVpz",
+        "DgMGtSjUg1wXPZuPBT6HqGN3qRLVBJCqYrv31XtcwcBR",
+        "4SJyALW3CinnBrFUzHeJL6v5KM12hw2FGLL1wbVTVfn8",
+        "Cmd42MrYC7CVyQNGq7GRkTqR3jQ8cBPKzjzDpsc5eNW4",
+      ],
+    },
+    pdas: {
+      controllerConfig: "2iGUy7fPV69ZQY3GLGbr5YXNuihnT4tCpcrb94rqb946",
+      controllerAuthority: "6Qow1hoUqiPrGQAFT9uxk2qbXwzo69cReRHbJY5FhV1v",
+      protocolGate: "4oKrg4A8T6Z8UeSXSqtojZ3MZJwzKA2tyHgWj6jWrEj1",
+      governancePolicyV1: "8JQ1mE9ruQ1GFhwwdb7jkEmHkyYo6S3gyA7ErdVLjQFT",
+      governanceCouncilSetV1: "a6KooRHCqbEvryCMyHsxL7kBci9V37fid87WN2KAWds",
+      capacityPolicy: "7B2CAF1JAHF4VadMyY9XVR68C3RMbihfAYEJeoYp1AVK",
+      controllerReleaseCommitment: "HaYtP3PvscgdzokLpuSD9aijMDCYDWZ34jdnFx4sNESk",
+      controllerImmutabilityReceipt: "BWid4vy43WP4DQ7jUQdCShpxLbULHp4ZhXw1jTpUMnvv",
+    },
+    governanceLivenessV2: {
+      initialTimingProfileVersion: 1,
+      initialTimingProfileHash: "1663ed402b211cc47b5318cec498fc92ec6f87e2c0178ae6d1536ead7f5f7ebe",
+      initialNextProposalId: 1,
+      initialRotationNonce: 1,
+      routineQuorum: 3,
+      terminalQuorumReserved: 4,
+      tokenGovernanceEnabled: false,
+    },
+    authorization: {
+      devnetOnly: true,
+      mainnetAllowed: false,
+      writerRestartAllowed: false,
+      mainBranchMergeAllowed: false,
+    },
+  };
+  try {
+    configureGovernanceV2Descriptor(descriptorVector, "d".repeat(64));
+    assert.equal(CONTROLLER.toBase58(), descriptorVector.identities.controllerProgram);
+    assert.equal(EXPECTED_ARTIFACT_SHA256, descriptorVector.artifact.sha256);
+    const unsafeDescriptor = structuredClone(descriptorVector);
+    unsafeDescriptor.authorization.mainnetAllowed = true;
+    assert.throws(() => validateGovernanceV2Descriptor(unsafeDescriptor), /permits Mainnet/u);
+  } finally {
+    ({
+      CONTROLLER,
+      CONTROLLER_PROGRAMDATA,
+      TARGET,
+      TARGET_PROGRAMDATA,
+      LEGACY_TARGET_AUTHORITY,
+      PAYER,
+      INITIALIZER,
+      TREASURY,
+      GUARDIAN,
+      SEATS,
+      EXPECTED_ARTIFACT_SHA256,
+      EXPECTED_ARTIFACT_BYTES,
+      SOURCE_COMMIT,
+      SOURCE_TREE,
+      GOVERNANCE_V2_DESCRIPTOR,
+      GOVERNANCE_V2_DESCRIPTOR_SHA256,
+    } = runtimeBeforeDescriptorTest);
+  }
+
   const expectedCatchUpMethods = [
     "getAccountInfoAndContext",
     "getBlockHeight",
@@ -3097,6 +3469,19 @@ async function selfTest() {
   }
   assert.equal(FINALIZED_STATUS_POLL_INTERVAL_MS, 30_000, "finalized status polling is faster than 30 seconds");
 
+  let governanceV2DescriptorInputsVerified = false;
+  const liveDescriptorInput = process.env.AMEBA_GOVERNANCE_V2_DESCRIPTOR?.trim();
+  if (liveDescriptorInput) {
+    const descriptor = await loadGovernanceV2Descriptor(liveDescriptorInput);
+    const descriptorRunDir = await requireSecureDirectory(path.dirname(descriptor.file), "governance V2 descriptor run directory");
+    const { artifact } = await loadArtifact(fileInRunDir(descriptorRunDir, descriptor.value.artifact.file));
+    const attestation = await loadGovernanceV2InitializationAttestation(descriptorRunDir, artifact, descriptor);
+    assert.equal(attestation.mode, "governance-v2");
+    assert.equal(attestation.snapshot.descriptorSha256, descriptor.descriptorSha256);
+    assert.equal(attestation.transactions.length, 2);
+    governanceV2DescriptorInputsVerified = true;
+  }
+
   return {
     ok: true,
     actionPlanSha256,
@@ -3115,6 +3500,8 @@ async function selfTest() {
     },
     replanPatterns: Object.values(PLAN_SPECS).map((spec) => spec.pattern.source),
     rpcSelectionNegativeCases: ["history", "helius-state", "empty"],
+    governanceV2DescriptorSupported: true,
+    governanceV2DescriptorInputsVerified,
   };
 }
 
@@ -3141,6 +3528,8 @@ function usage() {
     "message, signs only through AMEBA_CEREMONY_SIGNER_PROVIDER, validates the closed",
     "envelope, journals it, then submits once with maxRetries: 0.",
     "SetAuthorityChecked-to-None is impossible in the pinned Loader ABI.",
+    "Set AMEBA_GOVERNANCE_V2_DESCRIPTOR to use the descriptor artifact and the",
+    "successful tag53/tag82 receipts in that descriptor's secure run directory.",
   ].join("\n");
 }
 
