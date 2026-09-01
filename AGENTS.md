@@ -13,6 +13,9 @@ repository:
 - `docs/governance/amendments/phase-3-universal-spread-gate-v1.md` is the
   current normative Phase 3 amendment. It wins for Phase 3 scope, bridge ABI,
   and phase numbering while preserving the Phase 2 Bootstrap V1 council model.
+- `docs/governance/amendments/governance-liveness-v2.md` supersedes V1 ceremony
+  proposal timing and identity for the fresh-controller path only. V1 bytes and
+  meanings remain historical and unchanged.
 
 ## Current assignment
 
