@@ -58,11 +58,16 @@ const AUTHORITY_ALLOWLIST = Object.freeze([
     address: "Cmd42MrYC7CVyQNGq7GRkTqR3jQ8cBPKzjzDpsc5eNW4",
     kmsKeyVersion: "projects/amoeba-hm0q2k/locations/global/keyRings/ameba-spread-devnet/cryptoKeys/governance-seat-5-v1/cryptoKeyVersions/1",
   }),
+  Object.freeze({
+    role: "governance-treasury-v1",
+    address: "8XUjnzVzR71DaVuqbSHaNev5H4vrxofyFP4iZt2FXa1j",
+    kmsKeyVersion: "projects/amoeba-hm0q2k/locations/global/keyRings/ameba-spread-devnet/cryptoKeys/governance-treasury-v1/cryptoKeyVersions/1",
+  }),
 ]);
 
 const USAGE = `usage:
   node gcp-kms-ed25519-signer.mjs \\
-    --authority <legacy-target-authority|seat-0|seat-1|seat-2|seat-3|seat-4|allowed-address> \\
+    --authority <legacy-target-authority|seat-0|seat-1|seat-2|seat-3|seat-4|governance-treasury-v1|allowed-address> \\
     --kms-key-version <projects/.../locations/.../keyRings/.../cryptoKeys/.../cryptoKeyVersions/N> \\
     --public-key-pem <secure-ed25519-public-key.pem> \\
     --message <secure-raw-solana-message.bin> \\
@@ -112,7 +117,7 @@ function resolveAllowedAuthority(input) {
   const match = AUTHORITY_ALLOWLIST.find(
     ({ role, address }) => input === role || input === address,
   );
-  assert(match, "authority is not one of the six fixed Devnet ceremony identities");
+  assert(match, "authority is not one of the seven fixed Devnet ceremony identities");
   return {
     role: match.role,
     publicKey: new PublicKey(match.address),
