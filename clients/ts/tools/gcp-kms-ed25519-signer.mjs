@@ -23,6 +23,8 @@ import { requireSecureRegularFile } from "./secure-rpc-env.mjs";
 
 const MAX_SOLANA_MESSAGE_BYTES = 1_232;
 const TEMP_PREFIX = "ameba-gcp-kms-ed25519-";
+const KMS_REST_ACCESS_TOKEN_ENV = "AMEBA_GCP_KMS_ACCESS_TOKEN";
+const KMS_REST_TIMEOUT_MS = 15_000;
 
 // These are the only Devnet ceremony identities this helper may sign for. A
 // KMS resource name is not an authority identity: its public key must resolve
@@ -289,6 +291,50 @@ async function signWithGcloud({ kms, messageBytes }) {
   }
 }
 
+async function signWithRestAccessToken({ kms, messageBytes, accessToken }) {
+  assert(
+    typeof accessToken === "string"
+      && accessToken.length >= 32
+      && accessToken.length <= 8_192
+      && !/[\s\u0000]/u.test(accessToken),
+    `${KMS_REST_ACCESS_TOKEN_ENV} is malformed`,
+  );
+  const resource = [
+    "projects", kms.project,
+    "locations", kms.location,
+    "keyRings", kms.keyRing,
+    "cryptoKeys", kms.key,
+    "cryptoKeyVersions", kms.version,
+  ].join("/");
+  const response = await fetch(`https://cloudkms.googleapis.com/v1/${resource}:asymmetricSign`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ data: messageBytes.toString("base64") }),
+    signal: AbortSignal.timeout(KMS_REST_TIMEOUT_MS),
+  });
+  const responseBytes = Buffer.from(await response.arrayBuffer());
+  assert(responseBytes.length <= 64 * 1024, "KMS REST response exceeds the fixed bound");
+  if (!response.ok) {
+    throw new Error(
+      `KMS REST asymmetric-sign failed (status=${response.status}, responseSha256=${sha256Hex(responseBytes)})`,
+    );
+  }
+  let decoded;
+  try {
+    decoded = JSON.parse(responseBytes.toString("utf8"));
+  } catch {
+    throw new Error(`KMS REST response is not JSON (responseSha256=${sha256Hex(responseBytes)})`);
+  }
+  assert(typeof decoded?.signature === "string", "KMS REST response omits the signature");
+  const signature = Buffer.from(decoded.signature, "base64");
+  assert.equal(signature.length, 64, "KMS REST Ed25519 signature is not exactly 64 raw bytes");
+  assert.equal(signature.toString("base64"), decoded.signature, "KMS REST signature is noncanonical base64");
+  return signature;
+}
+
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   assert(
@@ -309,7 +355,10 @@ async function main() {
   const requiredSignerIndex = decodeAndBindSolanaMessage(messageBytes, authority.publicKey);
   const publicKey = await loadAndBindPublicKey(options.publicKeyPem, authority.publicKey);
 
-  const signature = await signWithGcloud({ kms, messageBytes });
+  const restAccessToken = process.env[KMS_REST_ACCESS_TOKEN_ENV]?.trim();
+  const signature = restAccessToken
+    ? await signWithRestAccessToken({ kms, messageBytes, accessToken: restAccessToken })
+    : await signWithGcloud({ kms, messageBytes });
   assert.equal(signature.length, 64, "KMS Ed25519 signature is not exactly 64 bytes");
   assert(
     verifySignature(null, messageBytes, publicKey, signature),
