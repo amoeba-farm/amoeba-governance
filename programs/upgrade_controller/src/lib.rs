@@ -27,6 +27,7 @@ pub mod release1_ceremony_digest;
 pub mod release1_ceremony_instruction;
 pub mod release1_ceremony_state;
 pub mod release1_digest;
+pub mod release1_governance_v2;
 pub mod release1_loader_accounts;
 // The reference model is deliberately host-only. It is an executable oracle
 // for unit/property tests, not part of the controller's on-chain verification

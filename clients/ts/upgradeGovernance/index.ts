@@ -5,6 +5,7 @@ export * as release1Accounts from "./release1.js";
 export * as artifactMerkleV1 from "./artifactMerkleV1.js";
 export * as programDataObservationMerkleV1 from "./programDataObservationMerkleV1.js";
 export * as release1Ceremony from "./release1Ceremony.js";
+export * as release1GovernanceV2 from "./release1GovernanceV2.js";
 export * as release1CeremonyInstructions from "./release1CeremonyInstructions.js";
 export * as release1AuthorityInstructions from "./release1AuthorityInstructions.js";
 export * as release1V3Instructions from "./release1V3Instructions.js";
