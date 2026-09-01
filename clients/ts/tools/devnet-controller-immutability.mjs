@@ -586,6 +586,34 @@ function assertGovernanceV2TimingDescriptorLineage(tag53Descriptor, currentDescr
   };
 }
 
+function assertGovernanceV2TimingAmendmentAttestation(tag82, descriptorLineage) {
+  assert.equal(
+    tag82.plan.descriptorSha256,
+    descriptorLineage.tag53DescriptorSha256,
+    "tag82 plan is not bound to the tag53 base descriptor",
+  );
+  assert.equal(
+    tag82.receipt.descriptorSha256,
+    descriptorLineage.tag53DescriptorSha256,
+    "tag82 receipt is not bound to the tag53 base descriptor",
+  );
+  assert.equal(
+    tag82.receipt.timingAmendmentDescriptorSha256,
+    descriptorLineage.tag82DescriptorSha256,
+    "tag82 receipt timing-amendment descriptor changed",
+  );
+  assert.equal(
+    tag82.plan.details?.initialTimingProfileHash,
+    descriptorLineage.nominalTimingProfileHash,
+    "tag82 plan timing-profile hash differs from the corrected nominal profile",
+  );
+  assert.equal(
+    tag82.receipt.timingProfileHash,
+    descriptorLineage.nominalTimingProfileHash,
+    "tag82 receipt timing-profile hash differs from the corrected nominal profile",
+  );
+}
+
 async function selectGovernanceV2Receipt(runDir, environmentName, pattern, label) {
   const configured = process.env[environmentName]?.trim();
   if (configured) {
@@ -665,11 +693,12 @@ async function loadGovernanceV2InitializationAttestation(runDir, artifact, descr
   );
   const tag82 = await loadGovernanceV2ActionAttestation(
     runDir,
-    descriptor,
+    tag53Descriptor,
     "initialize-tag82",
     "AMEBA_GOVERNANCE_V2_TAG82_RECEIPT",
     GOVERNANCE_V2_TAG82_RECEIPT_PATTERN,
   );
+  if (descriptorLineage !== null) assertGovernanceV2TimingAmendmentAttestation(tag82, descriptorLineage);
   assert(tag82.receipt.finalizedSlot >= tag53.receipt.finalizedSlot, "tag82 finalized before tag53");
   const details = tag53.plan.details;
   assert(Number.isSafeInteger(details.controllerCapacity) && details.controllerCapacity === artifact.length, "tag53 controller capacity changed");
@@ -3313,6 +3342,26 @@ async function selfTest() {
     assert.equal(descriptorLineage.tag82DescriptorSha256, currentDescriptor.descriptorSha256);
     assert.equal(descriptorLineage.tag82TimingProfileHash, descriptorVector.governanceLivenessV2.initialTimingProfileHash);
     assert.equal(descriptorLineage.nominalTimingProfileHash, descriptorLineage.tag82TimingProfileHash);
+    const tag82AmendmentVector = {
+      plan: {
+        descriptorSha256: tag53Descriptor.descriptorSha256,
+        details: { initialTimingProfileHash: descriptorLineage.nominalTimingProfileHash },
+      },
+      receipt: {
+        descriptorSha256: tag53Descriptor.descriptorSha256,
+        timingAmendmentDescriptorSha256: currentDescriptor.descriptorSha256,
+        timingProfileHash: descriptorLineage.nominalTimingProfileHash,
+      },
+    };
+    assert.doesNotThrow(() => assertGovernanceV2TimingAmendmentAttestation(tag82AmendmentVector, descriptorLineage));
+    assert.throws(
+      () => assertGovernanceV2TimingAmendmentAttestation({
+        ...tag82AmendmentVector,
+        receipt: { ...tag82AmendmentVector.receipt, timingAmendmentDescriptorSha256: "0".repeat(64) },
+      }, descriptorLineage),
+      /timing-amendment descriptor changed/u,
+      "tag82 attestation accepted the wrong timing-amendment descriptor",
+    );
 
     const identityDriftValue = structuredClone(tag53DescriptorValue);
     identityDriftValue.source.tree = "0".repeat(40);
