@@ -1967,7 +1967,7 @@ async function executeNext(phase) {
           journal,
           operationId: selected.plan.operationId,
           stage: selected.plan.stage,
-          expectedSigners: action.signers,
+          expectedSigners: plannedAction.signers,
           expectedPacketBytes: dummy.packetBytes,
           verifyImmediatelyBeforeResubmit: verifyCurrent,
           verifyExpiredPrestate: verifyCurrent,

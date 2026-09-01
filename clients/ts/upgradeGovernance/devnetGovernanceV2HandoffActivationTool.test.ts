@@ -77,6 +77,9 @@ test("V2 handoff/activation tool exposes only the narrow plan/execute surface", 
   const reconcileFinalized = source.indexOf("const reconciled = await reconcileOneFinalized", executeNext);
   const requireLivePrestate = source.indexOf("assertActionMatchesPlan(action, selected.plan, bundle)", reconcileFinalized);
   assert(executeNext >= 0 && reconcileFinalized > executeNext && requireLivePrestate > reconcileFinalized, "finalized journal reconciliation must precede live-prestate enforcement");
+  const reconcileBlock = source.slice(reconcileFinalized, requireLivePrestate);
+  assert(reconcileBlock.includes("expectedSigners: plannedAction.signers"), "finalized journal reconciliation must use restored planned signers");
+  assert(!reconcileBlock.includes("expectedSigners: action.signers"), "completed live-stage signers must not drive finalized journal reconciliation");
   assert(!source.includes(["loadSecure", "Keypair"].join("")));
   assert(!source.includes(["buildCreateTargetAuthorityHandoff", "V1Instruction"].join("")));
   assert(!source.includes(["buildCreateBootstrapActivation", "V1Instruction"].join("")));
