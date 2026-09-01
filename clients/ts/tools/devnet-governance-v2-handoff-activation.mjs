@@ -113,6 +113,7 @@ import {
   deserializeGovernanceLifecycleRegistryV2,
   deserializeGovernanceTimingProfileV1,
   deserializeTargetAuthorityHandoffProposalV2,
+  nominalGovernanceTimingProfileV1,
 } from "../dist/upgradeGovernance/release1GovernanceV2.js";
 import {
   buildApproveBootstrapActivationProposalV2Instruction,
@@ -942,12 +943,57 @@ function proposalGuard(state, proposal) {
 
 function assertProposalTiming(proposal, profile, timingClass) {
   const expected = deriveProposalTimingV2(profile, timingClass, proposal.creationSlot);
-  for (const field of [
-    "reviewDurationSlots", "delayDurationSlots", "expiryDurationSlots", "creationSlot",
-    "reviewStartSlot", "reviewEndSlot", "notBeforeSlot", "expirySlot",
-  ]) assert.equal(proposal[field], expected[field], `proposal ${field} changed`);
+  const expectedFields = {
+    reviewDurationSlots: expected.reviewSlots,
+    delayDurationSlots: expected.delaySlots,
+    expiryDurationSlots: expected.expirySlots,
+    creationSlot: expected.creationSlot,
+    reviewStartSlot: expected.reviewStartSlot,
+    reviewEndSlot: expected.reviewEndSlot,
+    notBeforeSlot: expected.notBeforeSlot,
+    expirySlot: expected.expirySlot,
+  };
+  for (const [field, value] of Object.entries(expectedFields)) {
+    assert.equal(proposal[field], value, `proposal ${field} changed`);
+  }
   assert.equal(proposal.approvalThreshold, 3, "proposal approval threshold changed");
   assert.equal(proposal.cancellationThreshold, 3, "proposal cancellation threshold changed");
+}
+
+function selfTestProposalTiming() {
+  const profile = nominalGovernanceTimingProfileV1({
+    bump: 1,
+    controllerConfig: selfTestKey("timing-controller-config"),
+    targetProgram: selfTestKey("timing-target-program"),
+    creationCouncilVersion: 1n,
+    creationSlot: 1n,
+  });
+  const creationSlot = 123_456n;
+  const check = (timingClass) => {
+    const expected = deriveProposalTimingV2(profile, timingClass, creationSlot);
+    const proposal = {
+      reviewDurationSlots: expected.reviewSlots,
+      delayDurationSlots: expected.delaySlots,
+      expiryDurationSlots: expected.expirySlots,
+      creationSlot: expected.creationSlot,
+      reviewStartSlot: expected.reviewStartSlot,
+      reviewEndSlot: expected.reviewEndSlot,
+      notBeforeSlot: expected.notBeforeSlot,
+      expirySlot: expected.expirySlot,
+      approvalThreshold: 3,
+      cancellationThreshold: 3,
+    };
+    assertProposalTiming(proposal, profile, timingClass);
+    return {
+      reviewDurationSlots: proposal.reviewDurationSlots.toString(),
+      delayDurationSlots: proposal.delayDurationSlots.toString(),
+      expiryDurationSlots: proposal.expiryDurationSlots.toString(),
+    };
+  };
+  return {
+    handoff: check(GovernanceTimingClassV1.Constitutional),
+    activation: check(GovernanceTimingClassV1.Routine),
+  };
 }
 
 function assertProposalEvidence(proposal, phase, bundle, state, model) {
@@ -1987,6 +2033,7 @@ async function selfTest() {
   assert(!source.includes(["buildCreateTargetAuthorityHandoff", "V1Instruction"].join("")), "tool imported the V1 handoff builder");
   assert(!source.includes(["buildCreateBootstrapActivation", "V1Instruction"].join("")), "tool imported the V1 activation builder");
   assert(!source.includes(["loadSecure", "Keypair"].join("")), "tool contains a keypair fallback");
+  const proposalTiming = selfTestProposalTiming();
   const runtime = await selfTestCeremonyRuntime();
   const result = {
     schema: "ameba-governance-devnet-v2-handoff-activation-self-test-v1",
@@ -1998,6 +2045,7 @@ async function selfTest() {
     injectedSignerOnly: true,
     oldV1LifecycleBuildersAbsent: true,
     authorityFinalAndOnchainRecordEvidenceSeparated: true,
+    proposalTiming,
     runtime,
   };
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

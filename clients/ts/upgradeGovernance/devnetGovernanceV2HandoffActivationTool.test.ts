@@ -24,6 +24,18 @@ test("V2 handoff/activation tool self-test pins exact execute tags and packet re
   assert.equal(value.injectedSignerOnly, true);
   assert.equal(value.oldV1LifecycleBuildersAbsent, true);
   assert.equal(value.authorityFinalAndOnchainRecordEvidenceSeparated, true);
+  assert.deepEqual(value.proposalTiming, {
+    handoff: {
+      reviewDurationSlots: "6048000",
+      delayDurationSlots: "18000",
+      expiryDurationSlots: "10584000",
+    },
+    activation: {
+      reviewDurationSlots: "1512000",
+      delayDurationSlots: "4500",
+      expiryDurationSlots: "2592000",
+    },
+  });
   assert.equal(value.runtime.firstRateLimitCallCount, 1);
   assert.equal(value.runtime.ambiguousPreparedTransactionSendCalls, 0);
 });
