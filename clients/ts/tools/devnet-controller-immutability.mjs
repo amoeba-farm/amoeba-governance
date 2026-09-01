@@ -81,6 +81,11 @@ import {
   GateStatusV1,
 } from "../dist/upgradeGovernance/release1.js";
 import {
+  deriveGovernanceLifecycleRegistryPdaV2,
+  deriveGovernanceTimingProfilePdaV1,
+  nominalGovernanceTimingProfileV1,
+} from "../dist/upgradeGovernance/release1GovernanceV2.js";
+import {
   BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
   CONTROLLER_CONFIG_LEN,
   GOVERNANCE_COUNCIL_SET_LEN,
@@ -160,6 +165,9 @@ const GOVERNANCE_V2_PLAN_SCHEMA = "ameba-governance-devnet-controller-v2-plan-v1
 const GOVERNANCE_V2_RECEIPT_SCHEMA = "ameba-governance-devnet-controller-v2-receipt-v1";
 const GOVERNANCE_V2_TAG53_RECEIPT_PATTERN = /^governance-v2-initialize-tag53-receipt-([0-9a-f]{64})\.json$/u;
 const GOVERNANCE_V2_TAG82_RECEIPT_PATTERN = /^governance-v2-initialize-tag82-receipt-([0-9a-f]{64})\.json$/u;
+const GOVERNANCE_V2_TAG53_DESCRIPTOR_ENV = "AMEBA_GOVERNANCE_V2_TAG53_DESCRIPTOR";
+const GOVERNANCE_V2_TIMING_DESCRIPTOR_LINEAGE_SCHEMA = "ameba-governance-v2-timing-descriptor-lineage-v1";
+const GOVERNANCE_V2_TIMING_HASH_FIELD = "governanceLivenessV2.initialTimingProfileHash";
 let GOVERNANCE_V2_DESCRIPTOR = null;
 let GOVERNANCE_V2_DESCRIPTOR_SHA256 = null;
 const RAW_CHUNK_SIZE = PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB_V1;
@@ -506,13 +514,76 @@ function configureGovernanceV2Descriptor(value, descriptorSha256) {
 }
 
 async function loadGovernanceV2Descriptor(fileInput) {
-  const file = await requireSecureRegularFile(path.resolve(fileInput), "governance V2 descriptor");
+  const descriptor = await readGovernanceV2Descriptor(fileInput, "governance V2 descriptor");
+  configureGovernanceV2Descriptor(descriptor.value, descriptor.descriptorSha256);
+  return descriptor;
+}
+
+async function readGovernanceV2Descriptor(fileInput, label) {
+  const file = await requireSecureRegularFile(path.resolve(fileInput), label);
   const bytes = await readFile(file);
   const value = validateGovernanceV2Descriptor(JSON.parse(bytes.toString("utf8")));
-  assert(bytes.equals(Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8")), "governance V2 descriptor is not canonical JSON");
+  assert(bytes.equals(Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8")), `${label} is not canonical JSON`);
   const descriptorSha256 = sha256Hex(bytes);
-  configureGovernanceV2Descriptor(value, descriptorSha256);
   return { bytes, descriptorSha256, file, value };
+}
+
+function assertGovernanceV2TimingDescriptorLineage(tag53Descriptor, currentDescriptor) {
+  assert.notEqual(
+    tag53Descriptor.descriptorSha256,
+    currentDescriptor.descriptorSha256,
+    "explicit tag53 predecessor descriptor must differ from the current descriptor",
+  );
+  const tag53TimingProfileHash = tag53Descriptor.value.governanceLivenessV2.initialTimingProfileHash;
+  const currentTimingProfileHash = currentDescriptor.value.governanceLivenessV2.initialTimingProfileHash;
+  assert.notEqual(tag53TimingProfileHash, currentTimingProfileHash, "descriptor lineage does not change the timing-profile hash");
+
+  const normalizedCurrent = structuredClone(currentDescriptor.value);
+  normalizedCurrent.governanceLivenessV2.initialTimingProfileHash = tag53TimingProfileHash;
+  const normalizedCurrentBytes = Buffer.from(`${JSON.stringify(normalizedCurrent, null, 2)}\n`, "utf8");
+  assert(
+    normalizedCurrentBytes.equals(tag53Descriptor.bytes),
+    `governance V2 descriptors must be byte-identical except ${GOVERNANCE_V2_TIMING_HASH_FIELD}`,
+  );
+
+  const controller = new PublicKey(currentDescriptor.value.identities.controllerProgram);
+  const target = new PublicKey(currentDescriptor.value.identities.targetProgram);
+  const [controllerConfig] = deriveControllerConfigPda(controller, target);
+  const [lifecycleRegistry] = deriveGovernanceLifecycleRegistryPdaV2(controller, target);
+  const [timingProfile, timingProfileBump] = deriveGovernanceTimingProfilePdaV1(controller, target, 1n);
+  assert.equal(
+    currentDescriptor.value.pdas?.governanceLifecycleRegistryV2,
+    lifecycleRegistry.toBase58(),
+    "current descriptor lifecycle registry is not canonical",
+  );
+  assert.equal(
+    currentDescriptor.value.pdas?.governanceTimingProfileV1,
+    timingProfile.toBase58(),
+    "current descriptor timing profile is not canonical",
+  );
+  const nominalProfile = nominalGovernanceTimingProfileV1({
+    bump: timingProfileBump,
+    controllerConfig,
+    targetProgram: target,
+    creationCouncilVersion: 1n,
+    creationSlot: 1n,
+  });
+  const nominalTimingProfileHash = nominalProfile.profileHash.toString("hex");
+  assert.equal(
+    currentTimingProfileHash,
+    nominalTimingProfileHash,
+    "current descriptor timing-profile hash does not match the canonical nominal profile for its identities",
+  );
+
+  return {
+    schema: GOVERNANCE_V2_TIMING_DESCRIPTOR_LINEAGE_SCHEMA,
+    changedField: GOVERNANCE_V2_TIMING_HASH_FIELD,
+    tag53DescriptorSha256: tag53Descriptor.descriptorSha256,
+    tag53TimingProfileHash,
+    tag82DescriptorSha256: currentDescriptor.descriptorSha256,
+    tag82TimingProfileHash: currentTimingProfileHash,
+    nominalTimingProfileHash,
+  };
 }
 
 async function selectGovernanceV2Receipt(runDir, environmentName, pattern, label) {
@@ -538,7 +609,7 @@ async function loadGovernanceV2ActionAttestation(runDir, descriptor, action, rec
   const receiptBytes = await readFile(receiptFile);
   const receipt = JSON.parse(receiptBytes.toString("utf8"));
   assert.equal(receipt.schema, GOVERNANCE_V2_RECEIPT_SCHEMA, `${action} receipt schema changed`);
-  assert.equal(receipt.descriptorSha256, GOVERNANCE_V2_DESCRIPTOR_SHA256, `${action} receipt descriptor changed`);
+  assert.equal(receipt.descriptorSha256, descriptor.descriptorSha256, `${action} receipt descriptor changed`);
   assert.equal(receipt.action, action, `${action} receipt action changed`);
   assert.equal(receipt.genesisHash, EXPECTED_GENESIS, `${action} receipt genesis changed`);
   assert(typeof receipt.planFile === "string" && path.basename(receipt.planFile) === receipt.planFile, `${action} receipt plan filename changed`);
@@ -551,7 +622,7 @@ async function loadGovernanceV2ActionAttestation(runDir, descriptor, action, rec
   const planBytes = await readFile(planFile);
   const plan = JSON.parse(planBytes.toString("utf8"));
   assert.equal(plan.schema, GOVERNANCE_V2_PLAN_SCHEMA, `${action} plan schema changed`);
-  assert.equal(plan.descriptorSha256, GOVERNANCE_V2_DESCRIPTOR_SHA256, `${action} plan descriptor changed`);
+  assert.equal(plan.descriptorSha256, descriptor.descriptorSha256, `${action} plan descriptor changed`);
   assert.equal(plan.action, action, `${action} plan action changed`);
   assert.equal(plan.genesisHash, EXPECTED_GENESIS, `${action} plan genesis changed`);
   assert.equal(plan.operationId, receipt.operationId, `${action} plan operation changed`);
@@ -581,10 +652,13 @@ async function loadGovernanceV2ActionAttestation(runDir, descriptor, action, rec
   };
 }
 
-async function loadGovernanceV2InitializationAttestation(runDir, artifact, descriptor) {
+async function loadGovernanceV2InitializationAttestation(runDir, artifact, descriptor, tag53Descriptor = descriptor) {
+  const descriptorLineage = tag53Descriptor.descriptorSha256 === descriptor.descriptorSha256
+    ? null
+    : assertGovernanceV2TimingDescriptorLineage(tag53Descriptor, descriptor);
   const tag53 = await loadGovernanceV2ActionAttestation(
     runDir,
-    descriptor,
+    tag53Descriptor,
     "initialize-tag53",
     "AMEBA_GOVERNANCE_V2_TAG53_RECEIPT",
     GOVERNANCE_V2_TAG53_RECEIPT_PATTERN,
@@ -641,6 +715,7 @@ async function loadGovernanceV2InitializationAttestation(runDir, artifact, descr
     snapshot: {
       mode: "governance-v2",
       descriptorSha256: descriptor.descriptorSha256,
+      ...(descriptorLineage === null ? {} : { descriptorLineage }),
       tag53PlanSha256: sha256Hex(tag53.planBytes),
       tag53ReceiptSha256: sha256Hex(tag53.receiptBytes),
       tag53Signature: tag53.receipt.signature,
@@ -829,7 +904,12 @@ async function inputs() {
   const { rpcSelection, stateRpcOrigin, stateRpcUrl } = await loadDevnetRpcConfiguration();
   assertStateRpcSelection(rpcSelection);
   const descriptorInput = process.env.AMEBA_GOVERNANCE_V2_DESCRIPTOR?.trim();
+  const tag53DescriptorInput = process.env[GOVERNANCE_V2_TAG53_DESCRIPTOR_ENV]?.trim();
+  assert(!tag53DescriptorInput || descriptorInput, `${GOVERNANCE_V2_TAG53_DESCRIPTOR_ENV} requires AMEBA_GOVERNANCE_V2_DESCRIPTOR`);
   const descriptor = descriptorInput ? await loadGovernanceV2Descriptor(descriptorInput) : null;
+  const tag53Descriptor = tag53DescriptorInput
+    ? await readGovernanceV2Descriptor(tag53DescriptorInput, "governance V2 tag53 predecessor descriptor")
+    : descriptor;
   const descriptorRunDir = descriptor ? path.dirname(descriptor.file) : null;
   const configuredRunDir = process.env.AMEBA_CEREMONY_RUN_DIR?.trim();
   const runDir = await requireSecureDirectory(
@@ -837,6 +917,13 @@ async function inputs() {
     "ceremony run directory",
   );
   if (descriptorRunDir !== null) assert.equal(path.resolve(runDir), path.resolve(descriptorRunDir), "governance V2 descriptor must be directly inside its ceremony run directory");
+  if (tag53DescriptorInput) {
+    assert.equal(
+      path.dirname(tag53Descriptor.file),
+      path.resolve(runDir),
+      "governance V2 tag53 predecessor descriptor must be directly inside the ceremony run directory",
+    );
+  }
   const descriptorArtifact = descriptor ? fileInRunDir(runDir, descriptor.value.artifact.file) : null;
   const configuredArtifact = process.env.AMEBA_CONTROLLER_ARTIFACT?.trim();
   if (descriptorArtifact !== null && configuredArtifact) {
@@ -846,7 +933,7 @@ async function inputs() {
     configuredArtifact ?? descriptorArtifact ?? requiredEnvironment("AMEBA_CONTROLLER_ARTIFACT"),
   );
   const initializationAttestation = descriptor
-    ? await loadGovernanceV2InitializationAttestation(runDir, artifact, descriptor)
+    ? await loadGovernanceV2InitializationAttestation(runDir, artifact, descriptor, tag53Descriptor)
     : await loadInitializationAttestation(runDir, artifact);
   const connection = new Connection(stateRpcUrl, {
     commitment: "finalized",
@@ -3193,13 +3280,59 @@ async function selfTest() {
       mainBranchMergeAllowed: false,
     },
   };
+  const descriptorVectorController = new PublicKey(descriptorVector.identities.controllerProgram);
+  const descriptorVectorTarget = new PublicKey(descriptorVector.identities.targetProgram);
+  descriptorVector.pdas.governanceLifecycleRegistryV2 = deriveGovernanceLifecycleRegistryPdaV2(
+    descriptorVectorController,
+    descriptorVectorTarget,
+  )[0].toBase58();
+  descriptorVector.pdas.governanceTimingProfileV1 = deriveGovernanceTimingProfilePdaV1(
+    descriptorVectorController,
+    descriptorVectorTarget,
+    1n,
+  )[0].toBase58();
   try {
-    configureGovernanceV2Descriptor(descriptorVector, "d".repeat(64));
+    const descriptorBundle = (value) => {
+      const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
+      return { bytes, descriptorSha256: sha256Hex(bytes), value };
+    };
+    const currentDescriptor = descriptorBundle(descriptorVector);
+    configureGovernanceV2Descriptor(descriptorVector, currentDescriptor.descriptorSha256);
     assert.equal(CONTROLLER.toBase58(), descriptorVector.identities.controllerProgram);
     assert.equal(EXPECTED_ARTIFACT_SHA256, descriptorVector.artifact.sha256);
     const unsafeDescriptor = structuredClone(descriptorVector);
     unsafeDescriptor.authorization.mainnetAllowed = true;
     assert.throws(() => validateGovernanceV2Descriptor(unsafeDescriptor), /permits Mainnet/u);
+
+    const tag53DescriptorValue = structuredClone(descriptorVector);
+    tag53DescriptorValue.governanceLivenessV2.initialTimingProfileHash = "a".repeat(64);
+    const tag53Descriptor = descriptorBundle(tag53DescriptorValue);
+    const descriptorLineage = assertGovernanceV2TimingDescriptorLineage(tag53Descriptor, currentDescriptor);
+    assert.equal(descriptorLineage.schema, GOVERNANCE_V2_TIMING_DESCRIPTOR_LINEAGE_SCHEMA);
+    assert.equal(descriptorLineage.tag53DescriptorSha256, tag53Descriptor.descriptorSha256);
+    assert.equal(descriptorLineage.tag82DescriptorSha256, currentDescriptor.descriptorSha256);
+    assert.equal(descriptorLineage.tag82TimingProfileHash, descriptorVector.governanceLivenessV2.initialTimingProfileHash);
+    assert.equal(descriptorLineage.nominalTimingProfileHash, descriptorLineage.tag82TimingProfileHash);
+
+    const identityDriftValue = structuredClone(tag53DescriptorValue);
+    identityDriftValue.source.tree = "0".repeat(40);
+    assert.throws(
+      () => assertGovernanceV2TimingDescriptorLineage(descriptorBundle(identityDriftValue), currentDescriptor),
+      /byte-identical except/u,
+      "descriptor lineage accepted a second changed field",
+    );
+    const wrongCurrentValue = structuredClone(descriptorVector);
+    wrongCurrentValue.governanceLivenessV2.initialTimingProfileHash = "b".repeat(64);
+    const wrongTag53Value = structuredClone(wrongCurrentValue);
+    wrongTag53Value.governanceLivenessV2.initialTimingProfileHash = "c".repeat(64);
+    assert.throws(
+      () => assertGovernanceV2TimingDescriptorLineage(
+        descriptorBundle(wrongTag53Value),
+        descriptorBundle(wrongCurrentValue),
+      ),
+      /canonical nominal profile/u,
+      "descriptor lineage accepted a noncanonical corrected timing-profile hash",
+    );
   } finally {
     ({
       CONTROLLER,
@@ -3470,15 +3603,39 @@ async function selfTest() {
   assert.equal(FINALIZED_STATUS_POLL_INTERVAL_MS, 30_000, "finalized status polling is faster than 30 seconds");
 
   let governanceV2DescriptorInputsVerified = false;
+  let governanceV2DescriptorLineageInputsVerified = false;
   const liveDescriptorInput = process.env.AMEBA_GOVERNANCE_V2_DESCRIPTOR?.trim();
+  const liveTag53DescriptorInput = process.env[GOVERNANCE_V2_TAG53_DESCRIPTOR_ENV]?.trim();
+  assert(!liveTag53DescriptorInput || liveDescriptorInput, `${GOVERNANCE_V2_TAG53_DESCRIPTOR_ENV} requires AMEBA_GOVERNANCE_V2_DESCRIPTOR`);
   if (liveDescriptorInput) {
     const descriptor = await loadGovernanceV2Descriptor(liveDescriptorInput);
     const descriptorRunDir = await requireSecureDirectory(path.dirname(descriptor.file), "governance V2 descriptor run directory");
+    const tag53Descriptor = liveTag53DescriptorInput
+      ? await readGovernanceV2Descriptor(liveTag53DescriptorInput, "governance V2 tag53 predecessor descriptor")
+      : descriptor;
+    assert.equal(
+      path.dirname(tag53Descriptor.file),
+      path.resolve(descriptorRunDir),
+      "governance V2 tag53 predecessor descriptor must be directly inside the descriptor run directory",
+    );
     const { artifact } = await loadArtifact(fileInRunDir(descriptorRunDir, descriptor.value.artifact.file));
-    const attestation = await loadGovernanceV2InitializationAttestation(descriptorRunDir, artifact, descriptor);
+    const attestation = await loadGovernanceV2InitializationAttestation(
+      descriptorRunDir,
+      artifact,
+      descriptor,
+      tag53Descriptor,
+    );
     assert.equal(attestation.mode, "governance-v2");
     assert.equal(attestation.snapshot.descriptorSha256, descriptor.descriptorSha256);
     assert.equal(attestation.transactions.length, 2);
+    if (liveTag53DescriptorInput) {
+      assert.equal(attestation.snapshot.descriptorLineage?.schema, GOVERNANCE_V2_TIMING_DESCRIPTOR_LINEAGE_SCHEMA);
+      assert.equal(attestation.snapshot.descriptorLineage?.tag53DescriptorSha256, tag53Descriptor.descriptorSha256);
+      assert.equal(attestation.snapshot.descriptorLineage?.tag82DescriptorSha256, descriptor.descriptorSha256);
+      governanceV2DescriptorLineageInputsVerified = true;
+    } else {
+      assert.equal(attestation.snapshot.descriptorLineage, undefined);
+    }
     governanceV2DescriptorInputsVerified = true;
   }
 
@@ -3502,6 +3659,8 @@ async function selfTest() {
     rpcSelectionNegativeCases: ["history", "helius-state", "empty"],
     governanceV2DescriptorSupported: true,
     governanceV2DescriptorInputsVerified,
+    governanceV2TimingDescriptorLineageSupported: true,
+    governanceV2DescriptorLineageInputsVerified,
   };
 }
 
@@ -3530,6 +3689,8 @@ function usage() {
     "SetAuthorityChecked-to-None is impossible in the pinned Loader ABI.",
     "Set AMEBA_GOVERNANCE_V2_DESCRIPTOR to use the descriptor artifact and the",
     "successful tag53/tag82 receipts in that descriptor's secure run directory.",
+    `Set ${GOVERNANCE_V2_TAG53_DESCRIPTOR_ENV} only when tag53 is bound to a predecessor`,
+    "descriptor that differs from the current tag82 descriptor solely in the timing-profile hash.",
   ].join("\n");
 }
 
