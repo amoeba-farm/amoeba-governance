@@ -142,6 +142,8 @@ const CONFIRMED_STATUS_POLL_INTERVAL_MS = 1_000;
 const OBSERVATION_FAST_LANE_ENV = "AMEBA_CONTROLLER_OBSERVATION_FAST_LANE";
 const OBSERVATION_FAST_LANE_VALUE = "confirmed-intermediate-v1";
 const OBSERVATION_FAST_LANE_STAGE_PACING_MS = 2_000;
+const OBSERVATION_RPC_FAILOVER_ENV = "AMEBA_CONTROLLER_OBSERVATION_RPC_FAILOVER";
+const OBSERVATION_RPC_FAILOVER_VALUE = "helius-state-v1";
 const MINIMUM_CONTEXT_CATCH_UP_MAX_ATTEMPTS = 20;
 const MINIMUM_CONTEXT_CATCH_UP_DELAY_MS = 2_000;
 const MINIMUM_CONTEXT_CATCH_UP_READ_METHODS = new Set([
@@ -288,6 +290,15 @@ function observationExecutionMode() {
   if (!configured) return Object.freeze({ fastLane: false, intermediateCommitment: "finalized" });
   assert.equal(configured, OBSERVATION_FAST_LANE_VALUE, `${OBSERVATION_FAST_LANE_ENV} value is unsupported`);
   return Object.freeze({ fastLane: true, intermediateCommitment: "confirmed" });
+}
+
+function observationRpcFailoverMode() {
+  const configured = process.env[OBSERVATION_RPC_FAILOVER_ENV]?.trim();
+  if (!configured) return false;
+  assert.equal(configured, OBSERVATION_RPC_FAILOVER_VALUE, `${OBSERVATION_RPC_FAILOVER_ENV} value is unsupported`);
+  assert(["execute-pre", "execute-post"].includes(process.argv[2]), "observation RPC failover is execution-only");
+  assert(observationExecutionMode().fastLane, "observation RPC failover requires the confirmed-intermediate fast lane");
+  return true;
 }
 
 function advanceMinContextSlot(value, slot, label) {
@@ -943,7 +954,11 @@ async function loadArtifact(fileInput) {
 }
 
 function assertStateRpcSelection(selection) {
-  assert.equal(selection, "state", "controller immutability requires the exact Devnet state RPC selection");
+  if (selection === "state") return;
+  assert(
+    observationRpcFailoverMode() && selection === "helius-state",
+    "controller immutability requires the exact Devnet state RPC selection",
+  );
 }
 
 async function inputs() {
@@ -2512,8 +2527,15 @@ function assertPlanBase(value, state, plan) {
   assertPlanActionBinding(plan);
   assert.equal(plan.genesisHash, EXPECTED_GENESIS);
   assert.equal(plan.commitment, "finalized");
-  assert.equal(plan.rpcSelection, value.rpcSelection, "RPC selection changed");
-  assert.equal(plan.rpcProviderOriginSha256, value.rpcProviderOriginSha256, "RPC provider origin changed");
+  if (observationRpcFailoverMode()) {
+    assert.equal(plan.rpcSelection, "state", "observation failover requires an exact state-RPC plan");
+    assert.equal(value.rpcSelection, "helius-state", "observation failover requires the admitted Helius state transport");
+    assertSha256(plan.rpcProviderOriginSha256, "planned RPC provider origin SHA-256");
+    assertSha256(value.rpcProviderOriginSha256, "execution RPC provider origin SHA-256");
+  } else {
+    assert.equal(plan.rpcSelection, value.rpcSelection, "RPC selection changed");
+    assert.equal(plan.rpcProviderOriginSha256, value.rpcProviderOriginSha256, "RPC provider origin changed");
+  }
   assert.equal(plan.controllerProgram, CONTROLLER.toBase58());
   assert.equal(plan.controllerProgramdata, CONTROLLER_PROGRAMDATA.toBase58());
   assert.equal(plan.targetProgram, TARGET.toBase58());
@@ -2597,6 +2619,11 @@ async function executeObservation(kind) {
       intermediateCommitment,
       finalizationCommitment: "finalized",
       automaticTransactionRetry: false,
+      plannedRpcSelection: plan.rpcSelection,
+      plannedRpcProviderOriginSha256: plan.rpcProviderOriginSha256,
+      executionRpcSelection: value.rpcSelection,
+      executionRpcProviderOriginSha256: value.rpcProviderOriginSha256,
+      rpcFailoverMode: observationRpcFailoverMode() ? OBSERVATION_RPC_FAILOVER_VALUE : null,
     });
     for (;;) {
       state = await readBaseState(value, intermediateCommitment);
@@ -2717,6 +2744,13 @@ async function executeObservation(kind) {
         targetMutationOccurred: false,
         ...(executionMode.fastLane ? {
           observationExecutionMode: OBSERVATION_FAST_LANE_VALUE,
+          executionRpcTransport: {
+            plannedSelection: plan.rpcSelection,
+            plannedProviderOriginSha256: plan.rpcProviderOriginSha256,
+            executionSelection: value.rpcSelection,
+            executionProviderOriginSha256: value.rpcProviderOriginSha256,
+            failoverMode: observationRpcFailoverMode() ? OBSERVATION_RPC_FAILOVER_VALUE : null,
+          },
           finalizedBarrier,
         } : {}),
         transactions: receiptTransactions,
