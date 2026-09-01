@@ -4,6 +4,7 @@ import { chmod, lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import bs58Module from "bs58";
 import {
   AddressLookupTableAccount,
   ComputeBudgetProgram,
@@ -149,6 +150,8 @@ import {
   deserializeGovernanceCouncilSetFixedV1,
   deserializeGovernancePolicyFixedV1,
 } from "../dist/upgradeGovernance/v1FixedAccounts.js";
+
+const bs58 = bs58Module.default ?? bs58Module;
 
 process.umask(0o077);
 
