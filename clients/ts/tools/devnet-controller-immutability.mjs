@@ -141,6 +141,7 @@ const FINALIZED_STATUS_POLL_INTERVAL_MS = 30_000;
 const CONFIRMED_STATUS_POLL_INTERVAL_MS = 1_000;
 const OBSERVATION_FAST_LANE_ENV = "AMEBA_CONTROLLER_OBSERVATION_FAST_LANE";
 const OBSERVATION_FAST_LANE_VALUE = "confirmed-intermediate-v1";
+const OBSERVATION_FAST_LANE_STAGE_PACING_MS = 2_000;
 const MINIMUM_CONTEXT_CATCH_UP_MAX_ATTEMPTS = 20;
 const MINIMUM_CONTEXT_CATCH_UP_DELAY_MS = 2_000;
 const MINIMUM_CONTEXT_CATCH_UP_READ_METHODS = new Set([
@@ -2612,6 +2613,7 @@ async function executeObservation(kind) {
           const immediate = await readObservation(value, model, intermediateCommitment);
           assert.equal(immediate.observation, null, "observation became occupied before begin submission");
         }, intermediateSubmissionOptions);
+        if (executionMode.fastLane) await delay(OBSERVATION_FAST_LANE_STAGE_PACING_MS);
         continue;
       }
       assertObservationCommon(observed.observation, model, state, `${kind} observation`);
@@ -2632,6 +2634,7 @@ async function executeObservation(kind) {
             assert.equal(immediate.observation.nextRawChunkIndex, rawIndex, "raw chunk cursor changed before submission");
             assert.equal(immediate.observation.nextArtifactChunkIndex, artifactIndex, "artifact chunk cursor changed before submission");
           }, intermediateSubmissionOptions);
+          if (executionMode.fastLane) await delay(OBSERVATION_FAST_LANE_STAGE_PACING_MS);
           continue;
         }
         assert.equal(rawIndex, model.rawGeometry.chunkCount, `${kind} raw chunk cursor exceeds the exact plan`);
@@ -2648,6 +2651,7 @@ async function executeObservation(kind) {
           assert.equal(immediate.observation.nextRawChunkIndex, rawIndex, "raw chunk cursor changed before submission");
           assert.equal(immediate.observation.nextArtifactChunkIndex, artifactIndex, "artifact chunk cursor changed before submission");
         }, intermediateSubmissionOptions);
+        if (executionMode.fastLane) await delay(OBSERVATION_FAST_LANE_STAGE_PACING_MS);
         continue;
       }
       if (observed.observation.status === ProgramDataObservationStatusV1.ReadyToFinalize) {
