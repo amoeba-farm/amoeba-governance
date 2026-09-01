@@ -16,6 +16,10 @@ import {
 } from "./release1LoaderInstructions.js";
 import { decodeRelease1CurrentInstruction } from "./release1CurrentInstructions.js";
 import { ACCEPT_TARGET_AUTHORITY_CHECKED_V1_TAG, EXECUTE_BOOTSTRAP_ACTIVATION_V1_TAG } from "./release1AuthorityInstructions.js";
+import {
+  EXECUTE_BOOTSTRAP_ACTIVATION_PROPOSAL_V2_TAG,
+  EXECUTE_TARGET_AUTHORITY_HANDOFF_PROPOSAL_V2_TAG,
+} from "./release1GovernanceV2.js";
 import { EXECUTE_EMERGENCY_RESOLUTION_V2_TAG, EXECUTE_UNFREEZE_V2_TAG } from "./release1V3Instructions.js";
 import { EXECUTE_UPGRADE_V2_TAG, EXTEND_TARGET_V2_TAG } from "./release1V3CustodyInstructions.js";
 
@@ -433,6 +437,8 @@ export function buildCanonicalRelease1LoaderEnvelopeV1(
   if (
     decoded.tag !== ACCEPT_TARGET_AUTHORITY_CHECKED_V1_TAG
     && decoded.tag !== EXECUTE_BOOTSTRAP_ACTIVATION_V1_TAG
+    && decoded.tag !== EXECUTE_TARGET_AUTHORITY_HANDOFF_PROPOSAL_V2_TAG
+    && decoded.tag !== EXECUTE_BOOTSTRAP_ACTIVATION_PROPOSAL_V2_TAG
     && decoded.tag !== EXECUTE_EMERGENCY_RESOLUTION_V2_TAG
     && decoded.tag !== EXECUTE_UNFREEZE_V2_TAG
     && decoded.tag !== EXTEND_TARGET_V2_TAG
