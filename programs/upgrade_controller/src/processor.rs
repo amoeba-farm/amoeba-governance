@@ -13,7 +13,35 @@ use solana_program::{
 
 use crate::{
     instruction::{self, MAX_CONTROLLER_INSTRUCTION_DATA_LEN},
-    release1_authority_instruction, release1_ceremony_instruction,
+    release1_authority_instruction, release1_ceremony_instruction, release1_governance_v2,
+    release1_governance_v2_authority_processor::{
+        process_approve_bootstrap_activation_proposal_v2,
+        process_approve_target_authority_handoff_proposal_v2,
+        process_cancel_bootstrap_activation_proposal_v2,
+        process_cancel_target_authority_handoff_proposal_v2,
+        process_create_bootstrap_activation_proposal_v2,
+        process_create_target_authority_handoff_proposal_v2,
+        process_execute_bootstrap_activation_proposal_v2,
+        process_execute_target_authority_handoff_proposal_v2,
+        process_expire_bootstrap_activation_proposal_v2,
+        process_expire_target_authority_handoff_proposal_v2,
+        process_queue_bootstrap_activation_proposal_v2,
+        process_queue_target_authority_handoff_proposal_v2,
+    },
+    release1_governance_v2_processor::{
+        process_approve_council_rotation_proposal_v2,
+        process_approve_timing_policy_change_proposal_v1,
+        process_cancel_council_rotation_proposal_v2,
+        process_cancel_timing_policy_change_proposal_v1,
+        process_create_council_rotation_proposal_v2, process_create_governance_timing_profile_v1,
+        process_create_timing_policy_change_proposal_v1,
+        process_execute_council_rotation_proposal_v2,
+        process_execute_timing_policy_change_proposal_v1,
+        process_expire_council_rotation_proposal_v2,
+        process_expire_timing_policy_change_proposal_v1,
+        process_initialize_governance_lifecycle_registry_v2,
+        process_queue_council_rotation_proposal_v2, process_queue_timing_policy_change_proposal_v1,
+    },
     release1_processor_authority::{
         process_accept_target_authority_checked_v1, process_approve_bootstrap_activation_v1,
         process_approve_target_authority_handoff_v1, process_create_bootstrap_activation_v1,
@@ -146,6 +174,20 @@ macro_rules! custody_v2_dispatch {
         ) -> ProgramResult {
             let instruction =
                 release1_v3_custody_instruction::$instruction::unpack(instruction_data)?;
+            $processor(program_id, accounts, instruction)
+        }
+    };
+}
+
+macro_rules! governance_v2_dispatch {
+    ($name:ident, $instruction:ident, $processor:ident) => {
+        #[inline(never)]
+        fn $name(
+            program_id: &Pubkey,
+            accounts: &[AccountInfo<'_>],
+            instruction_data: &[u8],
+        ) -> ProgramResult {
+            let instruction = release1_governance_v2::$instruction::unpack(instruction_data)?;
             $processor(program_id, accounts, instruction)
         }
     };
@@ -396,6 +438,136 @@ custody_v2_dispatch!(
     ActivateRollbackV2,
     process_activate_rollback_v2
 );
+governance_v2_dispatch!(
+    dispatch_initialize_governance_lifecycle_registry_v2,
+    InitializeGovernanceLifecycleRegistryV2,
+    process_initialize_governance_lifecycle_registry_v2
+);
+governance_v2_dispatch!(
+    dispatch_create_governance_timing_profile_v1,
+    CreateGovernanceTimingProfileV1,
+    process_create_governance_timing_profile_v1
+);
+governance_v2_dispatch!(
+    dispatch_create_timing_policy_change_proposal_v1,
+    CreateTimingPolicyChangeProposalV1,
+    process_create_timing_policy_change_proposal_v1
+);
+governance_v2_dispatch!(
+    dispatch_approve_timing_policy_change_proposal_v1,
+    ApproveTimingPolicyChangeProposalV1,
+    process_approve_timing_policy_change_proposal_v1
+);
+governance_v2_dispatch!(
+    dispatch_cancel_timing_policy_change_proposal_v1,
+    CancelTimingPolicyChangeProposalV1,
+    process_cancel_timing_policy_change_proposal_v1
+);
+governance_v2_dispatch!(
+    dispatch_expire_timing_policy_change_proposal_v1,
+    ExpireTimingPolicyChangeProposalV1,
+    process_expire_timing_policy_change_proposal_v1
+);
+governance_v2_dispatch!(
+    dispatch_queue_timing_policy_change_proposal_v1,
+    QueueTimingPolicyChangeProposalV1,
+    process_queue_timing_policy_change_proposal_v1
+);
+governance_v2_dispatch!(
+    dispatch_execute_timing_policy_change_proposal_v1,
+    ExecuteTimingPolicyChangeProposalV1,
+    process_execute_timing_policy_change_proposal_v1
+);
+governance_v2_dispatch!(
+    dispatch_create_council_rotation_proposal_v2,
+    CreateCouncilRotationProposalV2,
+    process_create_council_rotation_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_approve_council_rotation_proposal_v2,
+    ApproveCouncilRotationProposalV2,
+    process_approve_council_rotation_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_cancel_council_rotation_proposal_v2,
+    CancelCouncilRotationProposalV2,
+    process_cancel_council_rotation_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_expire_council_rotation_proposal_v2,
+    ExpireCouncilRotationProposalV2,
+    process_expire_council_rotation_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_queue_council_rotation_proposal_v2,
+    QueueCouncilRotationProposalV2,
+    process_queue_council_rotation_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_execute_council_rotation_proposal_v2,
+    ExecuteCouncilRotationProposalV2,
+    process_execute_council_rotation_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_create_target_authority_handoff_proposal_v2,
+    CreateTargetAuthorityHandoffProposalV2,
+    process_create_target_authority_handoff_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_approve_target_authority_handoff_proposal_v2,
+    ApproveTargetAuthorityHandoffProposalV2,
+    process_approve_target_authority_handoff_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_cancel_target_authority_handoff_proposal_v2,
+    CancelTargetAuthorityHandoffProposalV2,
+    process_cancel_target_authority_handoff_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_expire_target_authority_handoff_proposal_v2,
+    ExpireTargetAuthorityHandoffProposalV2,
+    process_expire_target_authority_handoff_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_queue_target_authority_handoff_proposal_v2,
+    QueueTargetAuthorityHandoffProposalV2,
+    process_queue_target_authority_handoff_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_execute_target_authority_handoff_proposal_v2,
+    ExecuteTargetAuthorityHandoffProposalV2,
+    process_execute_target_authority_handoff_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_create_bootstrap_activation_proposal_v2,
+    CreateBootstrapActivationProposalV2,
+    process_create_bootstrap_activation_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_approve_bootstrap_activation_proposal_v2,
+    ApproveBootstrapActivationProposalV2,
+    process_approve_bootstrap_activation_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_cancel_bootstrap_activation_proposal_v2,
+    CancelBootstrapActivationProposalV2,
+    process_cancel_bootstrap_activation_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_expire_bootstrap_activation_proposal_v2,
+    ExpireBootstrapActivationProposalV2,
+    process_expire_bootstrap_activation_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_queue_bootstrap_activation_proposal_v2,
+    QueueBootstrapActivationProposalV2,
+    process_queue_bootstrap_activation_proposal_v2
+);
+governance_v2_dispatch!(
+    dispatch_execute_bootstrap_activation_proposal_v2,
+    ExecuteBootstrapActivationProposalV2,
+    process_execute_bootstrap_activation_proposal_v2
+);
 
 pub fn process_instruction(
     program_id: &Pubkey,
@@ -556,6 +728,128 @@ pub fn process_instruction(
         }
         release1_v3_custody_instruction::ACTIVATE_ROLLBACK_V2_TAG => {
             dispatch_activate_rollback_v2(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::INITIALIZE_GOVERNANCE_LIFECYCLE_REGISTRY_V2_TAG => {
+            dispatch_initialize_governance_lifecycle_registry_v2(
+                program_id,
+                accounts,
+                instruction_data,
+            )
+        }
+        release1_governance_v2::CREATE_GOVERNANCE_TIMING_PROFILE_V1_TAG => {
+            dispatch_create_governance_timing_profile_v1(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::CREATE_TIMING_POLICY_CHANGE_PROPOSAL_V1_TAG => {
+            dispatch_create_timing_policy_change_proposal_v1(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::APPROVE_TIMING_POLICY_CHANGE_PROPOSAL_V1_TAG => {
+            dispatch_approve_timing_policy_change_proposal_v1(
+                program_id,
+                accounts,
+                instruction_data,
+            )
+        }
+        release1_governance_v2::CANCEL_TIMING_POLICY_CHANGE_PROPOSAL_V1_TAG => {
+            dispatch_cancel_timing_policy_change_proposal_v1(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::EXPIRE_TIMING_POLICY_CHANGE_PROPOSAL_V1_TAG => {
+            dispatch_expire_timing_policy_change_proposal_v1(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::QUEUE_TIMING_POLICY_CHANGE_PROPOSAL_V1_TAG => {
+            dispatch_queue_timing_policy_change_proposal_v1(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::EXECUTE_TIMING_POLICY_CHANGE_PROPOSAL_V1_TAG => {
+            dispatch_execute_timing_policy_change_proposal_v1(
+                program_id,
+                accounts,
+                instruction_data,
+            )
+        }
+        release1_governance_v2::CREATE_COUNCIL_ROTATION_PROPOSAL_V2_TAG => {
+            dispatch_create_council_rotation_proposal_v2(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::APPROVE_COUNCIL_ROTATION_PROPOSAL_V2_TAG => {
+            dispatch_approve_council_rotation_proposal_v2(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::CANCEL_COUNCIL_ROTATION_PROPOSAL_V2_TAG => {
+            dispatch_cancel_council_rotation_proposal_v2(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::EXPIRE_COUNCIL_ROTATION_PROPOSAL_V2_TAG => {
+            dispatch_expire_council_rotation_proposal_v2(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::QUEUE_COUNCIL_ROTATION_PROPOSAL_V2_TAG => {
+            dispatch_queue_council_rotation_proposal_v2(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::EXECUTE_COUNCIL_ROTATION_PROPOSAL_V2_TAG => {
+            dispatch_execute_council_rotation_proposal_v2(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::CREATE_TARGET_AUTHORITY_HANDOFF_PROPOSAL_V2_TAG => {
+            dispatch_create_target_authority_handoff_proposal_v2(
+                program_id,
+                accounts,
+                instruction_data,
+            )
+        }
+        release1_governance_v2::APPROVE_TARGET_AUTHORITY_HANDOFF_PROPOSAL_V2_TAG => {
+            dispatch_approve_target_authority_handoff_proposal_v2(
+                program_id,
+                accounts,
+                instruction_data,
+            )
+        }
+        release1_governance_v2::CANCEL_TARGET_AUTHORITY_HANDOFF_PROPOSAL_V2_TAG => {
+            dispatch_cancel_target_authority_handoff_proposal_v2(
+                program_id,
+                accounts,
+                instruction_data,
+            )
+        }
+        release1_governance_v2::EXPIRE_TARGET_AUTHORITY_HANDOFF_PROPOSAL_V2_TAG => {
+            dispatch_expire_target_authority_handoff_proposal_v2(
+                program_id,
+                accounts,
+                instruction_data,
+            )
+        }
+        release1_governance_v2::QUEUE_TARGET_AUTHORITY_HANDOFF_PROPOSAL_V2_TAG => {
+            dispatch_queue_target_authority_handoff_proposal_v2(
+                program_id,
+                accounts,
+                instruction_data,
+            )
+        }
+        release1_governance_v2::EXECUTE_TARGET_AUTHORITY_HANDOFF_PROPOSAL_V2_TAG => {
+            dispatch_execute_target_authority_handoff_proposal_v2(
+                program_id,
+                accounts,
+                instruction_data,
+            )
+        }
+        release1_governance_v2::CREATE_BOOTSTRAP_ACTIVATION_PROPOSAL_V2_TAG => {
+            dispatch_create_bootstrap_activation_proposal_v2(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::APPROVE_BOOTSTRAP_ACTIVATION_PROPOSAL_V2_TAG => {
+            dispatch_approve_bootstrap_activation_proposal_v2(
+                program_id,
+                accounts,
+                instruction_data,
+            )
+        }
+        release1_governance_v2::CANCEL_BOOTSTRAP_ACTIVATION_PROPOSAL_V2_TAG => {
+            dispatch_cancel_bootstrap_activation_proposal_v2(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::EXPIRE_BOOTSTRAP_ACTIVATION_PROPOSAL_V2_TAG => {
+            dispatch_expire_bootstrap_activation_proposal_v2(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::QUEUE_BOOTSTRAP_ACTIVATION_PROPOSAL_V2_TAG => {
+            dispatch_queue_bootstrap_activation_proposal_v2(program_id, accounts, instruction_data)
+        }
+        release1_governance_v2::EXECUTE_BOOTSTRAP_ACTIVATION_PROPOSAL_V2_TAG => {
+            dispatch_execute_bootstrap_activation_proposal_v2(
+                program_id,
+                accounts,
+                instruction_data,
+            )
         }
         _ => Err(ProgramError::InvalidInstructionData),
     }
