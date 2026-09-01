@@ -380,7 +380,55 @@ async function loadBundle({ requireArtifact = true } = {}) {
   assert.equal(immutabilityRecord.value.artifactSha256, amended.value.artifact.sha256, "immutability record controller artifact changed");
   assert.equal(immutabilityRecord.value.targetMutationOccurred, false, "immutability ceremony mutated Spread");
   const bridgeRunDir = await requireSecureDirectory(env("AMEBA_SPREAD_BRIDGE_RUN_DIR"), "Spread bridge run directory");
+  const controllerAuthorityFinal = await secureJsonFile(
+    path.join(bridgeRunDir, "controller-immutability-authority-final-receipt-v1.json"),
+    "controller authority-final receipt",
+  );
+  assert.equal(
+    controllerAuthorityFinal.value.schema,
+    "ameba-governance-devnet-controller-immutability-authority-final-receipt-v1",
+    "controller authority-final receipt schema changed",
+  );
+  assert.equal(controllerAuthorityFinal.value.controllerProgram, EXPECTED_CONTROLLER, "controller authority-final program changed");
+  assert.equal(controllerAuthorityFinal.value.controllerProgramdata, EXPECTED_CONTROLLER_PROGRAMDATA, "controller authority-final ProgramData changed");
+  assert.equal(controllerAuthorityFinal.value.postAuthority, null, "controller authority-final receipt retained authority");
+  assert.equal(controllerAuthorityFinal.value.targetMutationOccurred, false, "controller authority-final receipt mutated Spread");
+  lowerHash(controllerAuthorityFinal.value.operationId, "controller authority-final operation ID");
+  lowerHash(controllerAuthorityFinal.value.postRawSha256, "controller authority-final ProgramData hash");
+  assert(
+    typeof controllerAuthorityFinal.value.planFile === "string"
+      && path.basename(controllerAuthorityFinal.value.planFile) === controllerAuthorityFinal.value.planFile,
+    "controller authority-final plan filename changed",
+  );
+  assert(
+    Array.isArray(controllerAuthorityFinal.value.transactions)
+      && controllerAuthorityFinal.value.transactions.length === 1
+      && controllerAuthorityFinal.value.transactions[0]?.stage === "authority-final",
+    "controller authority-final receipt must bind one authority-final transaction",
+  );
+  const controllerAuthorityFinalPlan = await secureJsonFile(
+    path.join(bridgeRunDir, controllerAuthorityFinal.value.planFile),
+    "controller authority-final plan",
+  );
+  assert.equal(
+    controllerAuthorityFinalPlan.value.schema,
+    "ameba-governance-devnet-controller-immutability-authority-final-plan-v1",
+    "controller authority-final plan schema changed",
+  );
+  assert.equal(controllerAuthorityFinalPlan.value.operationId, controllerAuthorityFinal.value.operationId, "controller authority-final plan operation changed");
+  assert.equal(controllerAuthorityFinalPlan.value.command, "execute-authority-final", "controller authority-final plan command changed");
+  assert.equal(controllerAuthorityFinalPlan.value.controllerProgram, EXPECTED_CONTROLLER, "controller authority-final plan program changed");
+  assert.equal(controllerAuthorityFinalPlan.value.controllerProgramdata, EXPECTED_CONTROLLER_PROGRAMDATA, "controller authority-final plan ProgramData changed");
+  assert.equal(controllerAuthorityFinalPlan.value.targetProgram, EXPECTED_TARGET, "controller authority-final plan target changed");
+  assert.equal(controllerAuthorityFinalPlan.value.targetProgramdata, EXPECTED_TARGET_PROGRAMDATA, "controller authority-final plan target ProgramData changed");
+  assert.equal(controllerAuthorityFinalPlan.value.postAuthority, null, "controller authority-final plan retained authority");
+  assert.equal(controllerAuthorityFinalPlan.value.targetMutationAllowed, false, "controller authority-final plan permits Spread mutation");
+  assert.equal(controllerAuthorityFinalPlan.value.postRawSha256, controllerAuthorityFinal.value.postRawSha256, "controller authority-final plan ProgramData hash changed");
+  assert.deepEqual(controllerAuthorityFinalPlan.value.targetSnapshot, controllerAuthorityFinal.value.targetSnapshot, "controller authority-final target snapshot changed");
+  assert.deepEqual(controllerAuthorityFinalPlan.value.initializationSnapshot, controllerAuthorityFinal.value.initializationSnapshot, "controller authority-final initialization snapshot changed");
   const evidence = {
+    controllerAuthorityFinal,
+    controllerAuthorityFinalPlan,
     identityManifest: await auditedJson("AMEBA_SPREAD_GOVERNANCE_IDENTITY_MANIFEST", "Spread reviewed identity manifest"),
     identityReview: await auditedJson("AMEBA_SPREAD_GOVERNANCE_IDENTITY_REVIEW", "Spread reviewed identity review"),
     releaseManifest: await auditedJson("AMEBA_SPREAD_GOVERNANCE_BRIDGE_PLAN", "Spread reviewed bridge plan"),
@@ -406,7 +454,7 @@ async function loadBundle({ requireArtifact = true } = {}) {
   assert.equal(review.identityManifestSha256, evidence.identityManifest.sha256, "Spread review manifest hash changed");
   assert.equal(review.reviewedSourceCommit, amended.value.source.commit, "Spread review controller source changed");
   assert.equal(review.controllerArtifactSha256, amended.value.artifact.sha256, "Spread review controller artifact changed");
-  assert.equal(review.controllerImmutabilityReceiptSha256, immutabilityRecord.sha256, "Spread review immutability receipt changed");
+  assert.equal(review.controllerImmutabilityReceiptSha256, controllerAuthorityFinal.sha256, "Spread review authority-final receipt changed");
   assert.equal(review.spreadBridgePlanSha256, evidence.releaseManifest.sha256, "Spread review bridge plan changed");
   assert.equal(review.productionUseAuthorized, true, "Spread identity review is not authorized");
   assert.equal(manifest.schema, "ameba-spread-governance-bridge-prebuild-plan-v1");
@@ -418,6 +466,7 @@ async function loadBundle({ requireArtifact = true } = {}) {
   assert.equal(manifest.controller?.programData, EXPECTED_CONTROLLER_PROGRAMDATA, "Spread bridge plan controller ProgramData changed");
   assert.equal(manifest.controller?.configPda, ids.config.toBase58(), "Spread bridge plan config changed");
   assert.equal(manifest.controller?.gatePda, ids.gate.toBase58(), "Spread bridge plan gate changed");
+  assert.equal(manifest.controller?.immutabilityReceiptSha256, controllerAuthorityFinal.sha256, "Spread bridge plan authority-final receipt changed");
   assert.equal(manifest.controller?.upgradeAuthorityStatus, "immutable-none", "Spread bridge plan controller is not immutable");
   assert.equal(evidence.prebuildPlan.sha256, evidence.releaseManifest.sha256, "run-dir prebuild plan differs from reviewed plan");
   assert.deepEqual(evidence.prebuildPlan.value, manifest, "run-dir prebuild plan content changed");
@@ -434,6 +483,25 @@ async function loadBundle({ requireArtifact = true } = {}) {
   assert.equal(buildReceipt.prebuildPlan?.sha256, evidence.releaseManifest.sha256, "build receipt prebuild plan changed");
   assert.equal(buildReceipt.inputs?.sha256, evidence.buildInputs.sha256, "build receipt inventory changed");
   assert.equal(buildReceipt.source?.commit, evidence.buildInputs.value.git?.head, "build receipt and inventory commits differ");
+  assert.deepEqual(buildReceipt.controllerImmutabilityEvidence, {
+    schema: controllerAuthorityFinal.value.schema,
+    evidenceFilename: "controller-immutability-authority-final-receipt-v1.json",
+    sha256: controllerAuthorityFinal.sha256,
+    operationId: controllerAuthorityFinal.value.operationId,
+    planFile: controllerAuthorityFinal.value.planFile,
+    planSha256: controllerAuthorityFinalPlan.sha256,
+    controllerProgram: EXPECTED_CONTROLLER,
+    controllerProgramData: EXPECTED_CONTROLLER_PROGRAMDATA,
+    postRawSha256: controllerAuthorityFinal.value.postRawSha256,
+    postAuthority: null,
+    targetMutationOccurred: false,
+    finalizedTransactionCount: 1,
+  }, "Spread build receipt authority-final evidence changed");
+  assert.notEqual(
+    controllerAuthorityFinal.sha256,
+    immutabilityRecord.sha256,
+    "authority-final and later on-chain immutability-record evidence were conflated",
+  );
   const artifactFile = requireArtifact
     ? await requireSecureRegularFile(path.join(bridgeRunDir, "light_token_minter.so"), "Spread bridge artifact")
     : null;
@@ -1834,6 +1902,7 @@ async function selfTest() {
     packetBytes: { handoffExecute: handoff.packetBytes, activationExecute: activation.packetBytes },
     injectedSignerOnly: true,
     oldV1LifecycleBuildersAbsent: true,
+    authorityFinalAndOnchainRecordEvidenceSeparated: true,
     runtime,
   };
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

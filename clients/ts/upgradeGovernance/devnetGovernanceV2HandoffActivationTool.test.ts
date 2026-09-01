@@ -23,6 +23,7 @@ test("V2 handoff/activation tool self-test pins exact execute tags and packet re
   assert.deepEqual(value.packetBytes, { handoffExecute: 794, activationExecute: 827 });
   assert.equal(value.injectedSignerOnly, true);
   assert.equal(value.oldV1LifecycleBuildersAbsent, true);
+  assert.equal(value.authorityFinalAndOnchainRecordEvidenceSeparated, true);
   assert.equal(value.runtime.firstRateLimitCallCount, 1);
   assert.equal(value.runtime.ambiguousPreparedTransactionSendCalls, 0);
 });
@@ -44,6 +45,10 @@ test("V2 handoff/activation tool exposes only the narrow plan/execute surface", 
     "buildExecuteBootstrapActivationProposalV2Instruction",
   ]) assert(source.includes(builder), `missing V2 builder ${builder}`);
   assert(source.includes("AMEBA_GOVERNANCE_V2_SIGNER_PROVIDER"));
+  assert(source.includes("controller-immutability-authority-final-receipt-v1.json"));
+  assert(source.includes("controllerAuthorityFinal.sha256"));
+  assert(source.includes("immutabilityRecord.sha256"));
+  assert(!source.includes("review.controllerImmutabilityReceiptSha256, immutabilityRecord.sha256"));
   assert(source.includes("signTransactionWithProvider"));
   assert(source.includes("submitOneFinalized"));
   assert(source.includes("reconcileOneFinalized"));
