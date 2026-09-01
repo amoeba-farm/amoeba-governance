@@ -65,6 +65,20 @@ active profile identity, version, and hash.
 Existing proposals are unaffected. Each proposal stores and digests its exact
 profile identity, version, hash, durations, and derived timing slots.
 
+### Legacy entry-point closure
+
+The fresh V2 controller keeps historical codecs available for receipt and
+regression decoding, but does not dispatch the superseded lifecycle tags:
+
+- `19-25` for V1 council rotation;
+- `44-47` for V1 authority handoff; and
+- `49-52` for V1 bootstrap activation.
+
+This prevents a caller from bypassing the active timing profile through the old
+450-slot path. Tag `18` remains executable only to create the immutable
+candidate council account consumed by V2 rotation. Tags `39-43` retain the
+observation and controller-immutability surface.
+
 ### Proposal identity
 
 The lifecycle registry owns one monotonically increasing proposal ID. Every V2
