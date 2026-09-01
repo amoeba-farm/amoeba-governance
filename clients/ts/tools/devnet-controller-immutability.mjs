@@ -138,6 +138,9 @@ let EXPECTED_ARTIFACT_SHA256 = "0c107bce1ec34d3badf72b69161f0cae0b82a7b85ea71477
 let EXPECTED_ARTIFACT_BYTES = 1_114_592;
 const PLAN_TTL_SLOTS = 100_000;
 const FINALIZED_STATUS_POLL_INTERVAL_MS = 30_000;
+const CONFIRMED_STATUS_POLL_INTERVAL_MS = 1_000;
+const OBSERVATION_FAST_LANE_ENV = "AMEBA_CONTROLLER_OBSERVATION_FAST_LANE";
+const OBSERVATION_FAST_LANE_VALUE = "confirmed-intermediate-v1";
 const MINIMUM_CONTEXT_CATCH_UP_MAX_ATTEMPTS = 20;
 const MINIMUM_CONTEXT_CATCH_UP_DELAY_MS = 2_000;
 const MINIMUM_CONTEXT_CATCH_UP_READ_METHODS = new Set([
@@ -268,10 +271,22 @@ function initializationOperationId(material) {
   return sha256Hex(Buffer.from(JSON.stringify(material), "utf8"));
 }
 
-function finalizedReadConfig(value) {
-  const config = { commitment: "finalized" };
+function commitmentReadConfig(value, commitment) {
+  assert(["confirmed", "finalized"].includes(commitment), "unsupported read commitment");
+  const config = { commitment };
   if (value.minContextSlot > 0) config.minContextSlot = value.minContextSlot;
   return config;
+}
+
+function finalizedReadConfig(value) {
+  return commitmentReadConfig(value, "finalized");
+}
+
+function observationExecutionMode() {
+  const configured = process.env[OBSERVATION_FAST_LANE_ENV]?.trim();
+  if (!configured) return Object.freeze({ fastLane: false, intermediateCommitment: "finalized" });
+  assert.equal(configured, OBSERVATION_FAST_LANE_VALUE, `${OBSERVATION_FAST_LANE_ENV} value is unsupported`);
+  return Object.freeze({ fastLane: true, intermediateCommitment: "confirmed" });
 }
 
 function advanceMinContextSlot(value, slot, label) {
@@ -355,6 +370,7 @@ async function readSelectedPlan(runDir, spec, label) {
 function assertJournalEntriesAllowReplan(allEntries, priorPlan) {
   const entries = allEntries.filter((entry) => entry.operationId === priorPlan.operationId);
   const finalized = entries.filter((entry) => [
+    "transaction-confirmed",
     "transaction-finalized",
     "transaction-reconciled-finalized",
   ].includes(entry.event));
@@ -1205,7 +1221,7 @@ function assertInitializationState(value, ids, accounts, config, gate, policy, c
   assert.equal(release.releaseDigest.toString("hex"), plan.controllerReleaseDigest, "controller release digest differs from initialization");
 }
 
-async function readBaseState(value) {
+async function readBaseState(value, commitment = "finalized") {
   await ensureInitializationTransaction(value);
   const ids = identities();
   const addresses = [
@@ -1223,17 +1239,17 @@ async function readBaseState(value) {
   ];
   const response = await executionAwareRpc(
     "getMultipleAccountsInfoAndContext",
-    "finalized-read:base-state",
-    () => value.connection.getMultipleAccountsInfoAndContext(addresses, finalizedReadConfig(value)),
+    `${commitment}-read:base-state`,
+    () => value.connection.getMultipleAccountsInfoAndContext(addresses, commitmentReadConfig(value, commitment)),
   );
-  advanceMinContextSlot(value, response.context.slot, "base-state read");
+  advanceMinContextSlot(value, response.context.slot, `${commitment} base-state read`);
   const [controller, controllerProgramdataAccount, target, targetProgramdataAccount, configAccount, gateAccount, policyAccount, councilAccount, capacityAccount, releaseAccount, authorityAccount] = response.value;
 
   assertProgram(controller, CONTROLLER_PROGRAMDATA, "controller Program");
   assertProgram(target, TARGET_PROGRAMDATA, "target Program");
   const controllerProgramdata = parseProgramdata(controllerProgramdataAccount, "controller ProgramData");
   const targetProgramdata = parseProgramdata(targetProgramdataAccount, "target ProgramData");
-  assert(BigInt(response.context.slot) > controllerProgramdata.deployedSlot, "controller deployment is not yet in the finalized past");
+  assert(BigInt(response.context.slot) > controllerProgramdata.deployedSlot, `controller deployment is not yet in the ${commitment} past`);
   assert(targetProgramdata.authority.present && targetProgramdata.authority.value.equals(LEGACY_TARGET_AUTHORITY), "target ProgramData authority changed");
   assert(controllerProgramdata.payload.equals(value.artifact), "controller ProgramData payload differs from the exact artifact");
   assert.equal(controllerProgramdata.payload.length, EXPECTED_ARTIFACT_BYTES, "controller ProgramData capacity is not exact");
@@ -1594,13 +1610,13 @@ function buildObservationModel(value, state, generation, expectedAuthority) {
   };
 }
 
-async function readOneAccount(value, address) {
+async function readOneAccount(value, address, commitment = "finalized") {
   const response = await executionAwareRpc(
     "getAccountInfoAndContext",
-    `finalized-read:account:${address.toBase58()}`,
-    () => value.connection.getAccountInfoAndContext(address, finalizedReadConfig(value)),
+    `${commitment}-read:account:${address.toBase58()}`,
+    () => value.connection.getAccountInfoAndContext(address, commitmentReadConfig(value, commitment)),
   );
-  advanceMinContextSlot(value, response.context.slot, `account read ${address.toBase58()}`);
+  advanceMinContextSlot(value, response.context.slot, `${commitment} account read ${address.toBase58()}`);
   return response;
 }
 
@@ -1675,8 +1691,8 @@ function assertFinalObservation(observation, model, state, label) {
   validateProgramDataObservationDigestV1(observation);
 }
 
-async function readObservation(value, model) {
-  const response = await readOneAccount(value, model.observation);
+async function readObservation(value, model, commitment = "finalized") {
+  const response = await readOneAccount(value, model.observation, commitment);
   if (response.value === null || (response.value.owner.equals(SystemProgram.programId) && response.value.data.length === 0)) {
     return { account: response.value, observation: null, slot: response.context.slot };
   }
@@ -1920,8 +1936,9 @@ async function rpcExecution(
   throw new Error(`${stage} minimum-context catch-up loop terminated unexpectedly`);
 }
 
-async function recordFinalizedReread(value, journal, plan, stage, phase, callback) {
+async function recordFinalizedReread(value, journal, plan, stage, phase, callback, commitment = "finalized") {
   assert(["pre-sign", "pre-submit"].includes(phase), `${stage} finalized reread phase is invalid`);
+  assert(["confirmed", "finalized"].includes(commitment), `${stage} reread commitment is invalid`);
   const beforeSlot = value.minContextSlot;
   const result = await callback();
   const observationSlot = value.minContextSlot;
@@ -1930,13 +1947,14 @@ async function recordFinalizedReread(value, journal, plan, stage, phase, callbac
   journal.append(plan.operationId, `${phase}-state-verified`, {
     stage,
     actionPlanSha256: plan.actionPlanSha256,
+    commitment,
     priorMinContextSlot: beforeSlot,
     observationSlot,
   });
   return result;
 }
 
-async function assertBlockhashValidAtCurrentContext(value, journal, plan, stage, blockhash, phase) {
+async function assertBlockhashValidAtCurrentContext(value, journal, plan, stage, blockhash, phase, commitment = "finalized") {
   const minimum = value.minContextSlot;
   assert(Number.isSafeInteger(minimum) && minimum > 0, `${stage} ${phase} blockhash check lacks a minimum context slot`);
   const response = await rpcExecution(
@@ -1945,7 +1963,7 @@ async function assertBlockhashValidAtCurrentContext(value, journal, plan, stage,
     `${stage}:${phase}-blockhash-validity`,
     "isBlockhashValid",
     () => value.connection.isBlockhashValid(blockhash, {
-      commitment: "finalized",
+      commitment,
       minContextSlot: minimum,
     }),
   );
@@ -1958,9 +1976,63 @@ function preparedTransactions(journal, operationIdValue, stage) {
   const prepared = entries.filter((entry) => entry.event === "transaction-prepared" && entry.payload.stage === stage);
   if (prepared.length === 0) return null;
   const last = prepared.at(-1).payload;
-  const terminal = entries.find((entry) => ["transaction-finalized", "transaction-reconciled-finalized", "transaction-expired-not-landed"].includes(entry.event)
+  const terminal = entries.find((entry) => ["transaction-confirmed", "transaction-finalized", "transaction-reconciled-finalized", "transaction-expired-not-landed"].includes(entry.event)
     && entry.payload.stage === stage && entry.payload.signature === last.signature);
   return terminal ? null : last;
+}
+
+function priorConfirmedTransaction(journal, operationIdValue, stage) {
+  const entries = journal.recover().filter((entry) => entry.operationId === operationIdValue);
+  const confirmed = entries.filter((entry) => entry.event === "transaction-confirmed" && entry.payload.stage === stage);
+  if (confirmed.length === 0) return null;
+  const last = confirmed.at(-1).payload;
+  const superseded = entries.find((entry) => [
+    "transaction-finalized",
+    "transaction-reconciled-finalized",
+    "transaction-expired-not-landed",
+  ].includes(entry.event) && entry.payload.stage === stage && entry.payload.signature === last.signature);
+  return superseded ? null : last;
+}
+
+async function reconcilePriorConfirmed(value, journal, operationIdValue, stage) {
+  const prior = priorConfirmedTransaction(journal, operationIdValue, stage);
+  if (!prior) return null;
+  assertSignerProviderEvidence(prior.signerProvider, `${stage} confirmed transaction`);
+  const landed = await rpcExecution(
+    journal,
+    operationIdValue,
+    `${stage}:confirmed-resume-reconcile`,
+    "getTransaction",
+    () => confirmedTransaction(value, prior.signature, prior.messageSha256, prior.minContextSlot),
+  );
+  if (landed) return landed;
+  const blockHeight = await rpcExecution(
+    journal,
+    operationIdValue,
+    `${stage}:confirmed-resume-block-height`,
+    "getBlockHeight",
+    () => value.connection.getBlockHeight(commitmentReadConfig(value, "confirmed")),
+  );
+  if (blockHeight <= prior.lastValidBlockHeight) {
+    throw new Error(`${stage} has a journaled confirmed signature whose current outcome is unresolved; no retry is allowed`);
+  }
+  const finalizedProofSlot = await rpcExecution(
+    journal,
+    operationIdValue,
+    `${stage}:confirmed-rollback-proof-slot`,
+    "getSlot",
+    () => value.connection.getSlot("finalized"),
+  );
+  advanceMinContextSlot(value, finalizedProofSlot, `${stage} confirmed rollback proof`);
+  journal.append(operationIdValue, "transaction-expired-not-landed", {
+    stage,
+    signature: prior.signature,
+    lastValidBlockHeight: prior.lastValidBlockHeight,
+    observedBlockHeight: blockHeight,
+    finalizedProofSlot,
+    priorConfirmationRolledBack: true,
+  });
+  throw new Error(`${stage} prior confirmed signature rolled back and expired; rerun explicitly before preparing a fresh attempt`);
 }
 
 function assertSignerProviderEvidence(value, label) {
@@ -1979,7 +2051,7 @@ function assertSignerProviderEvidence(value, label) {
 function unresolvedPreparedStages(journal, operationIdValue) {
   const entries = journal.recover().filter((entry) => entry.operationId === operationIdValue);
   const terminalKeys = new Set(entries
-    .filter((entry) => ["transaction-finalized", "transaction-reconciled-finalized", "transaction-expired-not-landed"].includes(entry.event))
+    .filter((entry) => ["transaction-confirmed", "transaction-finalized", "transaction-reconciled-finalized", "transaction-expired-not-landed"].includes(entry.event))
     .map((entry) => `${entry.payload.stage}:${entry.payload.signature}`));
   const stages = [];
   const seen = new Set();
@@ -2019,6 +2091,86 @@ async function finalizedTransaction(value, signature, expectedMessageSha256, min
     recentBlockhash: landed.transaction.message.recentBlockhash,
     minContextSlot: minimumContextSlot,
   };
+}
+
+async function confirmedTransaction(value, signature, expectedMessageSha256, minimumContextSlot = 0) {
+  assert(Number.isSafeInteger(minimumContextSlot) && minimumContextSlot >= 0, "confirmed transaction minimum context slot is invalid");
+  const [statusResponse, landed] = await Promise.all([
+    value.connection.getSignatureStatuses([signature], { searchTransactionHistory: true }),
+    value.connection.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }),
+  ]);
+  const status = statusResponse.value[0];
+  if (status?.err) throw new Error(`transaction ${signature} failed`);
+  if (!landed || !["confirmed", "finalized"].includes(status?.confirmationStatus)) return null;
+  assert(landed.meta && landed.meta.err === null, `transaction ${signature} confirmed with an error`);
+  assert(landed.slot >= minimumContextSlot, `transaction ${signature} predates its minimum context slot`);
+  value.minContextSlot = Math.max(value.minContextSlot, landed.slot);
+  assert(landed.transaction.signatures.includes(signature), `transaction ${signature} signature changed`);
+  const messageSha256 = sha256Hex(Buffer.from(landed.transaction.message.serialize()));
+  assert.equal(messageSha256, expectedMessageSha256, `transaction ${signature} confirmed message changed`);
+  return {
+    signature,
+    slot: landed.slot,
+    blockTime: landed.blockTime,
+    feeLamports: landed.meta.fee,
+    computeUnits: landed.meta.computeUnitsConsumed ?? null,
+    messageSha256,
+    recentBlockhash: landed.transaction.message.recentBlockhash,
+    minContextSlot: minimumContextSlot,
+    confirmationStatus: status.confirmationStatus,
+  };
+}
+
+async function pollSubmittedConfirmed(value, journal, plan, stage, prepared) {
+  for (;;) {
+    const statusResponse = await rpcExecution(
+      journal,
+      plan.operationId,
+      `${stage}:confirmed-status-poll`,
+      "getSignatureStatuses",
+      () => value.connection.getSignatureStatuses([prepared.signature], { searchTransactionHistory: true }),
+    );
+    assert.equal(statusResponse.value.length, 1, `${stage} confirmed status response length changed`);
+    const status = statusResponse.value[0];
+    if (status?.err) throw new Error(`${stage} transaction confirmed with an error`);
+    if (["confirmed", "finalized"].includes(status?.confirmationStatus)) {
+      const landed = await rpcExecution(
+        journal,
+        plan.operationId,
+        `${stage}:confirmed-read`,
+        "getTransaction",
+        () => confirmedTransaction(value, prepared.signature, prepared.messageSha256, prepared.minContextSlot),
+      );
+      if (landed) {
+        journal.append(plan.operationId, "transaction-confirmed", {
+          stage,
+          ...landed,
+          blockhash: prepared.blockhash,
+          lastValidBlockHeight: prepared.lastValidBlockHeight,
+          wireSha256: prepared.wireSha256,
+          wireBytes: prepared.wireBytes,
+          maxRetries: 0,
+          signerProvider: prepared.signerProvider,
+        });
+        return landed;
+      }
+    }
+    if (status === null) {
+      const blockHeight = await rpcExecution(
+        journal,
+        plan.operationId,
+        `${stage}:confirmed-poll-block-height`,
+        "getBlockHeight",
+        () => value.connection.getBlockHeight(commitmentReadConfig(value, "confirmed")),
+      );
+      if (blockHeight > prepared.lastValidBlockHeight) {
+        const reconciled = await reconcilePrepared(value, journal, plan.operationId, stage);
+        if (reconciled) return reconciled;
+        throw new Error(`${stage} transaction expired without landing; rerun the same armed plan to prepare a fresh attempt`);
+      }
+    }
+    await delay(CONFIRMED_STATUS_POLL_INTERVAL_MS);
+  }
 }
 
 async function pollSubmittedFinalized(value, journal, plan, stage, prepared) {
@@ -2149,7 +2301,12 @@ async function submitSignedTransaction(
   latestBlockhash,
   verifyImmediatelyBeforeSubmit,
   signerProviderEvidence,
+  options = {},
 ) {
+  const stateCommitment = options.stateCommitment ?? "finalized";
+  const awaitCommitment = options.awaitCommitment ?? "finalized";
+  assert(["confirmed", "finalized"].includes(stateCommitment), `${stage} state commitment is invalid`);
+  assert(["confirmed", "finalized"].includes(awaitCommitment), `${stage} await commitment is invalid`);
   const operationIdValue = plan.operationId;
   const reconciled = await reconcilePrepared(value, journal, operationIdValue, stage);
   if (reconciled) return reconciled;
@@ -2165,6 +2322,7 @@ async function submitSignedTransaction(
     stage,
     "pre-submit",
     verifyImmediatelyBeforeSubmit,
+    stateCommitment,
   );
   await assertBlockhashValidAtCurrentContext(
     value,
@@ -2173,6 +2331,7 @@ async function submitSignedTransaction(
     stage,
     latestBlockhash.blockhash,
     "submission",
+    stateCommitment,
   );
   const minContextSlot = value.minContextSlot;
   assert(Number.isSafeInteger(minContextSlot) && minContextSlot > 0, `${stage} minimum context slot is invalid`);
@@ -2222,18 +2381,20 @@ async function submitSignedTransaction(
   }
   assert.equal(submitted, signature, `${stage} RPC returned a different signature`);
   journal.append(operationIdValue, "transaction-submitted", { stage, signature });
-  return pollSubmittedFinalized(value, journal, plan, stage, prepared);
+  return awaitCommitment === "confirmed"
+    ? pollSubmittedConfirmed(value, journal, plan, stage, prepared)
+    : pollSubmittedFinalized(value, journal, plan, stage, prepared);
 }
 
-async function latestFinalizedBlockhash(value, journal, operationIdValue, stage) {
+async function latestFinalizedBlockhash(value, journal, operationIdValue, stage, commitment = "finalized") {
   const response = await rpcExecution(
     journal,
     operationIdValue,
     `${stage}:blockhash`,
     "getLatestBlockhashAndContext",
-    () => value.connection.getLatestBlockhashAndContext(finalizedReadConfig(value)),
+    () => value.connection.getLatestBlockhashAndContext(commitmentReadConfig(value, commitment)),
   );
-  advanceMinContextSlot(value, response.context.slot, `${stage} blockhash`);
+  advanceMinContextSlot(value, response.context.slot, `${stage} ${commitment} blockhash`);
   return response.value;
 }
 
@@ -2243,12 +2404,16 @@ function providerStage(stage) {
   return value;
 }
 
-async function submitControllerInstructions(value, journal, plan, stage, instructions, verifyCurrentState) {
+async function submitControllerInstructions(value, journal, plan, stage, instructions, verifyCurrentState, options = {}) {
   const operationIdValue = plan.operationId;
+  const stateCommitment = options.stateCommitment ?? "finalized";
+  const awaitCommitment = options.awaitCommitment ?? "finalized";
+  const priorConfirmed = await reconcilePriorConfirmed(value, journal, operationIdValue, stage);
+  if (priorConfirmed) return priorConfirmed;
   const pending = await reconcilePrepared(value, journal, operationIdValue, stage);
   if (pending) return pending;
-  const latest = await latestFinalizedBlockhash(value, journal, operationIdValue, stage);
-  await recordFinalizedReread(value, journal, plan, stage, "pre-sign", verifyCurrentState);
+  const latest = await latestFinalizedBlockhash(value, journal, operationIdValue, stage, stateCommitment);
+  await recordFinalizedReread(value, journal, plan, stage, "pre-sign", verifyCurrentState, stateCommitment);
   await assertBlockhashValidAtCurrentContext(
     value,
     journal,
@@ -2256,6 +2421,7 @@ async function submitControllerInstructions(value, journal, plan, stage, instruc
     stage,
     latest.blockhash,
     "signing",
+    stateCommitment,
   );
   const unsigned = new Transaction({ feePayer: PAYER, recentBlockhash: latest.blockhash });
   unsigned.add(...instructions);
@@ -2277,6 +2443,7 @@ async function submitControllerInstructions(value, journal, plan, stage, instruc
     latest,
     verifyCurrentState,
     signed.providerEvidence,
+    { stateCommitment, awaitCommitment },
   );
 }
 
@@ -2285,6 +2452,22 @@ function operationFinalizedTransactions(journal, operationIdValue) {
   for (const entry of journal.recover()) {
     if (entry.operationId !== operationIdValue || !["transaction-finalized", "transaction-reconciled-finalized"].includes(entry.event)) continue;
     results.set(entry.payload.stage, entry.payload);
+  }
+  return [...results.values()];
+}
+
+function operationObservationTransactions(journal, operationIdValue) {
+  const results = new Map();
+  for (const entry of journal.recover()) {
+    if (entry.operationId !== operationIdValue || ![
+      "transaction-confirmed",
+      "transaction-finalized",
+      "transaction-reconciled-finalized",
+    ].includes(entry.event)) continue;
+    results.set(entry.payload.stage, {
+      ...entry.payload,
+      journalFinalityEvent: entry.event,
+    });
   }
   return [...results.values()];
 }
@@ -2391,6 +2574,12 @@ async function executeObservation(kind) {
   assert.equal(spec.schema, schema, "observation plan specification schema changed");
   const selectedPlan = await readSelectedPlan(value.runDir, spec, `${kind} observation plan`);
   const plan = selectedPlan.plan;
+  const executionMode = observationExecutionMode();
+  const intermediateCommitment = executionMode.intermediateCommitment;
+  const intermediateSubmissionOptions = {
+    stateCommitment: intermediateCommitment,
+    awaitCommitment: intermediateCommitment,
+  };
   await withExecutionLock(value, plan, command, async (journal) => {
     let state = await readBaseState(value);
     assertAuthority(state, kind === "pre");
@@ -2401,21 +2590,28 @@ async function executeObservation(kind) {
       kind === "pre" ? optionalAuthority(true, INITIALIZER) : optionalAuthority(false),
     );
     assertObservationPlan(value, state, model, plan);
+    journal.append(plan.operationId, "observation-execution-mode", {
+      kind,
+      fastLane: executionMode.fastLane,
+      intermediateCommitment,
+      finalizationCommitment: "finalized",
+      automaticTransactionRetry: false,
+    });
     for (;;) {
-      state = await readBaseState(value);
+      state = await readBaseState(value, intermediateCommitment);
       assertAuthority(state, kind === "pre");
       model = buildObservationModel(value, state, model.guard.generation, model.expectedAuthority);
       assertObservationPlan(value, state, model, plan);
-      const observed = await readObservation(value, model);
+      let observed = await readObservation(value, model, intermediateCommitment);
       if (!observed.observation) {
         assert.deepEqual(assertVacantPda(observed.account, model.observation, `${kind} observation`), plan.observationInitiallyVacant, "observation vacancy changed");
         await submitControllerInstructions(value, journal, plan, `${kind}:begin`, [model.begin], async () => {
-          const immediateState = await readBaseState(value);
+          const immediateState = await readBaseState(value, intermediateCommitment);
           assertAuthority(immediateState, kind === "pre");
           assert.deepEqual(immediateState.targetSnapshot, plan.targetSnapshot, "target changed before observation begin");
-          const immediate = await readObservation(value, model);
+          const immediate = await readObservation(value, model, intermediateCommitment);
           assert.equal(immediate.observation, null, "observation became occupied before begin submission");
-        });
+        }, intermediateSubmissionOptions);
         continue;
       }
       assertObservationCommon(observed.observation, model, state, `${kind} observation`);
@@ -2426,48 +2622,80 @@ async function executeObservation(kind) {
           assert.equal(artifactIndex, 0, `${kind} artifact verification started before the exact raw scan completed`);
           const stage = `${kind}:append-${String(rawIndex).padStart(3, "0")}`;
           await submitControllerInstructions(value, journal, plan, stage, [model.appends[rawIndex]], async () => {
-            const immediateState = await readBaseState(value);
+            const immediateState = await readBaseState(value, intermediateCommitment);
             assertAuthority(immediateState, kind === "pre");
             assert.deepEqual(immediateState.targetSnapshot, plan.targetSnapshot, "target changed before observation append submission");
-            const immediate = await readObservation(value, model);
+            const immediate = await readObservation(value, model, intermediateCommitment);
             assert(immediate.observation, "observation disappeared before append submission");
             assertObservationCommon(immediate.observation, model, immediateState, `${kind} observation`);
             assert.equal(immediate.observation.status, ProgramDataObservationStatusV1.Accumulating, "observation status changed before append submission");
             assert.equal(immediate.observation.nextRawChunkIndex, rawIndex, "raw chunk cursor changed before submission");
             assert.equal(immediate.observation.nextArtifactChunkIndex, artifactIndex, "artifact chunk cursor changed before submission");
-          });
+          }, intermediateSubmissionOptions);
           continue;
         }
         assert.equal(rawIndex, model.rawGeometry.chunkCount, `${kind} raw chunk cursor exceeds the exact plan`);
         assert(artifactIndex < model.artifactChunkTotal, `${kind} observation is accumulating after all verification chunks`);
         const stage = `${kind}:verify-${String(artifactIndex).padStart(3, "0")}`;
         await submitControllerInstructions(value, journal, plan, stage, [model.verifies[artifactIndex]], async () => {
-          const immediateState = await readBaseState(value);
+          const immediateState = await readBaseState(value, intermediateCommitment);
           assertAuthority(immediateState, kind === "pre");
           assert.deepEqual(immediateState.targetSnapshot, plan.targetSnapshot, "target changed before observation verification submission");
-          const immediate = await readObservation(value, model);
+          const immediate = await readObservation(value, model, intermediateCommitment);
           assert(immediate.observation, "observation disappeared before verification submission");
           assertObservationCommon(immediate.observation, model, immediateState, `${kind} observation`);
           assert.equal(immediate.observation.status, ProgramDataObservationStatusV1.Accumulating, "observation status changed before verification submission");
           assert.equal(immediate.observation.nextRawChunkIndex, rawIndex, "raw chunk cursor changed before submission");
           assert.equal(immediate.observation.nextArtifactChunkIndex, artifactIndex, "artifact chunk cursor changed before submission");
-        });
+        }, intermediateSubmissionOptions);
         continue;
       }
       if (observed.observation.status === ProgramDataObservationStatusV1.ReadyToFinalize) {
         await submitControllerInstructions(value, journal, plan, `${kind}:finalize`, [model.finalize], async () => {
-          const immediateState = await readBaseState(value);
+          const immediateState = await readBaseState(value, intermediateCommitment);
           assertAuthority(immediateState, kind === "pre");
           assert.deepEqual(immediateState.targetSnapshot, plan.targetSnapshot, "target changed before observation finalization");
-          const immediate = await readObservation(value, model);
+          const immediate = await readObservation(value, model, intermediateCommitment);
           assert(immediate.observation, "observation disappeared before finalization");
           assert.equal(immediate.observation.status, ProgramDataObservationStatusV1.ReadyToFinalize, "observation status changed before finalization");
           assert.equal(immediate.observation.nextRawChunkIndex, model.rawGeometry.chunkCount, "raw scan changed before finalization");
           assert.equal(immediate.observation.nextArtifactChunkIndex, model.artifactChunkTotal, "artifact verification changed before finalization");
-        });
+        }, { stateCommitment: intermediateCommitment, awaitCommitment: "finalized" });
         continue;
       }
       assertFinalObservation(observed.observation, model, state, `${kind} observation`);
+      let finalizedBarrier = null;
+      if (executionMode.fastLane) {
+        state = await readBaseState(value, "finalized");
+        assertAuthority(state, kind === "pre");
+        model = buildObservationModel(value, state, model.guard.generation, model.expectedAuthority);
+        assertObservationPlan(value, state, model, plan);
+        observed = await readObservation(value, model, "finalized");
+        assert(observed.observation, `${kind} observation is absent at the finalized barrier`);
+        assertFinalObservation(observed.observation, model, state, `${kind} finalized-barrier observation`);
+        const finalizeProof = operationFinalizedTransactions(journal, plan.operationId)
+          .find((transaction) => transaction.stage === `${kind}:finalize`);
+        assert(finalizeProof, `${kind} fast lane lacks a finalized dependent finalize transaction`);
+        assert(state.slot >= finalizeProof.slot, `${kind} finalized barrier predates the finalize transaction`);
+        finalizedBarrier = {
+          schema: "ameba-controller-observation-finalized-barrier-v1",
+          finalizeSignature: finalizeProof.signature,
+          finalizeMessageSha256: finalizeProof.messageSha256,
+          finalizeTransactionSlot: finalizeProof.slot,
+          finalizedStateSlot: state.slot,
+          observationFinalizedSlot: observed.observation.finalizedSlot.toString(),
+        };
+        journal.append(plan.operationId, "observation-phase-finalized-barrier", {
+          kind,
+          ...finalizedBarrier,
+        });
+      }
+      const receiptTransactions = executionMode.fastLane
+        ? operationObservationTransactions(journal, plan.operationId)
+        : operationFinalizedTransactions(journal, plan.operationId);
+      if (executionMode.fastLane) {
+        assert(receiptTransactions.every((transaction) => transaction.slot <= finalizedBarrier.finalizeTransactionSlot), `${kind} transaction schedule extends beyond the finalized barrier`);
+      }
       const receipt = {
         schema: `ameba-governance-devnet-controller-immutability-${kind}-observation-receipt-v1`,
         operationId: plan.operationId,
@@ -2483,7 +2711,11 @@ async function executeObservation(kind) {
         targetSnapshot: state.targetSnapshot,
         initializationSnapshot: state.initializationSnapshot,
         targetMutationOccurred: false,
-        transactions: operationFinalizedTransactions(journal, plan.operationId),
+        ...(executionMode.fastLane ? {
+          observationExecutionMode: OBSERVATION_FAST_LANE_VALUE,
+          finalizedBarrier,
+        } : {}),
+        transactions: receiptTransactions,
       };
       assert.deepEqual(
         receipt.transactions.map((transaction) => transaction.stage),
@@ -2873,6 +3105,20 @@ async function loadFinalObservationFromPlan(value, spec, receiptName, label) {
     plan.transactions.map((transaction) => `${prefix}:${transaction.stage}`),
     `${label} finalized transaction schedule changed`,
   );
+  if (receipt.observationExecutionMode !== undefined) {
+    assert.equal(receipt.observationExecutionMode, OBSERVATION_FAST_LANE_VALUE, `${label} observation execution mode changed`);
+    assert.equal(receipt.finalizedBarrier?.schema, "ameba-controller-observation-finalized-barrier-v1", `${label} finalized barrier schema changed`);
+    const finalizeStage = `${prefix}:finalize`;
+    const finalizeTransaction = receipt.transactions.find((transaction) => transaction.stage === finalizeStage);
+    assert(finalizeTransaction, `${label} finalized barrier lacks its finalize transaction`);
+    assert.equal(receipt.finalizedBarrier.finalizeSignature, finalizeTransaction.signature, `${label} finalized barrier signature changed`);
+    assert.equal(receipt.finalizedBarrier.finalizeMessageSha256, finalizeTransaction.messageSha256, `${label} finalized barrier message changed`);
+    assert.equal(receipt.finalizedBarrier.finalizeTransactionSlot, finalizeTransaction.slot, `${label} finalized barrier transaction slot changed`);
+    assert(receipt.finalizedBarrier.finalizedStateSlot >= finalizeTransaction.slot, `${label} finalized state predates the finalize transaction`);
+    assert(receipt.transactions.every((transaction) => transaction.slot <= finalizeTransaction.slot), `${label} transaction schedule extends beyond its finalized barrier`);
+  } else {
+    assert.equal(receipt.finalizedBarrier, undefined, `${label} default receipt unexpectedly contains a finalized barrier`);
+  }
   for (const transaction of receipt.transactions) {
     assert(typeof transaction.signature === "string" && transaction.signature.length > 0, `${label} finalized signature is absent`);
     assert(typeof transaction.messageSha256 === "string" && /^[0-9a-f]{64}$/u.test(transaction.messageSha256), `${label} finalized message hash is absent`);
@@ -3232,6 +3478,18 @@ async function selfTest() {
       undefined,
       `state-RPC self-test accepted ${selection || "empty"}`,
     );
+  }
+  const priorObservationFastLane = process.env[OBSERVATION_FAST_LANE_ENV];
+  try {
+    delete process.env[OBSERVATION_FAST_LANE_ENV];
+    assert.deepEqual(observationExecutionMode(), { fastLane: false, intermediateCommitment: "finalized" });
+    process.env[OBSERVATION_FAST_LANE_ENV] = OBSERVATION_FAST_LANE_VALUE;
+    assert.deepEqual(observationExecutionMode(), { fastLane: true, intermediateCommitment: "confirmed" });
+    process.env[OBSERVATION_FAST_LANE_ENV] = "unsafe";
+    assert.throws(() => observationExecutionMode(), /value is unsupported/u);
+  } finally {
+    if (priorObservationFastLane === undefined) delete process.env[OBSERVATION_FAST_LANE_ENV];
+    else process.env[OBSERVATION_FAST_LANE_ENV] = priorObservationFastLane;
   }
 
   const runtimeBeforeDescriptorTest = {
@@ -3645,11 +3903,37 @@ async function selfTest() {
     undefined,
     "replan self-test accepted a prior finalized transaction",
   );
+  assert.throws(
+    () => assertJournalEntriesAllowReplan([
+      { operationId: priorPlan.operationId, event: "transaction-prepared", payload: { stage: "pre:begin", signature: "confirmed" } },
+      { operationId: priorPlan.operationId, event: "transaction-confirmed", payload: { stage: "pre:begin", signature: "confirmed" } },
+    ], priorPlan),
+    undefined,
+    "replan self-test accepted a prior confirmed mutation",
+  );
+  const observationJournal = {
+    recover: () => [
+      { operationId: priorPlan.operationId, event: "transaction-confirmed", payload: { stage: "pre:begin", signature: "one" } },
+      { operationId: priorPlan.operationId, event: "transaction-confirmed", payload: { stage: "pre:append-000", signature: "two" } },
+      { operationId: priorPlan.operationId, event: "transaction-finalized", payload: { stage: "pre:finalize", signature: "three" } },
+    ],
+  };
+  assert.deepEqual(
+    operationObservationTransactions(observationJournal, priorPlan.operationId).map((entry) => entry.stage),
+    ["pre:begin", "pre:append-000", "pre:finalize"],
+    "observation transaction evidence lost its strict stage order",
+  );
+  assert.equal(
+    priorConfirmedTransaction(observationJournal, priorPlan.operationId, "pre:append-000")?.signature,
+    "two",
+    "confirmed resume evidence was not recovered",
+  );
   for (const spec of Object.values(PLAN_SPECS)) {
     const basename = suffixedPlanBasename(spec, priorPlan.operationId);
     assert(spec.pattern.test(basename), `replan filename self-test rejected ${basename}`);
   }
   assert.equal(FINALIZED_STATUS_POLL_INTERVAL_MS, 30_000, "finalized status polling is faster than 30 seconds");
+  assert.equal(CONFIRMED_STATUS_POLL_INTERVAL_MS, 1_000, "confirmed fast-lane status polling changed");
 
   let governanceV2DescriptorInputsVerified = false;
   let governanceV2DescriptorLineageInputsVerified = false;
@@ -3694,6 +3978,8 @@ async function selfTest() {
     decodedActionSha256: decoded.actionSha256,
     finalizedRereadPhases: rereadEvents.map((entry) => entry.event),
     finalizedStatusPollIntervalMs: FINALIZED_STATUS_POLL_INTERVAL_MS,
+    confirmedStatusPollIntervalMs: CONFIRMED_STATUS_POLL_INTERVAL_MS,
+    observationFastLane: OBSERVATION_FAST_LANE_VALUE,
     minimumContextCatchUp: {
       maxAttempts: MINIMUM_CONTEXT_CATCH_UP_MAX_ATTEMPTS,
       delayMs: MINIMUM_CONTEXT_CATCH_UP_DELAY_MS,
@@ -3740,6 +4026,8 @@ function usage() {
     "successful tag53/tag82 receipts in that descriptor's secure run directory.",
     `Set ${GOVERNANCE_V2_TAG53_DESCRIPTOR_ENV} only when tag53 is bound to a predecessor`,
     "descriptor that differs from the current tag82 descriptor solely in the timing-profile hash.",
+    `Set ${OBSERVATION_FAST_LANE_ENV}=${OBSERVATION_FAST_LANE_VALUE} only for execute-pre/execute-post`,
+    "to wait confirmed for ordered begin/append/verify stages and finalized for the dependent finalize barrier.",
   ].join("\n");
 }
 
