@@ -401,14 +401,28 @@ async function loadBuildEvidence(descriptor, artifact) {
     sourceFiles[relative] = await requireAuditedEvidenceFile(path.join(REPOSITORY_ROOT, relative), `audited source ${relative}`, false);
   }
   assert.equal(sha256Hex(sourceFiles["Cargo.lock"].bytes), descriptor.source.cargoLockSha256, "current Cargo.lock differs from descriptor");
-  const git = (args) => {
-    const result = spawnSync("git", ["-C", REPOSITORY_ROOT, ...args], { encoding: "utf8", env: sanitizedChildEnvironment(), timeout: 30_000 });
-    assert.equal(result.status, 0, `git ${args.join(" ")} failed`);
+  const git = async (args) => {
+    const environment = sanitizedChildEnvironment();
+    let result = spawnSync("git", ["-C", REPOSITORY_ROOT, ...args], { encoding: "utf8", env: environment, timeout: 30_000 });
+    if (result.status !== 0) {
+      const dotGit = (await readFile(path.join(REPOSITORY_ROOT, ".git"), "utf8")).trim();
+      assert(dotGit.startsWith("gitdir: "), "repository .git indirection is malformed");
+      let gitDirectory = dotGit.slice("gitdir: ".length).trim();
+      if (/^[A-Za-z]:[\\/]/u.test(gitDirectory)) {
+        const converted = spawnSync("wslpath", ["-u", gitDirectory], { encoding: "utf8", env: environment, timeout: 30_000 });
+        assert.equal(converted.status, 0, "wslpath failed to resolve the linked Windows gitdir");
+        gitDirectory = converted.stdout.trim();
+      } else {
+        gitDirectory = path.resolve(REPOSITORY_ROOT, gitDirectory);
+      }
+      result = spawnSync("git", ["--git-dir", gitDirectory, "--work-tree", REPOSITORY_ROOT, ...args], { encoding: "utf8", env: environment, timeout: 30_000 });
+    }
+    assert.equal(result.status, 0, `git ${args.join(" ")} failed: ${result.stderr.trim()}`);
     return result.stdout.trim();
   };
-  assert.equal(git(["rev-parse", "HEAD"]), descriptor.source.commit, "repository HEAD differs from descriptor source commit");
-  assert.equal(git(["rev-parse", "HEAD^{tree}"]), descriptor.source.tree, "repository tree differs from descriptor source tree");
-  assert.equal(git(["status", "--porcelain", "--untracked-files=no"]), "", "repository has tracked working-tree changes");
+  assert.equal(await git(["rev-parse", "HEAD"]), descriptor.source.commit, "repository HEAD differs from descriptor source commit");
+  assert.equal(await git(["rev-parse", "HEAD^{tree}"]), descriptor.source.tree, "repository tree differs from descriptor source tree");
+  assert.equal(await git(["status", "--porcelain", "--untracked-files=no"]), "", "repository has tracked working-tree changes");
   return { directory, files, sourceFiles, auditedArtifact };
 }
 
