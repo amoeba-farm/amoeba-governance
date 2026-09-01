@@ -7,6 +7,7 @@ import { CURRENT_RELEASE1_INSTRUCTION_TAGS, decodeRelease1CurrentInstruction } f
 import * as v3 from "./release1V3Instructions.js";
 import * as builders from "./release1V3Builders.js";
 import * as custody from "./release1V3CustodyInstructions.js";
+import * as governanceV2 from "./release1GovernanceV2.js";
 
 const h = (seed: number): Buffer => Buffer.alloc(32, seed);
 const key = (seed: number): PublicKey => new PublicKey(h(seed));
@@ -15,6 +16,52 @@ const some = (seed: number) => ({ present: true, value: key(seed) }) as const;
 const envelope = { computeUnitLimit: 1_000_000, computeUnitPriceMicroLamports: 1n, durableNonceAccount: none, durableNonceAuthority: none } as const;
 const zeroProof = { proofLen: 0, nodes: Array.from({ length: 7 }, () => Buffer.alloc(32)) } as const;
 const bitmap = Buffer.alloc(64);
+
+function governanceLivenessV2Instructions(): readonly Buffer[] {
+  const profile = governanceV2.nominalGovernanceTimingProfileV1({
+    bump: 1,
+    controllerConfig: key(70),
+    targetProgram: key(71),
+    creationCouncilVersion: 1n,
+    creationSlot: 1_000_000n,
+  });
+  const actionGuard: governanceV2.GovernanceActionGuardV2 = {
+    proposalId: 9n,
+    expectedProposalDigest: h(72),
+    expectedCouncilVersion: 2n,
+    expectedTimingProfileVersion: 1n,
+    expectedTimingProfileHash: profile.profileHash,
+  };
+  const action = { guard: actionGuard } as const;
+  return [
+    governanceV2.encodeInitializeGovernanceLifecycleRegistryV2({ expectedInitialTimingProfileVersion: 1n, expectedInitialTimingProfileHash: profile.profileHash, expectedInitialNextProposalId: 1n, expectedInitialRotationNonce: 1n }),
+    governanceV2.encodeCreateGovernanceTimingProfileV1({ profileVersion: 1n, predecessorProfileHash: Buffer.alloc(32), emergencyRollback: profile.emergencyRollback, routine: profile.routine, major: profile.major, constitutional: profile.constitutional }),
+    governanceV2.encodeCreateTimingPolicyChangeProposalV1({ expectedProposalId: 1n, expectedCurrentTimingProfileVersion: 1n, expectedCurrentTimingProfileHash: profile.profileHash, candidateTimingProfileVersion: 3n, candidateTimingProfileHash: h(73), expectedCouncilVersion: 2n, expectedCouncilHash: h(74) }),
+    governanceV2.encodeApproveTimingPolicyChangeProposalV1(action),
+    governanceV2.encodeCancelTimingPolicyChangeProposalV1({ ...action, cancellationReasonCode: 1 }),
+    governanceV2.encodeExpireTimingPolicyChangeProposalV1(action),
+    governanceV2.encodeQueueTimingPolicyChangeProposalV1(action),
+    governanceV2.encodeExecuteTimingPolicyChangeProposalV1(action),
+    governanceV2.encodeCreateCouncilRotationProposalV2({ expectedProposalId: 2n, expectedCurrentCouncilVersion: 2n, expectedCurrentCouncilHash: h(75), candidateCouncilVersion: 4n, candidateCouncilHash: h(76), expectedRotationNonce: 1n, expectedTimingProfileVersion: 1n, expectedTimingProfileHash: profile.profileHash }),
+    governanceV2.encodeApproveCouncilRotationProposalV2(action),
+    governanceV2.encodeCancelCouncilRotationProposalV2({ ...action, cancellationReasonCode: 2 }),
+    governanceV2.encodeExpireCouncilRotationProposalV2(action),
+    governanceV2.encodeQueueCouncilRotationProposalV2(action),
+    governanceV2.encodeExecuteCouncilRotationProposalV2(action),
+    governanceV2.encodeCreateTargetAuthorityHandoffProposalV2({ expectedProposalId: 3n, expectedGateEpoch: 1n, expectedTargetNonce: 1n, expectedCouncilVersion: 2n, expectedTimingProfileVersion: 1n, expectedTimingProfileHash: profile.profileHash, bridgeSourceCommitment: h(77), bridgeBuildInputsCommitment: h(78), bridgePackageCommitment: h(79), bridgeReleaseManifestCommitment: h(80) }),
+    governanceV2.encodeApproveTargetAuthorityHandoffProposalV2(action),
+    governanceV2.encodeCancelTargetAuthorityHandoffProposalV2({ ...action, cancellationReasonCode: 3 }),
+    governanceV2.encodeExpireTargetAuthorityHandoffProposalV2(action),
+    governanceV2.encodeQueueTargetAuthorityHandoffProposalV2(action),
+    governanceV2.encodeExecuteTargetAuthorityHandoffProposalV2({ ...action, expectedBridgeObservationDigest: h(81), expectedGateEpoch: 1n, expectedTargetNonce: 1n, envelope }),
+    governanceV2.encodeCreateBootstrapActivationProposalV2({ expectedProposalId: 4n, expectedControllerImmutabilityDigest: h(82), expectedHandoffReceiptDigest: h(83), expectedBridgeObservationDigest: h(84), expectedGateEpoch: 1n, expectedTargetNonce: 1n, expectedCouncilVersion: 2n, expectedTimingProfileVersion: 1n, expectedTimingProfileHash: profile.profileHash }),
+    governanceV2.encodeApproveBootstrapActivationProposalV2(action),
+    governanceV2.encodeCancelBootstrapActivationProposalV2({ ...action, cancellationReasonCode: 4 }),
+    governanceV2.encodeExpireBootstrapActivationProposalV2(action),
+    governanceV2.encodeQueueBootstrapActivationProposalV2(action),
+    governanceV2.encodeExecuteBootstrapActivationProposalV2({ ...action, expectedBridgeObservationDigest: h(85), expectedGateEpoch: 1n, expectedTargetNonce: 1n, expectedDeploymentPlanDigest: h(86), expectedReceiptPlanDigest: h(87), envelope }),
+  ];
+}
 
 const guard = (state: ProposalStateV2 = ProposalStateV2.Draft, gate: GateStatusV1 = GateStatusV1.FrozenForUpgrade): v3.ProposalGuardV3 => ({
   expectedProposalDigest: h(1), expectedState: state, expectedGateStatus: gate, expectedGateEpoch: 3n,
@@ -127,9 +174,16 @@ test("tags 43-81 round-trip exact Rust fixed lengths and reject all framing drif
   }
 });
 
-test("current decoder advertises only retained council and ceremony/V3 tags", () => {
-  assert.equal(CURRENT_RELEASE1_INSTRUCTION_TAGS.length, 49);
-  for (const tag of [...Array.from({ length: 18 }, (_, index) => index), 23, ...Array.from({ length: 13 }, (_, index) => 26 + index), 48, 82, 255]) {
+test("current decoder advertises retained council, ceremony/V3, and governance-liveness V2 tags", () => {
+  assert.equal(CURRENT_RELEASE1_INSTRUCTION_TAGS.length, 75);
+  for (const [index, instruction] of governanceLivenessV2Instructions().entries()) {
+    const tag = 82 + index;
+    assert.equal(instruction[0], tag);
+    const decoded = decodeRelease1CurrentInstruction(instruction);
+    assert.equal("kind" in decoded, true);
+    if ("kind" in decoded) assert.equal(decoded.kind, governanceV2.decodeRelease1GovernanceV2Instruction(instruction).kind);
+  }
+  for (const tag of [...Array.from({ length: 18 }, (_, index) => index), 23, ...Array.from({ length: 13 }, (_, index) => 26 + index), 48, 108, 255]) {
     assert.throws(() => decodeRelease1CurrentInstruction(Buffer.from([tag])));
   }
 });

@@ -19,6 +19,15 @@ import {
   UPGRADE_PROPOSAL_LEN,
 } from "./v1.js";
 import {
+  BOOTSTRAP_ACTIVATION_PROPOSAL_V2_LEN,
+  COUNCIL_ROTATION_PROPOSAL_V2_LEN,
+  GOVERNANCE_LIFECYCLE_REGISTRY_V2_LEN,
+  GOVERNANCE_LIVENESS_V2_INSTRUCTION_TAGS,
+  GOVERNANCE_TIMING_PROFILE_V1_LEN,
+  TARGET_AUTHORITY_HANDOFF_PROPOSAL_V2_LEN,
+  TIMING_POLICY_CHANGE_PROPOSAL_V1_LEN,
+} from "./release1GovernanceV2.js";
+import {
   assertClusterDomainV1,
   assertProductionControllerIdentityV1,
   assertRelease1PlanFreshV1,
@@ -95,6 +104,32 @@ export const UPGRADE_GOVERNANCE_CLI_COMMANDS_V1 = Object.freeze([
   "test-capacity-drift",
   "plan-local-ceremony",
   "verify-local-ceremony",
+  "initialize-governance-lifecycle-registry-v2",
+  "create-governance-timing-profile-v1",
+  "create-timing-policy-change-v1",
+  "approve-timing-policy-change-v1",
+  "cancel-timing-policy-change-v1",
+  "expire-timing-policy-change-v1",
+  "queue-timing-policy-change-v1",
+  "execute-timing-policy-change-v1",
+  "create-council-rotation-v2",
+  "approve-council-rotation-v2",
+  "cancel-council-rotation-v2",
+  "expire-council-rotation-v2",
+  "queue-council-rotation-v2",
+  "execute-council-rotation-v2",
+  "create-target-authority-handoff-v2",
+  "approve-target-authority-handoff-v2",
+  "cancel-target-authority-handoff-v2",
+  "expire-target-authority-handoff-v2",
+  "queue-target-authority-handoff-v2",
+  "execute-target-authority-handoff-v2",
+  "create-bootstrap-activation-v2",
+  "approve-bootstrap-activation-v2",
+  "cancel-bootstrap-activation-v2",
+  "expire-bootstrap-activation-v2",
+  "queue-bootstrap-activation-v2",
+  "execute-bootstrap-activation-v2",
 ] as const);
 export type UpgradeGovernanceCliCommandV1 =
   (typeof UPGRADE_GOVERNANCE_CLI_COMMANDS_V1)[number];
@@ -135,6 +170,12 @@ export const RELEASE1_PUBLIC_SCHEMA_V1 = Object.freeze({
     EmergencyFreezeObservationV1: EMERGENCY_FREEZE_OBSERVATION_V1_LEN,
     ProgramDataFailureObservationV1: PROGRAMDATA_FAILURE_OBSERVATION_V1_LEN,
     CheckpointAttestationV1: CHECKPOINT_ATTESTATION_V1_LEN,
+    GovernanceLifecycleRegistryV2: GOVERNANCE_LIFECYCLE_REGISTRY_V2_LEN,
+    GovernanceTimingProfileV1: GOVERNANCE_TIMING_PROFILE_V1_LEN,
+    TimingPolicyChangeProposalV1: TIMING_POLICY_CHANGE_PROPOSAL_V1_LEN,
+    CouncilRotationProposalV2: COUNCIL_ROTATION_PROPOSAL_V2_LEN,
+    TargetAuthorityHandoffProposalV2: TARGET_AUTHORITY_HANDOFF_PROPOSAL_V2_LEN,
+    BootstrapActivationProposalV2: BOOTSTRAP_ACTIVATION_PROPOSAL_V2_LEN,
   }),
   instructionTags: Object.freeze({
     CreateCandidateCouncilSetV1: 18,
@@ -186,6 +227,7 @@ export const RELEASE1_PUBLIC_SCHEMA_V1 = Object.freeze({
     ExecuteUpgradeV2: 79,
     CloseAbandonedBufferV2: 80,
     ActivateRollbackV2: 81,
+    ...GOVERNANCE_LIVENESS_V2_INSTRUCTION_TAGS,
   }),
   executableInstructionTagRanges: Object.freeze([
     Object.freeze([18, 22] as const),
@@ -193,6 +235,7 @@ export const RELEASE1_PUBLIC_SCHEMA_V1 = Object.freeze({
     Object.freeze([39, 47] as const),
     Object.freeze([49, 52] as const),
     Object.freeze([53, 81] as const),
+    Object.freeze([82, 107] as const),
   ]),
   rejectedInstructionTags: Object.freeze([
     ...Array.from({ length: 18 }, (_, tag) => tag),

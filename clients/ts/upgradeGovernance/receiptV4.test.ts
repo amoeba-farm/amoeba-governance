@@ -84,6 +84,7 @@ import {
 } from "./release1.js";
 import { LOCAL_CEREMONY_CONTROLLER_PROGRAM_V1 } from "./spreadGateBridgeV1.js";
 import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from "./v1.js";
+import * as governanceV2 from "./release1GovernanceV2.js";
 
 const key = (seed: number): PublicKey => new PublicKey(Buffer.alloc(32, seed));
 const hash = (seed: number): Buffer => Buffer.alloc(32, seed);
@@ -805,10 +806,53 @@ test("receipt v4 independently verifies the complete synthetic ceremony evidence
     checkedHandoff: true,
     bootstrapActivated: true,
     oldAuthorityRejected: true,
+    governanceLivenessV2Bound: false,
     capacity: "200",
     finalGateEpoch: "2",
   });
   assert.equal(receipt.receiptDigest, fixture().receiptDigest);
+});
+
+test("receipt v4 binds governance-liveness registry, profile, proposal id, and immutable timing", () => {
+  const profile = governanceV2.nominalGovernanceTimingProfileV1({
+    bump: 1,
+    controllerConfig,
+    targetProgram: target,
+    creationCouncilVersion: 1n,
+    creationSlot: 1_000_000n,
+  });
+  const proposalId = 9n;
+  const timing = governanceV2.deriveProposalTimingV2(
+    profile,
+    governanceV2.GovernanceTimingClassV1.Constitutional,
+    2_000_000n,
+  );
+  const receipt = rematerialize(fixture(), (material) => {
+    material.governanceLivenessV2 = {
+      lifecycleRegistry: governanceV2.deriveGovernanceLifecycleRegistryPdaV2(controller, target)[0].toBase58(),
+      timingProfile: governanceV2.deriveGovernanceTimingProfilePdaV1(controller, target, profile.profileVersion)[0].toBase58(),
+      timingProfileVersion: profile.profileVersion.toString(),
+      timingProfileHash: profile.profileHash.toString("hex"),
+      proposal: governanceV2.deriveGovernanceActionProposalPdaV2(controller, target, governanceV2.GovernanceActionKindV2.TargetAuthorityHandoff, proposalId)[0].toBase58(),
+      proposalKind: "target-authority-handoff",
+      proposalId: proposalId.toString(),
+      proposalDigest: hashHex(120),
+      timingClass: "constitutional",
+      creationSlot: timing.creationSlot.toString(),
+      reviewDurationSlots: timing.reviewSlots.toString(),
+      delayDurationSlots: timing.delaySlots.toString(),
+      expiryDurationSlots: timing.expirySlots.toString(),
+      reviewStartSlot: timing.reviewStartSlot.toString(),
+      reviewEndSlot: timing.reviewEndSlot.toString(),
+      notBeforeSlot: timing.notBeforeSlot.toString(),
+      expirySlot: timing.expirySlot.toString(),
+    };
+  });
+  assert.equal(verifyGovernedRelease1CeremonyReceiptV4(receipt).governanceLivenessV2Bound, true);
+  const drifted = rematerialize(receipt, (material) => {
+    material.governanceLivenessV2!.notBeforeSlot = (BigInt(material.governanceLivenessV2!.notBeforeSlot) + 1n).toString();
+  });
+  assert.throws(() => verifyGovernedRelease1CeremonyReceiptV4(drifted), /immutable durations|timing boundaries/u);
 });
 
 test("receipt v4 accepts a post-handoff rejection finalized in the handoff slot", () => {

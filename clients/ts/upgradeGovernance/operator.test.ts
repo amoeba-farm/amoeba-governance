@@ -80,6 +80,37 @@ test("operator exposes every typed emergency and rollback mutation route", () =>
   assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["execute-emergency-resolution"], [65]);
   assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["activate-rollback"], [81]);
   assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1["observe-programdata-failure"], [72]);
+  const governanceLivenessV2Routes = [
+    ["initialize-governance-lifecycle-registry-v2", 82],
+    ["create-governance-timing-profile-v1", 83],
+    ["create-timing-policy-change-v1", 84],
+    ["approve-timing-policy-change-v1", 85],
+    ["cancel-timing-policy-change-v1", 86],
+    ["expire-timing-policy-change-v1", 87],
+    ["queue-timing-policy-change-v1", 88],
+    ["execute-timing-policy-change-v1", 89],
+    ["create-council-rotation-v2", 90],
+    ["approve-council-rotation-v2", 91],
+    ["cancel-council-rotation-v2", 92],
+    ["expire-council-rotation-v2", 93],
+    ["queue-council-rotation-v2", 94],
+    ["execute-council-rotation-v2", 95],
+    ["create-target-authority-handoff-v2", 96],
+    ["approve-target-authority-handoff-v2", 97],
+    ["cancel-target-authority-handoff-v2", 98],
+    ["expire-target-authority-handoff-v2", 99],
+    ["queue-target-authority-handoff-v2", 100],
+    ["execute-target-authority-handoff-v2", 101],
+    ["create-bootstrap-activation-v2", 102],
+    ["approve-bootstrap-activation-v2", 103],
+    ["cancel-bootstrap-activation-v2", 104],
+    ["expire-bootstrap-activation-v2", 105],
+    ["queue-bootstrap-activation-v2", 106],
+    ["execute-bootstrap-activation-v2", 107],
+  ] as const;
+  for (const [command, tag] of governanceLivenessV2Routes) {
+    assert.deepEqual(OPERATOR_EXPECTED_TAGS_V1[command], [tag]);
+  }
   assert.equal(new Set(OPERATOR_MUTATION_COMMANDS_V1).size, OPERATOR_MUTATION_COMMANDS_V1.length);
   assert.deepEqual(
     Object.keys(OPERATOR_EXPECTED_TAGS_V1).sort(),

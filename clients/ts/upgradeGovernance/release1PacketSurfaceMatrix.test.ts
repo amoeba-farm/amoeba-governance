@@ -25,6 +25,7 @@ import * as authority from "./release1AuthorityInstructions.js";
 import * as v3 from "./release1V3Instructions.js";
 import * as v3Builders from "./release1V3Builders.js";
 import * as custody from "./release1V3CustodyInstructions.js";
+import { GOVERNANCE_LIVENESS_V2_INSTRUCTION_TAGS } from "./release1GovernanceV2.js";
 import {
   BufferVerificationStatusV1,
   CouncilRotationStateV1,
@@ -904,6 +905,12 @@ test("every current Release 1 operator mutation surface has a bounded packet pla
   );
 
   const coveredTags = new Set(surfaces.map((surface) => surface.tag));
+  // Governance-liveness V2 has its own exact builder/account/packet matrix in
+  // release1GovernanceV2Instructions.test.ts. Keep the operator completeness
+  // assertion aware of that independently bounded surface without duplicating
+  // its 26 typed transactions here.
+  const governanceLivenessV2PacketTags = new Set<number>(Object.values(GOVERNANCE_LIVENESS_V2_INSTRUCTION_TAGS));
+  assert.deepEqual([...governanceLivenessV2PacketTags], Array.from({ length: 26 }, (_, index) => 82 + index));
   assert.deepEqual(
     [...OPERATOR_MUTATION_COMMANDS_V1],
     Object.keys(OPERATOR_EXPECTED_TAGS_V1),
@@ -912,7 +919,7 @@ test("every current Release 1 operator mutation surface has a bounded packet pla
     const expectedTags = OPERATOR_EXPECTED_TAGS_V1[command];
     assert.ok(expectedTags.length > 0, `${command} has no typed instruction surface`);
     for (const tag of expectedTags) {
-      assert.ok(coveredTags.has(tag), `${command} tag ${tag} lacks packet coverage`);
+      assert.ok(coveredTags.has(tag) || governanceLivenessV2PacketTags.has(tag), `${command} tag ${tag} lacks packet coverage`);
     }
   }
 

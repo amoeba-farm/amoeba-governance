@@ -15,6 +15,10 @@ import {
 import { decodeRelease1AuthorityInstructionV1, type Release1AuthorityInstructionV1 } from "./release1AuthorityInstructions.js";
 import { decodeRelease1V3Instruction, type Release1V3Instruction } from "./release1V3Instructions.js";
 import { decodeRelease1V3CustodyInstruction, type Release1V3CustodyInstruction } from "./release1V3CustodyInstructions.js";
+import {
+  decodeRelease1GovernanceV2Instruction,
+  type Release1GovernanceV2Instruction,
+} from "./release1GovernanceV2.js";
 import { MAX_RELEASE1_INSTRUCTION_DATA_LEN } from "./release1FixedWire.js";
 
 export {
@@ -46,6 +50,8 @@ export const CURRENT_RELEASE1_INSTRUCTION_TAGS = Object.freeze([
   39, 40, 41, 42, 43, 44, 45, 46, 47, 49, 50, 51, 52,
   53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66,
   67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+  82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95,
+  96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107,
 ] as const);
 
 type RetainedCouncilInstruction = Extract<Release1InstructionV1, { tag: 18 | 19 | 20 | 21 | 22 | 24 | 25 }>;
@@ -54,8 +60,10 @@ export type Release1ObservationInstructionV1 =
   | { tag: 40; value: AppendProgramDataObservationChunkV1 }
   | { tag: 41; value: VerifyObservedArtifactChunkV1 }
   | { tag: 42; value: FinalizeProgramDataObservationV1 };
+export type Release1GovernanceInstructionV2 = Release1GovernanceV2Instruction & { tag: number };
 export type Release1CurrentInstruction = RetainedCouncilInstruction | Release1ObservationInstructionV1 |
-  Release1AuthorityInstructionV1 | Release1V3Instruction | Release1V3CustodyInstruction;
+  Release1AuthorityInstructionV1 | Release1V3Instruction | Release1V3CustodyInstruction |
+  Release1GovernanceInstructionV2;
 
 /** Decoder for the program's current dispatcher surface. Retired tags 0-17,
  * 23, 26-38, reserved tag 48, and all unknown tags fail generically. */
@@ -76,5 +84,6 @@ export function decodeRelease1CurrentInstruction(data: Buffer): Release1CurrentI
   if (tag >= 43 && tag <= 52 && tag !== 48) return decodeRelease1AuthorityInstructionV1(data);
   if (tag >= 53 && tag <= 74) return decodeRelease1V3Instruction(data);
   if (tag >= 75 && tag <= 81) return decodeRelease1V3CustodyInstruction(data);
+  if (tag >= 82 && tag <= 107) return { tag, ...decodeRelease1GovernanceV2Instruction(data) };
   throw new Error("unknown or retired Release 1 instruction tag");
 }

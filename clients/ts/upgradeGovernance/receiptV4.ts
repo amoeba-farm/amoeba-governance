@@ -58,6 +58,13 @@ import {
   SYNTHETIC_CONTROLLER_PROGRAM_V1,
 } from "./spreadGateBridgeV1.js";
 import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from "./v1.js";
+import {
+  GovernanceActionKindV2,
+  deriveGovernanceActionProposalPdaV2,
+  deriveGovernanceLifecycleRegistryPdaV2,
+  deriveGovernanceTimingBoundariesV1,
+  deriveGovernanceTimingProfilePdaV1,
+} from "./release1GovernanceV2.js";
 
 export const GOVERNED_RELEASE1_CEREMONY_RECEIPT_V4_SCHEMA =
   "amoeba-release1-ceremony-receipt-v4" as const;
@@ -150,6 +157,26 @@ export interface PostHandoffUpgradeEventV4 {
   programdataObservationDigest: string;
 }
 
+export interface GovernanceLivenessBindingV2 {
+  lifecycleRegistry: string;
+  timingProfile: string;
+  timingProfileVersion: string;
+  timingProfileHash: string;
+  proposal: string;
+  proposalKind: "timing-policy-change" | "council-rotation" | "target-authority-handoff" | "bootstrap-activation";
+  proposalId: string;
+  proposalDigest: string;
+  timingClass: "major" | "constitutional" | "routine";
+  creationSlot: string;
+  reviewDurationSlots: string;
+  delayDurationSlots: string;
+  expiryDurationSlots: string;
+  reviewStartSlot: string;
+  reviewEndSlot: string;
+  notBeforeSlot: string;
+  expirySlot: string;
+}
+
 export interface GovernedRelease1CeremonyReceiptV4Material {
   schema: typeof GOVERNED_RELEASE1_CEREMONY_RECEIPT_V4_SCHEMA;
   version: typeof GOVERNED_RELEASE1_CEREMONY_RECEIPT_V4_VERSION;
@@ -164,6 +191,7 @@ export interface GovernedRelease1CeremonyReceiptV4Material {
   targetProgramdata: string;
   legacyAuthority: string;
   upgradeableLoader: string;
+  governanceLivenessV2?: GovernanceLivenessBindingV2;
   accounts: readonly CeremonyReceiptAccountV4[];
   controllerImmutabilityTransition: "loader-set-authority-to-none";
   checkedHandoff: CheckedAuthorityHandoffEvidenceV4;
@@ -184,6 +212,7 @@ export interface GovernedRelease1CeremonyReceiptV4Verification {
   checkedHandoff: true;
   bootstrapActivated: true;
   oldAuthorityRejected: true;
+  governanceLivenessV2Bound: boolean;
   capacity: string;
   finalGateEpoch: string;
 }
@@ -272,6 +301,69 @@ function sameKey(left: PublicKey, right: PublicKey, path: string): void {
 
 function sameBytes(left: Uint8Array, right: Uint8Array, path: string): void {
   if (!Buffer.from(left).equals(Buffer.from(right))) fail(path, "byte commitment mismatch");
+}
+
+function validateGovernanceLivenessBindingV2(
+  binding: unknown,
+  controller: PublicKey,
+  target: PublicKey,
+): void {
+  assertExactKeys(binding, [
+    "lifecycleRegistry", "timingProfile", "timingProfileVersion", "timingProfileHash",
+    "proposal", "proposalKind", "proposalId", "proposalDigest", "timingClass",
+    "creationSlot", "reviewDurationSlots", "delayDurationSlots", "expiryDurationSlots",
+    "reviewStartSlot", "reviewEndSlot", "notBeforeSlot", "expirySlot",
+  ], "governanceLivenessV2");
+  const value = binding as GovernanceLivenessBindingV2;
+  const profileVersion = u64(value.timingProfileVersion, "governanceLivenessV2.timingProfileVersion");
+  const proposalId = u64(value.proposalId, "governanceLivenessV2.proposalId");
+  if (profileVersion === 0n || proposalId === 0n) fail("governanceLivenessV2", "profile version and proposal id must be nonzero");
+  hash32(value.timingProfileHash, "governanceLivenessV2.timingProfileHash");
+  hash32(value.proposalDigest, "governanceLivenessV2.proposalDigest");
+  sameKey(
+    publicKey(value.lifecycleRegistry, "governanceLivenessV2.lifecycleRegistry"),
+    deriveGovernanceLifecycleRegistryPdaV2(controller, target)[0],
+    "governanceLivenessV2.lifecycleRegistry",
+  );
+  sameKey(
+    publicKey(value.timingProfile, "governanceLivenessV2.timingProfile"),
+    deriveGovernanceTimingProfilePdaV1(controller, target, profileVersion)[0],
+    "governanceLivenessV2.timingProfile",
+  );
+  const kinds = {
+    "timing-policy-change": GovernanceActionKindV2.TimingPolicyChange,
+    "council-rotation": GovernanceActionKindV2.CouncilRotation,
+    "target-authority-handoff": GovernanceActionKindV2.TargetAuthorityHandoff,
+    "bootstrap-activation": GovernanceActionKindV2.BootstrapActivation,
+  } as const;
+  if (!(value.proposalKind in kinds)) fail("governanceLivenessV2.proposalKind", "unknown governance action kind");
+  const expectedTimingClass = value.proposalKind === "target-authority-handoff"
+    ? "constitutional"
+    : value.proposalKind === "bootstrap-activation"
+      ? "routine"
+      : "major";
+  if (value.timingClass !== expectedTimingClass) fail("governanceLivenessV2.timingClass", "does not match the action's immutable timing class");
+  sameKey(
+    publicKey(value.proposal, "governanceLivenessV2.proposal"),
+    deriveGovernanceActionProposalPdaV2(controller, target, kinds[value.proposalKind], proposalId)[0],
+    "governanceLivenessV2.proposal",
+  );
+  const creationSlot = u64(value.creationSlot, "governanceLivenessV2.creationSlot");
+  const reviewSlots = u64(value.reviewDurationSlots, "governanceLivenessV2.reviewDurationSlots");
+  const delaySlots = u64(value.delayDurationSlots, "governanceLivenessV2.delayDurationSlots");
+  const expirySlots = u64(value.expiryDurationSlots, "governanceLivenessV2.expiryDurationSlots");
+  let derived;
+  try {
+    derived = deriveGovernanceTimingBoundariesV1(creationSlot, { reviewSlots, delaySlots, expirySlots });
+  } catch (error) {
+    fail("governanceLivenessV2", error instanceof Error ? error.message : "invalid immutable timing");
+  }
+  if (
+    u64(value.reviewStartSlot, "governanceLivenessV2.reviewStartSlot") !== derived.reviewStartSlot ||
+    u64(value.reviewEndSlot, "governanceLivenessV2.reviewEndSlot") !== derived.reviewEndSlot ||
+    u64(value.notBeforeSlot, "governanceLivenessV2.notBeforeSlot") !== derived.notBeforeSlot ||
+    u64(value.expirySlot, "governanceLivenessV2.expirySlot") !== derived.expirySlot
+  ) fail("governanceLivenessV2", "stored timing boundaries do not match the immutable durations and Clock creation slot");
 }
 
 export function governedRelease1CeremonyReceiptDigestV4(
@@ -609,12 +701,16 @@ function validateUpgradeEvents(
 export function verifyGovernedRelease1CeremonyReceiptV4(
   input: unknown,
 ): GovernedRelease1CeremonyReceiptV4Verification {
-  assertExactKeys(input, [
+  const receiptFields = [
     "schema", "version", "production", "identityKind", "clusterDomainHex", "controllerProgram", "controllerProgramdata",
     "controllerConfig", "controllerAuthority", "targetProgram", "targetProgramdata", "legacyAuthority", "upgradeableLoader",
     "accounts", "controllerImmutabilityTransition", "checkedHandoff", "formerAuthorityRejection", "bootstrapActivation",
     "postHandoffUpgradeEvents", "receiptDigest",
-  ], "receipt");
+  ];
+  if (input !== null && typeof input === "object" && Object.prototype.hasOwnProperty.call(input, "governanceLivenessV2")) {
+    receiptFields.push("governanceLivenessV2");
+  }
+  assertExactKeys(input, receiptFields, "receipt");
   const receipt = input as GovernedRelease1CeremonyReceiptV4;
   if (receipt.schema !== GOVERNED_RELEASE1_CEREMONY_RECEIPT_V4_SCHEMA || receipt.version !== GOVERNED_RELEASE1_CEREMONY_RECEIPT_V4_VERSION) fail("receipt", "unknown receipt schema or version");
   if (typeof receipt.production !== "boolean") fail("production", "must be boolean");
@@ -635,6 +731,7 @@ export function verifyGovernedRelease1CeremonyReceiptV4(
   const legacyAuthority = publicKey(receipt.legacyAuthority, "legacyAuthority");
   if (legacyAuthority.equals(controllerAuthority)) fail("legacyAuthority", "must differ from the controller PDA");
   if (!publicKey(receipt.upgradeableLoader, "upgradeableLoader").equals(BPF_LOADER_UPGRADEABLE_PROGRAM_ID)) fail("upgradeableLoader", "wrong Loader-v3 identity");
+  if (receipt.governanceLivenessV2 !== undefined) validateGovernanceLivenessBindingV2(receipt.governanceLivenessV2, controller, target);
   hash32(receipt.clusterDomainHex, "clusterDomainHex");
   hash32(receipt.receiptDigest, "receiptDigest");
   const { receiptDigest: _receiptDigest, ...material } = receipt;
@@ -677,6 +774,7 @@ export function verifyGovernedRelease1CeremonyReceiptV4(
     checkedHandoff: true,
     bootstrapActivated: true,
     oldAuthorityRejected: true,
+    governanceLivenessV2Bound: receipt.governanceLivenessV2 !== undefined,
     capacity: accounts.activationReceipt.actualTargetCapacity.toString(),
     finalGateEpoch: accounts.activationReceipt.activatedGateEpoch.toString(),
   };
