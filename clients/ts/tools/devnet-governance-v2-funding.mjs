@@ -545,7 +545,20 @@ async function executeDirection(options, direction) {
   return withCeremonyRpcOwnerLock(loaded.runDir, operationId, async () => {
     const journal = await openJournal(loaded.runDir, journalName(direction, loaded.plan), operationId);
     try {
-      assert.equal(journal.entries.length, 0, `${direction} already has durable attempt evidence; automatic or manual resend is forbidden`);
+      const safePreSignResume = journal.entries.length > 0 && journal.entries.every((entry) =>
+        entry.event === "session-started" || entry.event === "prestate-verified"
+      );
+      assert(
+        journal.entries.length === 0 || safePreSignResume,
+        `${direction} already reached signing or submission; resend is forbidden`,
+      );
+      if (safePreSignResume) {
+        await journal.append("safe-pre-sign-resume", {
+          direction,
+          priorEntryCount: journal.entries.length,
+          reason: "prior attempt stopped before decoded action or signing",
+        });
+      }
       await journal.append("session-started", {
         direction,
         planId: loaded.plan.planId,
@@ -572,7 +585,10 @@ async function executeDirection(options, direction) {
         treasuryLamports: prestate.treasuryLamports.toString(),
         feePayerLamports: prestate.feePayerLamports.toString(),
       });
-      const latest = await connection.getLatestBlockhashAndContext("finalized");
+      const latest = await connection.getLatestBlockhashAndContext({
+        commitment: "finalized",
+        minContextSlot: prestate.contextSlot,
+      });
       assert(latest.context.slot >= prestate.contextSlot, "funding blockhash context regressed below prestate");
       const transaction = buildTransferTransaction({
         direction,
