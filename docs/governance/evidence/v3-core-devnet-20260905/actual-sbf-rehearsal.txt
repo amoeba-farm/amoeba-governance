@@ -1,0 +1,20 @@
+   Compiling governance_controller_v3 v0.1.0 (/mnt/c/Users/space/.codex/worktrees/governance-v3-week-window/ameba_gov/programs/governance_controller_v3)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 38.86s
+     Running tests/core.rs (/home/space/.cache/ameba-gov-v3-host/debug/deps/core-702f36e380f89afe)
+
+running 4 tests
+test closed_dispatch_rejects_every_unknown_tag_before_accounts ... ok
+test every_three_seat_coalition_and_no_two_can_execute_and_stale_council_fails ... ok
+test one_week_approval_is_independent_from_execution_delay_and_cannot_be_shortened ... ok
+test fixed_accounts_and_digest_reject_timing_action_padding_and_trailing_drift ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/self_upgrade.rs (/home/space/.cache/ameba-gov-v3-host/debug/deps/self_upgrade-e392ed258cfc9b84)
+
+running 1 test
+transaction: TransactionError(InstructionError(1, Custom(3007)))
+transaction: TransactionError(InstructionError(1, Custom(3003)))
+test actual_sbf_controller_remains_upgradeable_by_three_seats_after_450_slots ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.29s

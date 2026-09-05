@@ -1,0 +1,95 @@
+{
+  "schema": "ameba-governance-v3-core-devnet-v1",
+  "createdAt": "2026-09-05T22:30:36.508Z",
+  "genesis": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  "sourceCommit": "913b95ca612d18fc985a619e2152a5b3386be4f7",
+  "sourceRoot": "/mnt/c/Users/space/.codex/worktrees/governance-v3-week-window/ameba_gov",
+  "artifactSha256": "6e48e439f2f3532d5b82505b231aac5e88ffadd462b063a93f78b1c75b6fd4b7",
+  "artifactBytes": 169912,
+  "stateProviderOriginSha256": "3d423a3cdf16d45a050ac04bd1af892df2aba3be585a23462392774390919658",
+  "program": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+  "programdata": "7eW9UXcCDrpEAQ93fP7o2zgGMKhAKi3zJLihELjR8xYd",
+  "config": "Ec5H8jsGvaLU3T3gp6qTayPjY2qF3geBbVKWz4rsaEHB",
+  "authority": "Frc28QFQxqUxF9HPgzcmm5VkqorqUb2LeLPE5uKU6Ycp",
+  "deployer": "AWmD6vBkqTuTZBhaWraqjrRCye2S5y8DsgMW6KXMSQKT",
+  "feePayer": "G2f6Fv477ZyFbmRFtVr21jf9VufXpiRCxf1e91J6SxxT",
+  "seats": [
+    "pSutXCyMTkwvzG1kpiHXULkVKyzz8NPSNgnjLgwNcTu",
+    "4vrxWeSfCoJA8KvzCcWGgG4C5S4gPYrLaRWysycJeVpz",
+    "DgMGtSjUg1wXPZuPBT6HqGN3qRLVBJCqYrv31XtcwcBR",
+    "4SJyALW3CinnBrFUzHeJL6v5KM12hw2FGLL1wbVTVfn8",
+    "Cmd42MrYC7CVyQNGq7GRkTqR3jQ8cBPKzjzDpsc5eNW4"
+  ],
+  "treasury": "8XUjnzVzR71DaVuqbSHaNev5H4vrxofyFP4iZt2FXa1j",
+  "threshold": 3,
+  "reviewSlots": 1512000,
+  "delaySlots": 4500,
+  "expirySlots": 2592000,
+  "preflightBalanceLamports": 1023959950,
+  "estimatedProgramRentLamports": 864031800,
+  "spreadIntegration": false,
+  "verifiedAt": "2026-09-05T22:53:05.603Z",
+  "finalizedSlot": 493766911,
+  "deployedSlot": "493766087",
+  "liveAuthority": "Frc28QFQxqUxF9HPgzcmm5VkqorqUb2LeLPE5uKU6Ycp",
+  "initialized": true,
+  "configState": {
+    "bump": 254,
+    "controller": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+    "programdata": "7eW9UXcCDrpEAQ93fP7o2zgGMKhAKi3zJLihELjR8xYd",
+    "authority": "Frc28QFQxqUxF9HPgzcmm5VkqorqUb2LeLPE5uKU6Ycp",
+    "treasury": "8XUjnzVzR71DaVuqbSHaNev5H4vrxofyFP4iZt2FXa1j",
+    "seats": [
+      "pSutXCyMTkwvzG1kpiHXULkVKyzz8NPSNgnjLgwNcTu",
+      "4vrxWeSfCoJA8KvzCcWGgG4C5S4gPYrLaRWysycJeVpz",
+      "DgMGtSjUg1wXPZuPBT6HqGN3qRLVBJCqYrv31XtcwcBR",
+      "4SJyALW3CinnBrFUzHeJL6v5KM12hw2FGLL1wbVTVfn8",
+      "Cmd42MrYC7CVyQNGq7GRkTqR3jQ8cBPKzjzDpsc5eNW4"
+    ],
+    "councilEpoch": "1",
+    "timingVersion": "1",
+    "timing": {
+      "reviewSlots": "1512000",
+      "delaySlots": "4500",
+      "expirySlots": "2592000"
+    },
+    "nextId": "1"
+  },
+  "transactions": [
+    {
+      "stage": "deploy",
+      "signature": "2gNt2kMJnQAKmDmViYQ8S9XtVnjUzuru36PuVyJE6CJQg592LMttNSKiamFgN7LVz4KgRV8jwyHidcQpAugu73Mn",
+      "confirmationStatus": "finalized",
+      "confirmations": null,
+      "err": null,
+      "slot": 493766087,
+      "status": {
+        "Ok": null
+      }
+    },
+    {
+      "stage": "initialize-council",
+      "signature": "iQshrLYoiWtQwFNVfVkfk3SsqBGLHwZPhKVy8VMgmWPKw5pviLsx8Y7vdjriQyLxL8U2YGxCWyG2CfzmgSyDULv",
+      "confirmationStatus": "finalized",
+      "confirmations": null,
+      "err": null,
+      "slot": 493766535,
+      "status": {
+        "Ok": null
+      }
+    }
+  ],
+  "focusedVerification": {
+    "rustCoreTests": 4,
+    "typescriptTests": 2,
+    "actualSbfSelfUpgradeRehearsals": 1,
+    "typecheck": "passed",
+    "sbf": "v0",
+    "platformTools": "v1.53",
+    "cargoBuildSbf": "4.0.0",
+    "hostRust": "1.90.0",
+    "sbfRust": "1.89.0",
+    "fullRelease1SuiteRun": false
+  },
+  "scope": "New self-governing council core. Existing Spread is not integrated or changed."
+}
