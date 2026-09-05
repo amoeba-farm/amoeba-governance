@@ -1685,6 +1685,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "governance_controller_v3"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "borsh 0.10.4",
+ "solana-loader-v3-interface",
+ "solana-program",
+ "solana-program-test",
+ "solana-sdk",
+ "solana-sdk-ids",
+ "solana-system-interface",
+ "tokio",
+ "upgrade_controller",
+]
+
+[[package]]
 name = "governor"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

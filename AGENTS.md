@@ -1,5 +1,18 @@
 # AGENTS.md — Amoeba upgrade governance
 
+## New V3 assignment (2026-09-05)
+
+The user authorized a new Devnet governance program with an approximately
+one-week approval window and controller upgrades through the KMS-backed 3-of-5
+council. `docs/governance/amendments/governance-v3-council-core.md` records this
+new scope and supersedes the historical local-only and immutability boundaries
+below only for the fresh V3 program. Work on `codex/governance-v3-week-window`
+in its isolated governance worktree. Use focused verification as requested.
+The existing V2 deployment and Spread accounts remain outside this first stage.
+Do not claim that the council core already provides Spread gate integration.
+
+The sections below retain the earlier Release 1 assignment and wire rules.
+
 Read the governance documents completely in this order before changing this
 repository:
 

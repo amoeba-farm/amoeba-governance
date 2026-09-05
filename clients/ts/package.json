@@ -9,6 +9,10 @@
     "amoeba-upgrade-governance": "./dist/upgradeGovernance/cliMain.js"
   },
   "exports": {
+    "./governance-v3": {
+      "types": "./dist/upgradeGovernance/governanceV3.d.ts",
+      "import": "./dist/upgradeGovernance/governanceV3.js"
+    },
     ".": {
       "types": "./dist/upgradeGovernance/index.d.ts",
       "import": "./dist/upgradeGovernance/index.js"

@@ -1,5 +1,12 @@
 # ameba_gov
 
+The new [V3 Devnet council core](docs/governance/amendments/governance-v3-council-core.md)
+is in `programs/governance_controller_v3`. It gives every proposal an approximately
+one-week approval window and supports three-of-five council upgrades of its own
+code, including ProgramData growth. Its client export is `./governance-v3`.
+Spread gate integration is subsequent work; the existing V2 deployment is unchanged.
+The Release 1 description below is retained for the older program.
+
 `ameba_gov` is the independent, local-first implementation repository for the
 Amoeba Spread upgrade-governance trust root.
 

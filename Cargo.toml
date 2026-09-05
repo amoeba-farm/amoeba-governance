@@ -1,5 +1,5 @@
 [workspace]
-members = ["programs/upgrade_controller"]
+members = ["programs/upgrade_controller", "programs/governance_controller_v3"]
 resolver = "2"
 
 [workspace.package]
