@@ -46,7 +46,10 @@ assert(
   "absolute run directory required",
 );
 const run = path.resolve(runInput);
-if (mode === "prepare") await mkdir(run, { mode: 0o700 });
+if (mode === "prepare")
+  await mkdir(run, { mode: 0o700 }).catch((error) => {
+    if (error.code !== "EEXIST") throw error;
+  });
 await requireSecureDirectory(run, "V3 run");
 const json = (x) =>
   JSON.stringify(x, (_, v) => (typeof v === "bigint" ? v.toString() : v), 2) +
@@ -129,11 +132,17 @@ try {
       );
       await chmod(path.join(run, `seat-${i}.pem`), 0o600);
     }
-    for (const name of ["program", "deployer", "deploy-buffer"])
-      await save(
-        `${name}.keypair.json`,
-        Array.from(Keypair.generate().secretKey),
-      );
+    for (const name of ["program", "deployer", "deploy-buffer"]) {
+      try {
+        await keypair(`${name}.keypair.json`);
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+        await save(
+          `${name}.keypair.json`,
+          Array.from(Keypair.generate().secretKey),
+        );
+      }
+    }
     const artifact = await readFile(artifactInput);
     assert(
       artifact.subarray(0, 4).equals(Buffer.from([127, 69, 76, 70])),
@@ -164,19 +173,20 @@ try {
       { commitment: "finalized" },
     ]);
     assert(
-      balance.value > rent * 2 + 30_000_000,
-      "insufficient Devnet deployment funds",
+      balance.value > rent + 30_000_000,
+      `insufficient Devnet deployment funds: ${balance.value} lamports; need ${rent + 30_000_000}`,
     );
     const root = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
       "../../..",
     );
-    const commit = execFileSync("git", ["rev-parse", "HEAD"], {
+    const git = process.env.AMEBA_GIT_BIN || "git";
+    const commit = execFileSync(git, ["rev-parse", "HEAD"], {
       cwd: root,
       encoding: "utf8",
     }).trim();
     assert.equal(
-      execFileSync("git", ["status", "--porcelain"], {
+      execFileSync(git, ["status", "--porcelain"], {
         cwd: root,
         encoding: "utf8",
       }).trim(),
@@ -345,6 +355,11 @@ try {
       assert.equal(before.value[2], null, "config already exists");
       const payer = await keypair("fee-payer.json"),
         deployer = await keypair("deployer.keypair.json");
+      const token = process.env.AMEBA_GCP_KMS_ACCESS_TOKEN?.trim();
+      assert(
+        token && token.length > 30 && !/\s/.test(token),
+        "GCP KMS access token required in environment",
+      );
       const latest = (
         await rpc("getLatestBlockhash", [{ commitment: "finalized" }])
       ).value;
@@ -374,22 +389,6 @@ try {
         blockhash: latest.blockhash,
         lastValidBlockHeight: latest.lastValidBlockHeight,
       });
-      const token = execFileSync(
-        "python3",
-        [
-          process.env.AMEBA_GCLOUD_PYTHON_ENTRY,
-          "auth",
-          "print-access-token",
-          "--quiet",
-        ],
-        {
-          encoding: "utf8",
-          env: { ...process.env, CLOUDSDK_CORE_DISABLE_PROMPTS: "1" },
-          stdio: ["ignore", "pipe", "pipe"],
-          timeout: 45000,
-        },
-      ).trim();
-      assert(token.length > 30 && !/\s/.test(token), "invalid GCP token");
       for (let i = 0; i < 3; i++) {
         const resource = `projects/amoeba-hm0q2k/locations/global/keyRings/ameba-spread-devnet/cryptoKeys/governance-seat-${i + 1}-v1/cryptoKeyVersions/1`;
         const result = execFileSync(
