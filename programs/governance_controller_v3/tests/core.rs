@@ -155,7 +155,7 @@ fn fixed_accounts_and_digest_reject_timing_action_padding_and_trailing_drift() {
 #[test]
 fn closed_dispatch_rejects_every_unknown_tag_before_accounts() {
     let program = Pubkey::new_unique();
-    for tag in 11..=255u8 {
+    for tag in 15..=255u8 {
         assert_eq!(
             governance_controller_v3::process_instruction(&program, &[], &[tag]),
             Err(solana_program::program_error::ProgramError::InvalidInstructionData)

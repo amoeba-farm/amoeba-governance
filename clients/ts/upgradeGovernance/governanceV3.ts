@@ -53,7 +53,25 @@ export type ActionV3 =
       buildCommitment: Uint8Array;
     }
   | { kind: "setTiming"; timing: TimingV3 }
-  | { kind: "rotateCouncil"; seats: PublicKey[] };
+  | { kind: "rotateCouncil"; seats: PublicKey[] }
+  | {
+      kind: "upgradeTarget";
+      buffer: PublicKey;
+      artifactLength: bigint;
+      merkleRoot: Uint8Array;
+      deployedSlot: bigint;
+      capacity: bigint;
+      sourceCommitment: Uint8Array;
+      buildCommitment: Uint8Array;
+      target: PublicKey;
+      gateEpoch: bigint;
+    }
+  | {
+      kind: "setTargetGate";
+      target: PublicKey;
+      expectedEpoch: bigint;
+      active: boolean;
+    };
 export interface ProposalV3 {
   bump: number;
   config: PublicKey;
@@ -159,6 +177,19 @@ export const deriveBufferAuthorityV3 = (
   );
 export const deriveProgramdataV3 = (program: PublicKey) =>
   PublicKey.findProgramAddressSync([program.toBuffer()], LOADER_V3)[0];
+export const deriveTargetAuthorityV3 = (
+  program: PublicKey,
+  target: PublicKey,
+) =>
+  PublicKey.findProgramAddressSync(
+    [GOVERNANCE_V3_DOMAIN, Buffer.from("target-authority"), target.toBuffer()],
+    program,
+  );
+export const deriveTargetGateV3 = (program: PublicKey, target: PublicKey) =>
+  PublicKey.findProgramAddressSync(
+    [GOVERNANCE_V3_DOMAIN, Buffer.from("gate"), target.toBuffer()],
+    program,
+  );
 
 export function encodeActionV3(action: ActionV3): Buffer {
   let tag: number, body: Buffer;
@@ -191,6 +222,44 @@ export function encodeActionV3(action: ActionV3): Buffer {
     case "rotateCouncil":
       tag = 2;
       body = seatsBytes(action.seats);
+      break;
+    case "upgradeTarget":
+      check(
+        !action.buffer.equals(PublicKey.default) &&
+          !action.target.equals(PublicKey.default) &&
+          action.gateEpoch > 0n &&
+          action.artifactLength > 0n &&
+          action.artifactLength <= 1_572_864n &&
+          action.capacity > 0n &&
+          action.capacity <= 1_572_864n,
+        "invalid target upgrade",
+      );
+      tag = 3;
+      body = Buffer.concat([
+        action.buffer.toBuffer(),
+        u64(action.artifactLength),
+        hash32(action.merkleRoot),
+        u64(action.deployedSlot),
+        u64(action.capacity),
+        hash32(action.sourceCommitment),
+        hash32(action.buildCommitment),
+        action.target.toBuffer(),
+        u64(action.gateEpoch),
+      ]);
+      break;
+    case "setTargetGate":
+      check(
+        !action.target.equals(PublicKey.default) &&
+          action.expectedEpoch > 0n &&
+          typeof action.active === "boolean",
+        "invalid gate policy",
+      );
+      tag = 4;
+      body = Buffer.concat([
+        action.target.toBuffer(),
+        u64(action.expectedEpoch),
+        Buffer.from([Number(action.active)]),
+      ]);
       break;
     default:
       throw Error("unknown action");
@@ -253,7 +322,31 @@ function decodeActionV3(data: Buffer): ActionV3 {
       kind: "rotateCouncil",
       seats: Array.from({ length: 5 }, () => r.key()),
     };
-  else throw Error("unknown action");
+  else if (kind === 3)
+    result = {
+      kind: "upgradeTarget",
+      buffer: r.key(),
+      artifactLength: r.u64(),
+      merkleRoot: r.bytes(32),
+      deployedSlot: r.u64(),
+      capacity: r.u64(),
+      sourceCommitment: r.bytes(32),
+      buildCommitment: r.bytes(32),
+      target: r.key(),
+      gateEpoch: r.u64(),
+    };
+  else if (kind === 4) {
+    const target = r.key(),
+      expectedEpoch = r.u64(),
+      active = r.byte();
+    check(active <= 1, "invalid gate policy boolean");
+    result = {
+      kind: "setTargetGate",
+      target,
+      expectedEpoch,
+      active: active === 1,
+    };
+  } else throw Error("unknown action");
   r.reserved(data.length - r.offset);
   check(encodeActionV3(result).equals(data), "noncanonical action");
   return result;
@@ -408,7 +501,10 @@ export function decodeProposalV3(
       (p.state === 2) === p.cancellationCount >= 3,
     "proposal state",
   );
-  if (p.action.kind === "upgradeController")
+  if (
+    p.action.kind === "upgradeController" ||
+    p.action.kind === "upgradeTarget"
+  )
     check(
       (p.extensionSlot === 0n && p.extendedCapacity === 0n) ||
         (p.extensionSlot >= p.notBefore &&
@@ -547,8 +643,15 @@ export function sealBufferV3(
   p: ProposalV3,
   uploader: PublicKey,
 ): TransactionInstruction {
-  check(p.action.kind === "upgradeController", "upgrade proposal required");
-  if (p.action.kind !== "upgradeController") throw Error("action");
+  check(
+    p.action.kind === "upgradeController" || p.action.kind === "upgradeTarget",
+    "upgrade proposal required",
+  );
+  if (
+    p.action.kind !== "upgradeController" &&
+    p.action.kind !== "upgradeTarget"
+  )
+    throw Error("action");
   const key = deriveProposalV3(program, p.id)[0];
   return build(
     program,
@@ -570,7 +673,10 @@ export function verifyChunkV3(
   index: number,
   proof: Uint8Array[],
 ): TransactionInstruction {
-  if (p.action.kind !== "upgradeController")
+  if (
+    p.action.kind !== "upgradeController" &&
+    p.action.kind !== "upgradeTarget"
+  )
     throw Error("upgrade proposal required");
   check(
     Number.isInteger(index) &&
@@ -607,7 +713,10 @@ export function executePolicyV3(
   program: PublicKey,
   p: ProposalV3,
 ): TransactionInstruction {
-  check(p.action.kind !== "upgradeController", "policy proposal required");
+  check(
+    p.action.kind === "setTiming" || p.action.kind === "rotateCouncil",
+    "council policy proposal required",
+  );
   return build(
     program,
     7,
@@ -647,7 +756,10 @@ export function closeBufferV3(
   config: ConfigV3,
   p: ProposalV3,
 ): TransactionInstruction {
-  if (p.action.kind !== "upgradeController")
+  if (
+    p.action.kind !== "upgradeController" &&
+    p.action.kind !== "upgradeTarget"
+  )
     throw Error("upgrade proposal required");
   const program = config.controller,
     key = deriveProposalV3(program, p.id)[0];
@@ -688,4 +800,170 @@ export function extendControllerV3(
     ],
     hash32(p.digest),
   );
+}
+
+export function registerTargetV3(
+  config: ConfigV3,
+  target: PublicKey,
+  deployer: PublicKey,
+  payer: PublicKey,
+  consents: PublicKey[],
+): TransactionInstruction {
+  check(
+    !target.equals(config.controller) &&
+      consents.length === 3 &&
+      new Set(consents.map((x) => x.toBase58())).size === 3 &&
+      consents.every((x) => config.seats.some((s) => s.equals(x))),
+    "three current seats required",
+  );
+  return build(config.controller, 11, [
+    signer(payer, true),
+    signer(deployer),
+    ro(deriveConfigV3(config.controller)[0]),
+    ro(target),
+    rw(deriveProgramdataV3(target)),
+    rw(deriveTargetGateV3(config.controller, target)[0]),
+    ro(deriveTargetAuthorityV3(config.controller, target)[0]),
+    ro(LOADER_V3),
+    ro(SystemProgram.programId),
+    ...consents.map((x) => signer(x)),
+    ro(SYSVAR_INSTRUCTIONS_PUBKEY),
+  ]);
+}
+export function executeTargetUpgradeV3(
+  config: ConfigV3,
+  p: ProposalV3,
+): TransactionInstruction {
+  if (p.action.kind !== "upgradeTarget") throw Error("target upgrade required");
+  const program = config.controller,
+    target = p.action.target,
+    key = deriveProposalV3(program, p.id)[0];
+  return build(
+    program,
+    12,
+    [
+      ro(p.config),
+      rw(key),
+      rw(target),
+      rw(deriveProgramdataV3(target)),
+      rw(p.action.buffer),
+      rw(config.treasury),
+      ro(deriveTargetAuthorityV3(program, target)[0]),
+      ro(deriveBufferAuthorityV3(program, key)[0]),
+      ro(LOADER_V3),
+      ro(SYSVAR_RENT_PUBKEY),
+      ro(SYSVAR_CLOCK_PUBKEY),
+      ro(SYSVAR_INSTRUCTIONS_PUBKEY),
+      rw(deriveTargetGateV3(program, target)[0]),
+    ],
+    hash32(p.digest),
+  );
+}
+export function extendTargetV3(
+  config: ConfigV3,
+  p: ProposalV3,
+  payer: PublicKey,
+): TransactionInstruction {
+  if (p.action.kind !== "upgradeTarget") throw Error("target upgrade required");
+  const program = config.controller,
+    target = p.action.target;
+  return build(
+    program,
+    13,
+    [
+      ro(p.config),
+      rw(deriveProposalV3(program, p.id)[0]),
+      rw(target),
+      rw(deriveProgramdataV3(target)),
+      rw(deriveTargetAuthorityV3(program, target)[0]),
+      ro(LOADER_V3),
+      ro(SystemProgram.programId),
+      signer(payer, true),
+      ro(SYSVAR_INSTRUCTIONS_PUBKEY),
+      rw(deriveTargetGateV3(program, target)[0]),
+    ],
+    hash32(p.digest),
+  );
+}
+export function executeTargetGateV3(
+  program: PublicKey,
+  p: ProposalV3,
+): TransactionInstruction {
+  if (p.action.kind !== "setTargetGate")
+    throw Error("target gate policy required");
+  return build(
+    program,
+    14,
+    [
+      ro(p.config),
+      rw(deriveProposalV3(program, p.id)[0]),
+      rw(deriveTargetGateV3(program, p.action.target)[0]),
+    ],
+    hash32(p.digest),
+  );
+}
+/** RPC callers must separately verify owner, executable=false and privileges. */
+export function decodeTargetGateV3(
+  program: PublicKey,
+  target: PublicKey,
+  key: PublicKey,
+  data: Uint8Array,
+) {
+  const r = new Reader(Buffer.from(data));
+  check(
+    data.length === 192 &&
+      r.bytes(8).equals(Buffer.from("AGVGAT01")) &&
+      r.byte() === 1,
+    "gate header",
+  );
+  const bump = r.byte();
+  check(r.byte() === 1, "gate initialized");
+  const status = r.byte(),
+    config = r.key(),
+    targetProgram = r.key(),
+    programdata = r.key(),
+    epoch = r.u64(),
+    activeProposal = r.key(),
+    freezeSlot = r.u64(),
+    reason = r.bytes(2).readUInt16LE(),
+    lastCompletedProposal = r.key();
+  r.reserved(2);
+  const expected = deriveTargetGateV3(program, target);
+  check(
+    !target.equals(program) &&
+      key.equals(expected[0]) &&
+      bump === expected[1] &&
+      config.equals(deriveConfigV3(program)[0]) &&
+      targetProgram.equals(target) &&
+      programdata.equals(deriveProgramdataV3(target)) &&
+      epoch > 0n,
+    "gate identity",
+  );
+  check(
+    (status === 0 &&
+      activeProposal.equals(PublicKey.default) &&
+      freezeSlot === 0n &&
+      reason === 0) ||
+      (status === 1 &&
+        !activeProposal.equals(PublicKey.default) &&
+        freezeSlot > 0n &&
+        reason > 0) ||
+      (status === 2 &&
+        activeProposal.equals(PublicKey.default) &&
+        freezeSlot > 0n &&
+        reason > 0),
+    "gate state",
+  );
+  return {
+    bump,
+    status,
+    config,
+    targetProgram,
+    programdata,
+    epoch,
+    activeProposal,
+    freezeSlot,
+    reason,
+    lastCompletedProposal,
+  };
 }

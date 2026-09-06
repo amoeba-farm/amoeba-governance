@@ -18,6 +18,8 @@ pub const EXPIRED: u8 = 3;
 pub const UPGRADE_CONTROLLER: u8 = 0;
 pub const SET_TIMING: u8 = 1;
 pub const ROTATE_COUNCIL: u8 = 2;
+pub const UPGRADE_TARGET: u8 = 3;
+pub const SET_TARGET_GATE: u8 = 4;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u32)]
@@ -103,6 +105,12 @@ pub fn config_pda(program: &Pubkey) -> (Pubkey, u8) {
 pub fn authority_pda(program: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(&[DOMAIN, b"authority"], program)
 }
+pub fn target_authority_pda(program: &Pubkey, target: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[DOMAIN, b"target-authority", target.as_ref()], program)
+}
+pub fn gate_pda(program: &Pubkey, target: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[DOMAIN, b"gate", target.as_ref()], program)
+}
 pub fn proposal_pda(program: &Pubkey, id: u64) -> (Pubkey, u8) {
     Pubkey::find_program_address(&[DOMAIN, b"proposal", &id.to_le_bytes()], program)
 }
@@ -174,7 +182,80 @@ pub struct Upgrade {
     pub source_commitment: [u8; 32],
     pub build_commitment: [u8; 32],
 }
+/// Target upgrades commit the artifact through its length-bound Merkle root.
+/// The build commitment additionally binds the ordinary file SHA-256 receipt.
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct TargetUpgrade {
+    pub buffer: Pubkey,
+    pub artifact_length: u64,
+    pub merkle_root: [u8; 32],
+    pub deployed_slot: u64,
+    pub capacity: u64,
+    pub source_commitment: [u8; 32],
+    pub build_commitment: [u8; 32],
+    pub target: Pubkey,
+    pub gate_epoch: u64,
+}
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct TargetGatePolicy {
+    pub target: Pubkey,
+    pub expected_epoch: u64,
+    pub active: bool,
+}
+pub struct Artifact {
+    pub buffer: Pubkey,
+    pub artifact_length: u64,
+    pub merkle_root: [u8; 32],
+    pub deployed_slot: u64,
+    pub capacity: u64,
+    pub source_commitment: [u8; 32],
+    pub build_commitment: [u8; 32],
+}
 impl Action {
+    pub fn is_upgrade(&self) -> bool {
+        matches!(self.kind, UPGRADE_CONTROLLER | UPGRADE_TARGET)
+    }
+    pub fn target_upgrade(&self) -> Result<TargetUpgrade> {
+        require(self.kind == UPGRADE_TARGET, Error::InvalidArtifact)?;
+        TargetUpgrade::try_from_slice(&self.data).map_err(|_| Error::InvalidArtifact.into())
+    }
+    pub fn gate_policy(&self) -> Result<TargetGatePolicy> {
+        require(
+            self.kind == SET_TARGET_GATE && self.data[41..].iter().all(|x| *x == 0),
+            Error::InvalidAccount,
+        )?;
+        TargetGatePolicy::try_from_slice(&self.data[..41]).map_err(|_| Error::InvalidAccount.into())
+    }
+    pub fn artifact(&self) -> Result<Artifact> {
+        if self.kind == UPGRADE_CONTROLLER {
+            let u = self.upgrade()?;
+            require(u.artifact_sha256 != [0; 32], Error::InvalidArtifact)?;
+            Ok(Artifact {
+                buffer: u.buffer,
+                artifact_length: u.artifact_length,
+                merkle_root: u.merkle_root,
+                deployed_slot: u.deployed_slot,
+                capacity: u.capacity,
+                source_commitment: u.source_commitment,
+                build_commitment: u.build_commitment,
+            })
+        } else {
+            let u = self.target_upgrade()?;
+            require(
+                u.target != Pubkey::default() && u.gate_epoch > 0,
+                Error::InvalidAccount,
+            )?;
+            Ok(Artifact {
+                buffer: u.buffer,
+                artifact_length: u.artifact_length,
+                merkle_root: u.merkle_root,
+                deployed_slot: u.deployed_slot,
+                capacity: u.capacity,
+                source_commitment: u.source_commitment,
+                build_commitment: u.build_commitment,
+            })
+        }
+    }
     pub fn upgrade(&self) -> Result<Upgrade> {
         require(
             self.kind == UPGRADE_CONTROLLER && self.data[184..] == [0; 8],
@@ -198,8 +279,8 @@ impl Action {
     }
     pub fn validate(&self) -> Result<()> {
         match self.kind {
-            UPGRADE_CONTROLLER => {
-                let u = self.upgrade()?;
+            UPGRADE_CONTROLLER | UPGRADE_TARGET => {
+                let u = self.artifact()?;
                 require(
                     u.buffer != Pubkey::default()
                         && u.artifact_length > 0
@@ -207,7 +288,6 @@ impl Action {
                             <= upgrade_controller::artifact_merkle::MAX_ARTIFACT_BYTES_V1
                         && u.capacity > 0
                         && u.capacity <= upgrade_controller::artifact_merkle::MAX_ARTIFACT_BYTES_V1
-                        && u.artifact_sha256 != [0; 32]
                         && u.merkle_root != [0; 32]
                         && u.source_commitment != [0; 32]
                         && u.build_commitment != [0; 32],
@@ -216,6 +296,13 @@ impl Action {
             }
             SET_TIMING => self.timing()?.validate(),
             ROTATE_COUNCIL => validate_seats(&self.seats()?),
+            SET_TARGET_GATE => {
+                let policy = self.gate_policy()?;
+                require(
+                    policy.target != Pubkey::default() && policy.expected_epoch > 0,
+                    Error::InvalidAccount,
+                )
+            }
             _ => Err(ProgramError::InvalidInstructionData),
         }
     }
@@ -305,8 +392,8 @@ impl Proposal {
             Error::InvalidTiming,
         )?;
         self.action.validate()?;
-        if self.action.kind == UPGRADE_CONTROLLER {
-            let action = self.action.upgrade()?;
+        if self.action.is_upgrade() {
+            let action = self.action.artifact()?;
             require(
                 (self.extension_slot == 0 && self.extended_capacity == 0)
                     || (self.extension_slot >= self.not_before

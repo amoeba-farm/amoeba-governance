@@ -24,6 +24,7 @@ use upgrade_controller::{
         store_fixed_controller_account, validate_exact_privileges,
     },
     release1_loader_accounts::{validate_buffer_account, validate_program_programdata_linkage},
+    state::{GateStatusV1, ProtocolGateV1},
 };
 
 fn privileges(account: &AccountInfo<'_>, write: bool, sign: bool, executable: bool) -> Result<()> {
@@ -81,7 +82,7 @@ fn sealed(
     program: &Pubkey,
     proposal_key: &Pubkey,
     buffer: &AccountInfo<'_>,
-    action: &Upgrade,
+    action: &Artifact,
 ) -> Result<()> {
     let header = validate_buffer_account(buffer, &LOADER)?;
     require(
@@ -92,7 +93,7 @@ fn sealed(
     )
 }
 fn complete(proposal: &Proposal) -> Result<()> {
-    let action = proposal.action.upgrade()?;
+    let action = proposal.action.artifact()?;
     let chunks = artifact_chunk_count(action.artifact_length, CHUNK)?;
     require(proposal.verified_count == chunks, Error::InvalidArtifact)?;
     for index in 0..96 {
@@ -100,6 +101,212 @@ fn complete(proposal: &Proposal) -> Result<()> {
         require(set == (index < chunks as usize), Error::InvalidArtifact)?;
     }
     Ok(())
+}
+
+fn load_gate(
+    program: &Pubkey,
+    info: &AccountInfo<'_>,
+    target: &Pubkey,
+) -> Result<Box<ProtocolGateV1>> {
+    let gate: Box<ProtocolGateV1> =
+        load_fixed_controller_account(program, info, ProtocolGateV1::LEN)?;
+    gate.validate_static()?;
+    require(
+        *target != *program
+            && gate_pda(program, target) == (*info.key, gate.bump)
+            && gate.controller_config == config_pda(program).0
+            && gate.target_program == *target
+            && gate.target_programdata
+                == Pubkey::find_program_address(&[target.as_ref()], &LOADER).0,
+        Error::InvalidAccount,
+    )?;
+    Ok(gate)
+}
+fn save_gate(program: &Pubkey, info: &AccountInfo<'_>, gate: &ProtocolGateV1) -> Result<()> {
+    gate.validate_static()?;
+    store_fixed_controller_account(program, info, gate, ProtocolGateV1::LEN)
+}
+fn split_target_accounts<'a, 'b>(
+    accounts: &'a [AccountInfo<'b>],
+    target_mode: bool,
+) -> Result<(&'a [AccountInfo<'b>], Option<&'a AccountInfo<'b>>)> {
+    if target_mode {
+        let (gate, remaining) = accounts
+            .split_last()
+            .ok_or(ProgramError::NotEnoughAccountKeys)?;
+        writable(gate)?;
+        Ok((remaining, Some(gate)))
+    } else {
+        Ok((accounts, None))
+    }
+}
+fn upgrade_authority_seeds<'a>(
+    target: &'a Pubkey,
+    bump: &'a [u8; 1],
+    target_mode: bool,
+) -> Vec<&'a [u8]> {
+    if target_mode {
+        vec![DOMAIN, b"target-authority", target.as_ref(), bump]
+    } else {
+        vec![DOMAIN, b"authority", bump]
+    }
+}
+fn upgrade_scope(
+    program: &Pubkey,
+    p: &Proposal,
+    target: &AccountInfo<'_>,
+    programdata: &AccountInfo<'_>,
+    gate_info: Option<&AccountInfo<'_>>,
+) -> Result<(Pubkey, u8)> {
+    require(
+        *programdata.key == Pubkey::find_program_address(&[target.key.as_ref()], &LOADER).0,
+        Error::InvalidAccount,
+    )?;
+    if let Some(info) = gate_info {
+        let action = p.action.target_upgrade()?;
+        require(action.target == *target.key, Error::InvalidAccount)?;
+        let gate = load_gate(program, info, target.key)?;
+        // A separate quorum action must freeze an active target first. Code
+        // installation always leaves it frozen; activation is never implicit.
+        require(
+            gate.epoch == action.gate_epoch && gate.status == GateStatusV1::EmergencyFrozen,
+            Error::StaleProposal,
+        )?;
+        Ok(target_authority_pda(program, target.key))
+    } else {
+        require(
+            p.action.kind == UPGRADE_CONTROLLER && *target.key == *program,
+            Error::InvalidAccount,
+        )?;
+        Ok(authority_pda(program))
+    }
+}
+
+/// A fresh target's deployer and three current council seats consent to the
+/// exact target in one transaction. No existing target can be reinitialized.
+fn register_target(program: &Pubkey, accounts: &[AccountInfo<'_>], data: &[u8]) -> Result<()> {
+    let [payer, deployer, config_info, target, programdata, gate_info, authority, loader, system, a, b, c, ixs] =
+        accounts
+    else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+    privileges(payer, true, true, false)?;
+    signer(deployer)?;
+    readonly(config_info)?;
+    privileges(target, false, false, true)?;
+    writable(programdata)?;
+    writable(gate_info)?;
+    readonly(authority)?;
+    executable(loader, &LOADER)?;
+    executable(system, &system_program::ID)?;
+    envelope(program, accounts, ixs, data)?;
+    let config = config(program, config_info)?;
+    for consent in [a, b, c] {
+        seat(&config, consent)?;
+    }
+    let (gate_key, bump) = gate_pda(program, target.key);
+    let (authority_key, authority_bump) = target_authority_pda(program, target.key);
+    require(
+        *target.key != *program
+            && *gate_info.key == gate_key
+            && *authority.key == authority_key
+            && *programdata.key == Pubkey::find_program_address(&[target.key.as_ref()], &LOADER).0,
+        Error::InvalidAccount,
+    )?;
+    let before = validate_program_programdata_linkage(target, programdata, &LOADER)?;
+    require(
+        before.upgrade_authority == Some(*deployer.key),
+        Error::Unauthorized,
+    )?;
+    let gate = ProtocolGateV1 {
+        discriminator: *b"AGVGAT01",
+        version: 1,
+        bump,
+        initialized: true,
+        status: GateStatusV1::EmergencyFrozen,
+        controller_config: *config_info.key,
+        target_program: *target.key,
+        target_programdata: *programdata.key,
+        epoch: 1,
+        active_proposal: Pubkey::default(),
+        freeze_slot: clock()?,
+        freeze_reason_code: 1,
+        last_completed_proposal: Pubkey::default(),
+        reserved: [0; 2],
+    };
+    create_fixed_pda_account(
+        program,
+        payer,
+        gate_info,
+        system,
+        &Rent::get()?,
+        ProtocolGateV1::LEN,
+        &[DOMAIN, b"gate", target.key.as_ref(), &[bump]],
+    )?;
+    save_gate(program, gate_info, &gate)?;
+    invoke_signed(
+        &set_upgrade_authority_checked(target.key, deployer.key, authority.key),
+        &[
+            programdata.clone(),
+            deployer.clone(),
+            authority.clone(),
+            loader.clone(),
+        ],
+        &[&[
+            DOMAIN,
+            b"target-authority",
+            target.key.as_ref(),
+            &[authority_bump],
+        ]],
+    )?;
+    let after = validate_program_programdata_linkage(target, programdata, &LOADER)?;
+    require(
+        after.upgrade_authority == Some(authority_key)
+            && after.capacity == before.capacity
+            && after.deployed_slot == before.deployed_slot,
+        Error::InvalidAccount,
+    )
+}
+
+fn execute_target_gate(
+    program: &Pubkey,
+    accounts: &[AccountInfo<'_>],
+    digest: [u8; 32],
+) -> Result<()> {
+    let [config_info, proposal_info, gate_info] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+    readonly(config_info)?;
+    writable(proposal_info)?;
+    writable(gate_info)?;
+    let config = config(program, config_info)?;
+    let mut p = proposal(program, proposal_info, Some(digest))?;
+    let slot = clock()?;
+    p.executable(&config, slot)?;
+    let action = p.action.gate_policy()?;
+    let mut gate = load_gate(program, gate_info, &action.target)?;
+    require(
+        gate.epoch == action.expected_epoch
+            && matches!(
+                gate.status,
+                GateStatusV1::Active | GateStatusV1::EmergencyFrozen
+            ),
+        Error::StaleProposal,
+    )?;
+    gate.epoch = add(gate.epoch, 1)?;
+    gate.status = if action.active {
+        GateStatusV1::Active
+    } else {
+        GateStatusV1::EmergencyFrozen
+    };
+    gate.freeze_slot = if action.active { 0 } else { slot };
+    gate.freeze_reason_code = if action.active { 0 } else { 3 };
+    gate.active_proposal = Pubkey::default();
+    gate.last_completed_proposal = *proposal_info.key;
+    save_gate(program, gate_info, &gate)?;
+    p.state = EXECUTED;
+    p.executed_slot = slot;
+    save_proposal(program, proposal_info, &p)
 }
 
 pub fn process(program: &Pubkey, accounts: &[AccountInfo<'_>], data: &[u8]) -> Result<()> {
@@ -125,11 +332,19 @@ pub fn process(program: &Pubkey, accounts: &[AccountInfo<'_>], data: &[u8]) -> R
         Instruction::Expire => expire(program, accounts),
         Instruction::ExecutePolicy { digest } => execute_policy(program, accounts, digest),
         Instruction::ExecuteControllerUpgrade { digest } => {
-            execute_upgrade(program, accounts, digest, data)
+            execute_upgrade(program, accounts, digest, data, false)
         }
         Instruction::CloseBuffer { digest } => close_buffer(program, accounts, digest),
+        Instruction::RegisterTarget => register_target(program, accounts, data),
+        Instruction::ExecuteTargetUpgrade { digest } => {
+            execute_upgrade(program, accounts, digest, data, true)
+        }
+        Instruction::ExtendTarget { digest } => {
+            extend_controller(program, accounts, digest, data, true)
+        }
+        Instruction::ExecuteTargetGate { digest } => execute_target_gate(program, accounts, digest),
         Instruction::ExtendController { digest } => {
-            extend_controller(program, accounts, digest, data)
+            extend_controller(program, accounts, digest, data, false)
         }
     }
 }
@@ -306,7 +521,7 @@ fn seal(program: &Pubkey, accounts: &[AccountInfo<'_>], digest: [u8; 32]) -> Res
     let config = config(program, config_info)?;
     let p = proposal(program, proposal_info, Some(digest))?;
     p.current(&config, clock()?)?;
-    let action = p.action.upgrade()?;
+    let action = p.action.artifact()?;
     let (authority, bump) = buffer_authority_pda(program, proposal_info.key);
     let header = validate_buffer_account(buffer, &LOADER)?;
     require(
@@ -348,7 +563,7 @@ fn verify(
     let config = config(program, config_info)?;
     let mut p = proposal(program, proposal_info, Some(digest))?;
     p.current(&config, clock()?)?;
-    let action = p.action.upgrade()?;
+    let action = p.action.artifact()?;
     sealed(program, proposal_info.key, buffer, &action)?;
     let count = artifact_chunk_count(action.artifact_length, CHUNK)?;
     require(
@@ -396,7 +611,7 @@ fn approve(
     let slot = clock()?;
     p.current(&config, slot)?;
     let index = seat(&config, seat_info)?;
-    if !cancel && p.action.kind == UPGRADE_CONTROLLER {
+    if !cancel && p.action.is_upgrade() {
         complete(&p)?;
     }
     p.approve(index, slot, cancel)?;
@@ -512,7 +727,10 @@ fn execute_upgrade(
     accounts: &[AccountInfo<'_>],
     digest: [u8; 32],
     data: &[u8],
+    target_mode: bool,
 ) -> Result<()> {
+    let all_accounts = accounts;
+    let (accounts, gate_info) = split_target_accounts(accounts, target_mode)?;
     let [config_info, proposal_info, controller, programdata, buffer, treasury, authority, buffer_authority, loader, rent, clock_info, ixs] =
         accounts
     else {
@@ -528,19 +746,18 @@ fn execute_upgrade(
         readonly(info)?;
     }
     executable(loader, &LOADER)?;
-    envelope(program, accounts, ixs, data)?;
+    envelope(program, all_accounts, ixs, data)?;
     let config = config(program, config_info)?;
     let mut p = proposal(program, proposal_info, Some(digest))?;
     let slot = clock()?;
     p.executable(&config, slot)?;
     complete(&p)?;
-    let action = p.action.upgrade()?;
-    let (authority_key, authority_bump) = authority_pda(program);
+    let action = p.action.artifact()?;
+    let (authority_key, authority_bump) =
+        upgrade_scope(program, &p, controller, programdata, gate_info)?;
     let (buffer_key, buffer_bump) = buffer_authority_pda(program, proposal_info.key);
     require(
-        *controller.key == *program
-            && *programdata.key == config.programdata
-            && *treasury.key == config.treasury
+        *treasury.key == config.treasury
             && *authority.key == authority_key
             && *buffer_authority.key == buffer_key
             && *rent.key == sysvar::rent::ID
@@ -567,7 +784,9 @@ fn execute_upgrade(
         Error::StaleProposal,
     )?;
     sealed(program, proposal_info.key, buffer, &action)?;
-    let authority_seeds: &[&[u8]] = &[DOMAIN, b"authority", &[authority_bump]];
+    let authority_bump_bytes = [authority_bump];
+    let authority_seeds =
+        upgrade_authority_seeds(controller.key, &authority_bump_bytes, target_mode);
     let buffer_seeds: &[&[u8]] = &[
         DOMAIN,
         b"buffer",
@@ -584,10 +803,10 @@ fn execute_upgrade(
             authority.clone(),
             loader.clone(),
         ],
-        &[buffer_seeds, authority_seeds],
+        &[buffer_seeds, &authority_seeds],
     )?;
     invoke_signed(
-        &upgrade(program, buffer.key, authority.key, treasury.key),
+        &upgrade(controller.key, buffer.key, authority.key, treasury.key),
         &[
             programdata.clone(),
             controller.clone(),
@@ -598,7 +817,7 @@ fn execute_upgrade(
             authority.clone(),
             loader.clone(),
         ],
-        &[authority_seeds],
+        &[&authority_seeds],
     )?;
     let after = validate_program_programdata_linkage(controller, programdata, &LOADER)?;
     require(
@@ -609,6 +828,14 @@ fn execute_upgrade(
     )?;
     p.state = EXECUTED;
     p.executed_slot = slot;
+    if let Some(info) = gate_info {
+        let mut gate = load_gate(program, info, controller.key)?;
+        gate.epoch = add(gate.epoch, 1)?;
+        gate.freeze_slot = slot;
+        gate.freeze_reason_code = 2;
+        gate.last_completed_proposal = *proposal_info.key;
+        save_gate(program, info, &gate)?;
+    }
     save_proposal(program, proposal_info, &p)
 }
 
@@ -619,7 +846,10 @@ fn extend_controller(
     accounts: &[AccountInfo<'_>],
     digest: [u8; 32],
     data: &[u8],
+    target_mode: bool,
 ) -> Result<()> {
+    let all_accounts = accounts;
+    let (accounts, gate_info) = split_target_accounts(accounts, target_mode)?;
     let [config_info, proposal_info, controller, programdata, authority, loader, system, payer, ixs] =
         accounts
     else {
@@ -633,20 +863,15 @@ fn extend_controller(
     executable(loader, &LOADER)?;
     executable(system, &system_program::ID)?;
     privileges(payer, true, true, false)?;
-    envelope(program, accounts, ixs, data)?;
+    envelope(program, all_accounts, ixs, data)?;
     let config = config(program, config_info)?;
     let mut p = proposal(program, proposal_info, Some(digest))?;
     let slot = clock()?;
     p.executable(&config, slot)?;
     complete(&p)?;
-    let action = p.action.upgrade()?;
-    let (key, bump) = authority_pda(program);
-    require(
-        *controller.key == *program
-            && *programdata.key == config.programdata
-            && *authority.key == key,
-        Error::InvalidAccount,
-    )?;
+    let action = p.action.artifact()?;
+    let (key, bump) = upgrade_scope(program, &p, controller, programdata, gate_info)?;
+    require(*authority.key == key, Error::InvalidAccount)?;
     let before = validate_program_programdata_linkage(controller, programdata, &LOADER)?;
     let expected_slot = if p.extension_slot == 0 {
         action.deployed_slot
@@ -667,8 +892,10 @@ fn extend_controller(
         Error::StaleProposal,
     )?;
     let delta = (action.artifact_length - expected_capacity).min(10_240) as u32;
+    let bump_bytes = [bump];
+    let seeds = upgrade_authority_seeds(controller.key, &bump_bytes, target_mode);
     invoke_signed(
-        &extend_program_checked(program, authority.key, Some(payer.key), delta),
+        &extend_program_checked(controller.key, authority.key, Some(payer.key), delta),
         &[
             programdata.clone(),
             controller.clone(),
@@ -677,7 +904,7 @@ fn extend_controller(
             payer.clone(),
             loader.clone(),
         ],
-        &[&[DOMAIN, b"authority", &[bump]]],
+        &[&seeds],
     )?;
     let after = validate_program_programdata_linkage(controller, programdata, &LOADER)?;
     require(
@@ -704,7 +931,7 @@ fn close_buffer(program: &Pubkey, accounts: &[AccountInfo<'_>], digest: [u8; 32]
     let config = config(program, config_info)?;
     let p = proposal(program, proposal_info, Some(digest))?;
     require(matches!(p.state, CANCELLED | EXPIRED), Error::WrongState)?;
-    let action = p.action.upgrade()?;
+    let action = p.action.artifact()?;
     sealed(program, proposal_info.key, buffer, &action)?;
     let (key, bump) = buffer_authority_pda(program, proposal_info.key);
     require(

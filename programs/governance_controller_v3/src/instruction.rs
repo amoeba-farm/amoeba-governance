@@ -41,10 +41,20 @@ pub enum Instruction {
     ExtendController {
         digest: [u8; 32],
     },
+    RegisterTarget,
+    ExecuteTargetUpgrade {
+        digest: [u8; 32],
+    },
+    ExtendTarget {
+        digest: [u8; 32],
+    },
+    ExecuteTargetGate {
+        digest: [u8; 32],
+    },
 }
 impl Instruction {
     pub fn unpack(data: &[u8]) -> Result<Self> {
-        if data.len() > MAX_DATA || !matches!(data.first(), Some(0..=10)) {
+        if data.len() > MAX_DATA || !matches!(data.first(), Some(0..=14)) {
             return Err(ProgramError::InvalidInstructionData);
         }
         Self::try_from_slice(data).map_err(|_| ProgramError::InvalidInstructionData)
