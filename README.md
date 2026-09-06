@@ -1,10 +1,25 @@
 # ameba_gov
 
-The new [V3 Devnet council core](docs/governance/amendments/governance-v3-council-core.md)
-is in `programs/governance_controller_v3`. It gives every proposal an approximately
-one-week approval window and supports three-of-five council upgrades of its own
-code, including ProgramData growth. Its client export is `./governance-v3`.
-Spread gate integration is subsequent work; the existing V2 deployment is unchanged.
+The current [V3 Devnet controller](docs/governance/amendments/governance-v3-targets.md)
+is in `programs/governance_controller_v3`. Its KMS-backed three-of-five council
+governs its own code and registered targets. Its client export is `./governance-v3`.
+New proposals snapshot the live timing policy: the finalized deployment receipt
+records 4,000,000 approval slots, 4,500 delay slots and 7,000,000 expiry slots.
+The approval window was about 7.7 days at the measured Devnet rate; it is not a
+mandatory week-long execution delay. ProgramData growth occurs through top-level
+Loader sizing before proposal creation.
+
+Fresh Spread `2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw` is registered
+under controller `8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx`. The
+[finalized receipt](docs/governance/evidence/v3-spread-devnet-20260905/receipt.json)
+records its gate as EmergencyFrozen at epoch 1 with no initialized business
+accounts. Refresh mutable chain state before any later operation. The existing
+immutable V2 controller and old Spread deployment remain unchanged.
+
+September 6 integration work is local code and local-main consolidation only.
+It does not publish source, deploy applications, activate the gate, bootstrap
+business state or start operators. The core-only amendment is historical;
+the typed-target amendment and deployment receipt describe the current V3 code.
 The Release 1 description below is retained for the older program.
 
 `ameba_gov` is the independent, local-first implementation repository for the
