@@ -81,8 +81,10 @@ fn one_week_approval_is_independent_from_execution_delay_and_cannot_be_shortened
     config.timing_version = 2;
     assert_eq!(p.timing, frozen);
     p.executable(&config, p.not_before).unwrap();
-    let mut weak = Timing::default();
-    weak.review_slots = 450;
+    let mut weak = Timing {
+        review_slots: 450,
+        ..Timing::default()
+    };
     assert!(weak.validate().is_err());
     weak.review_slots = WEEK_SLOTS;
     weak.expiry_slots = WEEK_SLOTS + EXECUTION_MARGIN_SLOTS;

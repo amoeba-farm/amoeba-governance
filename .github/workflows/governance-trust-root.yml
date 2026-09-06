@@ -120,6 +120,7 @@ jobs:
       - name: Verify pinned SBF versions
         shell: bash
         run: |
+          cargo-build-sbf --install-only --tools-version v1.53
           cargo-build-sbf --version | tee /tmp/cargo-build-sbf-version.txt
           grep --fixed-strings "cargo-build-sbf 4.0.0" /tmp/cargo-build-sbf-version.txt
           grep --fixed-strings "platform-tools v1.53" /tmp/cargo-build-sbf-version.txt
