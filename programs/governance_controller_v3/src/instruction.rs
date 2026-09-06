@@ -51,10 +51,13 @@ pub enum Instruction {
     ExecuteTargetGate {
         digest: [u8; 32],
     },
+    ExecuteSpreadLightConfig {
+        digest: [u8; 32],
+    },
 }
 impl Instruction {
     pub fn unpack(data: &[u8]) -> Result<Self> {
-        if data.len() > MAX_DATA || !matches!(data.first(), Some(0..=9 | 11..=12 | 14)) {
+        if data.len() > MAX_DATA || !matches!(data.first(), Some(0..=9 | 11..=12 | 14..=15)) {
             return Err(ProgramError::InvalidInstructionData);
         }
         Self::try_from_slice(data).map_err(|_| ProgramError::InvalidInstructionData)

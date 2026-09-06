@@ -1,10 +1,12 @@
 use crate::{instruction::Instruction, state::*};
+use borsh::BorshSerialize;
 use solana_loader_v3_interface::instruction::{
     close, set_buffer_authority_checked, set_upgrade_authority_checked, upgrade,
 };
 use solana_program::{
     account_info::AccountInfo,
     clock::Clock,
+    instruction::{AccountMeta, Instruction as SolanaInstruction},
     program::invoke_signed,
     program_error::ProgramError,
     pubkey::Pubkey,
@@ -308,6 +310,130 @@ fn execute_target_gate(
     save_proposal(program, proposal_info, &p)
 }
 
+/// A typed, create-once council operation. There is no caller-selected CPI tag or account list.
+fn execute_spread_light_config(
+    program: &Pubkey,
+    accounts: &[AccountInfo<'_>],
+    digest: [u8; 32],
+    data: &[u8],
+) -> Result<()> {
+    let [payer, config_info, proposal_info, target, programdata, gate_info, authority, light_config, system, ixs] =
+        accounts
+    else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+    privileges(payer, true, true, false)?;
+    readonly(config_info)?;
+    writable(proposal_info)?;
+    executable(target, &DEVNET_SPREAD)?;
+    readonly(programdata)?;
+    readonly(gate_info)?;
+    readonly(authority)?;
+    writable(light_config)?;
+    executable(system, &system_program::ID)?;
+    envelope(program, accounts, ixs, data)?;
+    let config = config(program, config_info)?;
+    let mut p = proposal(program, proposal_info, Some(digest))?;
+    let slot = clock()?;
+    p.executable(&config, slot)?;
+    let policy = p.action.light_config_policy()?;
+    let gate = load_gate(program, gate_info, target.key)?;
+    let (authority_key, authority_bump) = target_authority_pda(program, target.key);
+    let header = validate_program_programdata_linkage(target, programdata, &LOADER)?;
+    require(
+        gate.status == GateStatusV1::Active
+            && gate.epoch == policy.expected_epoch
+            && policy.target == *target.key
+            && policy.deployed_slot == header.deployed_slot
+            && header.upgrade_authority == Some(authority_key)
+            && *authority.key == authority_key,
+        Error::StaleProposal,
+    )?;
+    let (config_key, config_bump) =
+        Pubkey::find_program_address(&[b"compressible_config", &[0, 0]], target.key);
+    let (rent_sponsor, sponsor_bump) = Pubkey::find_program_address(&[b"rent_sponsor"], target.key);
+    require(
+        *light_config.key == config_key
+            && *light_config.owner == system_program::ID
+            && light_config.data_is_empty(),
+        Error::InvalidAccount,
+    )?;
+    let config_lamports = light_config.lamports();
+    let payer_lamports = payer.lamports();
+    let funding = Rent::get()?
+        .minimum_balance(156)
+        .saturating_sub(config_lamports);
+    require(payer_lamports >= funding, Error::InvalidAccount)?;
+    let rent_bytes = policy
+        .rent
+        .try_to_vec()
+        .map_err(|_| Error::InvalidAccount)?;
+    let mut inner_data = Vec::with_capacity(130);
+    inner_data.push(216);
+    inner_data.extend_from_slice(rent_sponsor.as_ref());
+    inner_data.extend_from_slice(policy.compression_authority.as_ref());
+    inner_data.extend_from_slice(&rent_bytes);
+    inner_data.extend_from_slice(&policy.write_top_up.to_le_bytes());
+    inner_data.extend_from_slice(&1u32.to_le_bytes());
+    inner_data.extend_from_slice(policy.address_tree.as_ref());
+    inner_data.push(0);
+    inner_data.extend_from_slice(b"AGV1\x01\0\0\0");
+    inner_data.extend_from_slice(&policy.expected_epoch.to_le_bytes());
+    require(inner_data.len() == 130, Error::InvalidEnvelope)?;
+    let inner = SolanaInstruction {
+        program_id: *target.key,
+        accounts: vec![
+            AccountMeta::new(*payer.key, true),
+            AccountMeta::new(*light_config.key, false),
+            AccountMeta::new_readonly(*programdata.key, false),
+            AccountMeta::new_readonly(authority_key, true),
+            AccountMeta::new_readonly(system_program::ID, false),
+            AccountMeta::new_readonly(*gate_info.key, false),
+        ],
+        data: inner_data,
+    };
+    invoke_signed(
+        &inner,
+        &[
+            payer.clone(),
+            light_config.clone(),
+            programdata.clone(),
+            authority.clone(),
+            system.clone(),
+            gate_info.clone(),
+            target.clone(),
+        ],
+        &[&[
+            DOMAIN,
+            b"target-authority",
+            target.key.as_ref(),
+            &[authority_bump],
+        ]],
+    )?;
+    let mut expected = Vec::with_capacity(156);
+    expected.extend_from_slice(b"LightCfg\x01");
+    expected.extend_from_slice(&policy.write_top_up.to_le_bytes());
+    expected.extend_from_slice(authority_key.as_ref());
+    expected.extend_from_slice(rent_sponsor.as_ref());
+    expected.extend_from_slice(policy.compression_authority.as_ref());
+    expected.extend_from_slice(&rent_bytes);
+    expected.extend_from_slice(&[0, config_bump, sponsor_bump]);
+    expected.extend_from_slice(&1u32.to_le_bytes());
+    expected.extend_from_slice(policy.address_tree.as_ref());
+    require(
+        expected.len() == 156
+            && *light_config.owner == *target.key
+            && !light_config.executable
+            && light_config.try_borrow_data()?.as_ref() == expected.as_slice()
+            && light_config.lamports() == add(config_lamports, funding)?
+            && payer.lamports() == payer_lamports - funding,
+        Error::InvalidAccount,
+    )?;
+    p.state = EXECUTED;
+    p.executed_slot = slot;
+    save_proposal(program, proposal_info, &p)
+}
+
 pub fn process(program: &Pubkey, accounts: &[AccountInfo<'_>], data: &[u8]) -> Result<()> {
     let instruction = Instruction::unpack(data)?;
     require_distinct_accounts(&accounts.iter().collect::<Vec<_>>())?;
@@ -339,6 +465,9 @@ pub fn process(program: &Pubkey, accounts: &[AccountInfo<'_>], data: &[u8]) -> R
             execute_upgrade(program, accounts, digest, data, true)
         }
         Instruction::ExecuteTargetGate { digest } => execute_target_gate(program, accounts, digest),
+        Instruction::ExecuteSpreadLightConfig { digest } => {
+            execute_spread_light_config(program, accounts, digest, data)
+        }
         Instruction::ExtendTarget { .. } | Instruction::ExtendController { .. } => {
             Err(ProgramError::InvalidInstructionData)
         }

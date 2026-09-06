@@ -157,7 +157,7 @@ fn fixed_accounts_and_digest_reject_timing_action_padding_and_trailing_drift() {
 #[test]
 fn closed_dispatch_rejects_every_unknown_tag_before_accounts() {
     let program = Pubkey::new_unique();
-    for tag in 15..=255u8 {
+    for tag in 16..=255u8 {
         assert_eq!(
             governance_controller_v3::process_instruction(&program, &[], &[tag]),
             Err(solana_program::program_error::ProgramError::InvalidInstructionData)
@@ -166,4 +166,52 @@ fn closed_dispatch_rejects_every_unknown_tag_before_accounts() {
     assert!(Instruction::unpack(&vec![0; MAX_DATA + 1]).is_err());
     assert!(Instruction::unpack(&[6, 0]).is_err());
     assert!(Instruction::unpack(&[]).is_err());
+}
+
+#[test]
+fn spread_light_policy_has_fixed_bytes_and_rejects_reserved_or_foreign_targets() {
+    let policy = SpreadLightConfigPolicy {
+        target: DEVNET_SPREAD,
+        expected_epoch: 3,
+        deployed_slot: 10,
+        compression_authority: Pubkey::new_from_array([42; 32]),
+        rent: LightRentPolicy {
+            base_rent: 123,
+            compression_cost: 456,
+            lamports_per_byte_per_epoch: 7,
+            max_funded_epochs: 8,
+            max_top_up: 901,
+        },
+        write_top_up: 2345,
+        address_tree: Pubkey::new_from_array([43; 32]),
+    };
+    let body = policy.try_to_vec().unwrap();
+    assert_eq!(body.len(), 124);
+    assert_eq!(
+        &body[32..48],
+        &[3, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0]
+    );
+    assert_eq!(&body[80..92], &[123, 0, 200, 1, 7, 8, 133, 3, 41, 9, 0, 0]);
+    let mut action = Action {
+        kind: INITIALIZE_SPREAD_LIGHT_CONFIG,
+        data: [0; 192],
+    };
+    action.data[..124].copy_from_slice(&body);
+    action.validate().unwrap();
+    assert_eq!(action.try_to_vec().unwrap().len(), 193);
+    assert!(!action.is_upgrade());
+    action.data[124] = 1;
+    assert!(action.validate().is_err());
+    action.data[124] = 0;
+    action.data[0] ^= 1;
+    assert!(action.validate().is_err());
+    action.data[0] ^= 1;
+    action.data[32..40].fill(0);
+    assert!(action.validate().is_err());
+    let encoded = Instruction::ExecuteSpreadLightConfig { digest: [23; 32] }
+        .try_to_vec()
+        .unwrap();
+    assert_eq!(encoded, [vec![15], vec![23; 32]].concat());
+    Instruction::unpack(&encoded).unwrap();
+    assert!(Instruction::unpack(&[encoded, vec![0]].concat()).is_err());
 }

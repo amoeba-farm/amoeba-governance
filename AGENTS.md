@@ -1,5 +1,15 @@
 # AGENTS.md — Amoeba upgrade governance
 
+## Devnet demo parity follow-up (2026-09-06)
+
+The user's current authorization includes oracle parity, demo issuance and
+liquidity on fresh V3-governed Spread. The narrow paired controller/Spread
+initialization change is specified in
+`docs/governance/amendments/governance-v3-spread-light-config.md`. Work in the
+isolated `codex/v3-light-bootstrap` worktree. Do not modify the running oracle
+executor's governance dependency checkout, or install the candidate until that
+executor finishes. Preserve council authority and its current timing profile.
+
 ## New V3 assignment (2026-09-05)
 
 The user authorized a new Devnet governance program with an approximately

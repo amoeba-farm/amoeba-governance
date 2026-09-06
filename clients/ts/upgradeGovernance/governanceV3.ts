@@ -18,6 +18,16 @@ export const LOADER_V3 = new PublicKey(
 );
 export const CONFIG_V3_LEN = 384;
 export const PROPOSAL_V3_LEN = 400;
+export const DEVNET_SPREAD_V3 = new PublicKey(
+  "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
+);
+export interface LightRentPolicyV3 {
+  baseRent: number;
+  compressionCost: number;
+  lamportsPerBytePerEpoch: number;
+  maxFundedEpochs: number;
+  maxTopUp: number;
+}
 export interface TimingV3 {
   reviewSlots: bigint;
   delaySlots: bigint;
@@ -71,6 +81,16 @@ export type ActionV3 =
       target: PublicKey;
       expectedEpoch: bigint;
       active: boolean;
+    }
+  | {
+      kind: "initializeSpreadLightConfig";
+      target: PublicKey;
+      expectedEpoch: bigint;
+      deployedSlot: bigint;
+      compressionAuthority: PublicKey;
+      rent: LightRentPolicyV3;
+      writeTopUp: number;
+      addressTree: PublicKey;
     };
 export interface ProposalV3 {
   bump: number;
@@ -100,6 +120,12 @@ const check = (ok: boolean, message: string): void => {
   if (!ok) throw Error(message);
 };
 const zero = (value: Uint8Array) => value.every((x) => x === 0);
+function uint(value: number, width: 1 | 2 | 4): Buffer {
+  check(Number.isSafeInteger(value) && value >= 0 && value < 2 ** (width * 8), "unsigned integer out of range");
+  const bytes = Buffer.alloc(width);
+  bytes.writeUIntLE(value, 0, width);
+  return bytes;
+}
 function u64(value: bigint): Buffer {
   check(
     typeof value === "bigint" && value >= 0n && value <= 0xffffffffffffffffn,
@@ -190,6 +216,12 @@ export const deriveTargetGateV3 = (program: PublicKey, target: PublicKey) =>
     [GOVERNANCE_V3_DOMAIN, Buffer.from("gate"), target.toBuffer()],
     program,
   );
+export const deriveSpreadLightConfigV3 = () =>
+  PublicKey.findProgramAddressSync(
+    [Buffer.from("compressible_config"), Buffer.from([0, 0])], DEVNET_SPREAD_V3,
+  );
+export const deriveSpreadRentSponsorV3 = () =>
+  PublicKey.findProgramAddressSync([Buffer.from("rent_sponsor")], DEVNET_SPREAD_V3);
 
 export function encodeActionV3(action: ActionV3): Buffer {
   let tag: number, body: Buffer;
@@ -259,6 +291,22 @@ export function encodeActionV3(action: ActionV3): Buffer {
         action.target.toBuffer(),
         u64(action.expectedEpoch),
         Buffer.from([Number(action.active)]),
+      ]);
+      break;
+    case "initializeSpreadLightConfig":
+      check(
+        action.target.equals(DEVNET_SPREAD_V3) && action.expectedEpoch > 0n &&
+          !action.compressionAuthority.equals(PublicKey.default) &&
+          !action.addressTree.equals(PublicKey.default),
+        "invalid Spread Light config policy",
+      );
+      tag = 5;
+      body = Buffer.concat([
+        action.target.toBuffer(), u64(action.expectedEpoch), u64(action.deployedSlot),
+        action.compressionAuthority.toBuffer(),
+        uint(action.rent.baseRent, 2), uint(action.rent.compressionCost, 2),
+        uint(action.rent.lamportsPerBytePerEpoch, 1), uint(action.rent.maxFundedEpochs, 1),
+        uint(action.rent.maxTopUp, 2), uint(action.writeTopUp, 4), action.addressTree.toBuffer(),
       ]);
       break;
     default:
@@ -345,6 +393,16 @@ function decodeActionV3(data: Buffer): ActionV3 {
       target,
       expectedEpoch,
       active: active === 1,
+    };
+  } else if (kind === 5) {
+    result = {
+      kind: "initializeSpreadLightConfig", target: r.key(), expectedEpoch: r.u64(),
+      deployedSlot: r.u64(), compressionAuthority: r.key(),
+      rent: {
+        baseRent: r.bytes(2).readUInt16LE(), compressionCost: r.bytes(2).readUInt16LE(),
+        lamportsPerBytePerEpoch: r.byte(), maxFundedEpochs: r.byte(), maxTopUp: r.bytes(2).readUInt16LE(),
+      },
+      writeTopUp: r.bytes(4).readUInt32LE(), addressTree: r.key(),
     };
   } else throw Error("unknown action");
   r.reserved(data.length - r.offset);
@@ -882,6 +940,20 @@ export function executeTargetGateV3(
     ],
     hash32(p.digest),
   );
+}
+/** Fixed create-once CPI; the proposal binds every configurable Light field. */
+export function executeSpreadLightConfigV3(
+  program: PublicKey, p: ProposalV3, payer: PublicKey,
+): TransactionInstruction {
+  if (p.action.kind !== "initializeSpreadLightConfig") throw Error("Spread Light config policy required");
+  encodeActionV3(p.action);
+  const target = p.action.target;
+  return build(program, 15, [
+    signer(payer, true), ro(p.config), rw(deriveProposalV3(program, p.id)[0]), ro(target),
+    ro(deriveProgramdataV3(target)), ro(deriveTargetGateV3(program, target)[0]),
+    ro(deriveTargetAuthorityV3(program, target)[0]), rw(deriveSpreadLightConfigV3()[0]),
+    ro(SystemProgram.programId), ro(SYSVAR_INSTRUCTIONS_PUBKEY),
+  ], hash32(p.digest));
 }
 /** RPC callers must separately verify owner, executable=false and privileges. */
 export function decodeTargetGateV3(

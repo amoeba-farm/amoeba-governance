@@ -20,6 +20,9 @@ pub const SET_TIMING: u8 = 1;
 pub const ROTATE_COUNCIL: u8 = 2;
 pub const UPGRADE_TARGET: u8 = 3;
 pub const SET_TARGET_GATE: u8 = 4;
+pub const INITIALIZE_SPREAD_LIGHT_CONFIG: u8 = 5;
+pub const DEVNET_SPREAD: Pubkey =
+    solana_program::pubkey!("2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u32)]
@@ -202,6 +205,37 @@ pub struct TargetGatePolicy {
     pub expected_epoch: u64,
     pub active: bool,
 }
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct LightRentPolicy {
+    pub base_rent: u16,
+    pub compression_cost: u16,
+    pub lamports_per_byte_per_epoch: u8,
+    pub max_funded_epochs: u8,
+    pub max_top_up: u16,
+}
+/// Only the current Spread tag-216 create-once interface. All other bytes are derived.
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct SpreadLightConfigPolicy {
+    pub target: Pubkey,
+    pub expected_epoch: u64,
+    pub deployed_slot: u64,
+    pub compression_authority: Pubkey,
+    pub rent: LightRentPolicy,
+    pub write_top_up: u32,
+    pub address_tree: Pubkey,
+}
+impl SpreadLightConfigPolicy {
+    pub const LEN: usize = 124;
+    pub fn validate(&self) -> Result<()> {
+        require(
+            self.target == DEVNET_SPREAD
+                && self.expected_epoch > 0
+                && self.compression_authority != Pubkey::default()
+                && self.address_tree != Pubkey::default(),
+            Error::InvalidAccount,
+        )
+    }
+}
 pub struct Artifact {
     pub buffer: Pubkey,
     pub artifact_length: u64,
@@ -212,6 +246,20 @@ pub struct Artifact {
     pub build_commitment: [u8; 32],
 }
 impl Action {
+    pub fn light_config_policy(&self) -> Result<SpreadLightConfigPolicy> {
+        require(
+            self.kind == INITIALIZE_SPREAD_LIGHT_CONFIG
+                && self.data[SpreadLightConfigPolicy::LEN..]
+                    .iter()
+                    .all(|b| *b == 0),
+            Error::InvalidAccount,
+        )?;
+        let value =
+            SpreadLightConfigPolicy::try_from_slice(&self.data[..SpreadLightConfigPolicy::LEN])
+                .map_err(|_| Error::InvalidAccount)?;
+        value.validate()?;
+        Ok(value)
+    }
     pub fn is_upgrade(&self) -> bool {
         matches!(self.kind, UPGRADE_CONTROLLER | UPGRADE_TARGET)
     }
@@ -303,6 +351,7 @@ impl Action {
                     Error::InvalidAccount,
                 )
             }
+            INITIALIZE_SPREAD_LIGHT_CONFIG => self.light_config_policy()?.validate(),
             _ => Err(ProgramError::InvalidInstructionData),
         }
     }
