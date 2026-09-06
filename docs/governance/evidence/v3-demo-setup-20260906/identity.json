@@ -1,0 +1,119 @@
+{
+  "schema": "ameba-v3-finalized-release-identity-v1",
+  "at": "2026-09-06T19:52:56.847Z",
+  "genesis": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  "contextSlot": 494223048,
+  "minimumContextSlot": 494220926,
+  "gate": {
+    "bump": 254,
+    "status": 0,
+    "config": "Ec5H8jsGvaLU3T3gp6qTayPjY2qF3geBbVKWz4rsaEHB",
+    "targetProgram": "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
+    "programdata": "8KR6hgcQehz32jm7CvrAriYNhvT2Bu9JuUWHce81J1oh",
+    "epoch": "6",
+    "activeProposal": "11111111111111111111111111111111",
+    "freezeSlot": "0",
+    "reason": 0,
+    "lastCompletedProposal": "7Ctnh81g5AnRXk4nWTGpZEijdjFbpafuSEkz4Wwhgk4b"
+  },
+  "council": {
+    "bump": 254,
+    "controller": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+    "programdata": "7eW9UXcCDrpEAQ93fP7o2zgGMKhAKi3zJLihELjR8xYd",
+    "authority": "Frc28QFQxqUxF9HPgzcmm5VkqorqUb2LeLPE5uKU6Ycp",
+    "treasury": "8XUjnzVzR71DaVuqbSHaNev5H4vrxofyFP4iZt2FXa1j",
+    "seats": [
+      "pSutXCyMTkwvzG1kpiHXULkVKyzz8NPSNgnjLgwNcTu",
+      "4vrxWeSfCoJA8KvzCcWGgG4C5S4gPYrLaRWysycJeVpz",
+      "DgMGtSjUg1wXPZuPBT6HqGN3qRLVBJCqYrv31XtcwcBR",
+      "4SJyALW3CinnBrFUzHeJL6v5KM12hw2FGLL1wbVTVfn8",
+      "Cmd42MrYC7CVyQNGq7GRkTqR3jQ8cBPKzjzDpsc5eNW4"
+    ],
+    "councilEpoch": "1",
+    "timingVersion": "2",
+    "timing": {
+      "reviewSlots": "4000000",
+      "delaySlots": "4500",
+      "expirySlots": "7000000"
+    },
+    "nextId": "11"
+  },
+  "scope": "program-identity-only",
+  "marketParityComplete": false,
+  "accounts": {
+    "spreadProgram": {
+      "address": "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
+      "owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "executable": true,
+      "lamports": 833120,
+      "bytes": 36,
+      "sha256": "83be84ac424d864aacf03e489ff8fe3f0a6957e8726c8f9c48f572df6b522e75",
+      "finalizedSlot": 494223048,
+      "observationKind": "finalized-rpc-account",
+      "dataBase64File": "spreadProgram.base64"
+    },
+    "spreadProgramData": {
+      "address": "8KR6hgcQehz32jm7CvrAriYNhvT2Bu9JuUWHce81J1oh",
+      "owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "executable": false,
+      "lamports": 6307719160,
+      "bytes": 1241549,
+      "sha256": "3a0818ec453e81f59fe1dbe3754258b05dc5a656cffc3e635609d6f13d73f24a",
+      "finalizedSlot": 494223048,
+      "observationKind": "finalized-rpc-account",
+      "deployedSlot": "494187634",
+      "headerBase64": "AwAAAHK0dB0AAAAAATcLFo/lq5Rap3D5t5tjgcmcrZzDUG0llVcY/e1Ym0t3",
+      "payloadBytes": 1241504,
+      "payloadSha256": "23f6d99a47cc79d2babad6758531664414cfc51df313ae82ea2cfd6c32829f87",
+      "dataBase64File": "spreadProgramData.base64"
+    },
+    "controllerProgram": {
+      "address": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "executable": true,
+      "lamports": 833120,
+      "bytes": 36,
+      "sha256": "03976f8d382d44b62e3c53959fedefe7e1b9c0f30c90921553194ebb8159310d",
+      "finalizedSlot": 494223048,
+      "observationKind": "finalized-rpc-account",
+      "dataBase64File": "controllerProgram.base64"
+    },
+    "controllerProgramData": {
+      "address": "7eW9UXcCDrpEAQ93fP7o2zgGMKhAKi3zJLihELjR8xYd",
+      "owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "executable": false,
+      "lamports": 1030168120,
+      "bytes": 202661,
+      "sha256": "15baa3040bf20d1b0909ca43195c0f47cb6ab3ec0a710d1e007d962c2e577b8a",
+      "finalizedSlot": 494223048,
+      "observationKind": "finalized-rpc-account",
+      "deployedSlot": "494196733",
+      "headerBase64": "AwAAAP3XdB0AAAAAAdy4rFhKtAVB0N6KuYw5NkG28tPML72IP2oy0EyNZ2Qx",
+      "payloadBytes": 202616,
+      "payloadSha256": "50d409bceaebef4ce3edcee9e757b4f995e0405a482ad32f3272e13aa94dca47",
+      "dataBase64File": "controllerProgramData.base64"
+    },
+    "council": {
+      "address": "Ec5H8jsGvaLU3T3gp6qTayPjY2qF3geBbVKWz4rsaEHB",
+      "owner": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "executable": false,
+      "lamports": 2600960,
+      "bytes": 384,
+      "sha256": "c86cc865d279c976905d5f1a6fc30896c0d8183df460221c5385f2323ab025db",
+      "finalizedSlot": 494223048,
+      "observationKind": "finalized-rpc-account",
+      "dataBase64File": "council.base64"
+    },
+    "gate": {
+      "address": "Cdym9p7FvtxEAjF8XuCqSrishB7LmBDXaZGDMMgWczu",
+      "owner": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "executable": false,
+      "lamports": 1625600,
+      "bytes": 192,
+      "sha256": "18f7cd0d4e05d3a028f755bfe9b2db8f14a1f177333ae9fd5c49c64d7bcad8b3",
+      "finalizedSlot": 494223048,
+      "observationKind": "finalized-rpc-account",
+      "dataBase64File": "gate.base64"
+    }
+  }
+}

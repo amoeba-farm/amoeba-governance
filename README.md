@@ -11,15 +11,18 @@ Loader sizing before proposal creation.
 
 Fresh Spread `2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw` is registered
 under controller `8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx`. The
-[finalized receipt](docs/governance/evidence/v3-spread-devnet-20260905/receipt.json)
-records its gate as EmergencyFrozen at epoch 1 with no initialized business
-accounts. Refresh mutable chain state before any later operation. The existing
-immutable V2 controller and old Spread deployment remain unchanged.
+[September 6 finalized setup receipt](docs/governance/evidence/v3-demo-setup-20260906/README.md)
+records both program upgrades, Active gate epoch 6, and council initialization
+of Spread's Light configuration. The receipt distinguishes executable hashes
+from allocated ProgramData storage and records unchanged accounts across the
+code-only upgrades. Refresh mutable chain state before later operations.
 
-September 6 integration work is local code and local-main consolidation only.
-It does not publish source, deploy applications, activate the gate, bootstrap
-business state or start operators. The core-only amendment is historical;
-the typed-target amendment and deployment receipt describe the current V3 code.
+The user authorized source publication and fresh Devnet oracle, issuance and
+liquidity preparation. Final demo parity is tracked by the separate Spread
+fresh-path audit; a deployment receipt alone does not establish trading readiness.
+Application and service rollout remain separate. The September 5 core/target
+receipts retain their historical state observations, and the existing immutable
+V2 controller and old Spread deployment remain unchanged.
 The Release 1 description below is retained for the older program.
 
 `ameba_gov` is the independent, local-first implementation repository for the

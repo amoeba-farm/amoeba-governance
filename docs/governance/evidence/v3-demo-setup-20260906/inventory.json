@@ -1,0 +1,54 @@
+{
+  "spreadProgram.base64": {
+    "bytes": 49,
+    "sha256": "d777f3d4866d47248ddb7251a6efc8ab496429279ed0528509811eefc04cb12c"
+  },
+  "spreadProgramData.base64": {
+    "bytes": 1655401,
+    "sha256": "74c271d3594b325aaa5fbd9f9ea6e4e3e1fd00f35e2fb16d527c4ffa21f038a5"
+  },
+  "controllerProgram.base64": {
+    "bytes": 49,
+    "sha256": "293265201377db5991514f73842f455b8f723a5af87f13bd8231dc055580ea23"
+  },
+  "controllerProgramData.base64": {
+    "bytes": 270217,
+    "sha256": "ffa76a3610e5fd156eedc562a02f451e25cc3cbcb8a97503e408b8a14e87a1ae"
+  },
+  "council.base64": {
+    "bytes": 513,
+    "sha256": "5af23b940467bad3ab42a2c3ac499b217a47f8273ece254784e3ac040910fae4"
+  },
+  "gate.base64": {
+    "bytes": 257,
+    "sha256": "bdef7590bf94a7ca3b0ce0ecfb066ed40509a6946c4db185d807f1cb27000653"
+  },
+  "identity.json": {
+    "bytes": 4691,
+    "sha256": "78c2c29fcc8263f05094a07c264cdc9363a2c9764c6a9ba191039d65490855fa"
+  },
+  "receipt.json": {
+    "bytes": 6226,
+    "sha256": "8cd8584bd207734e431a2fd330e2477dd3d08516f19aff14b46d3e3021560e2e"
+  },
+  "runtime-extension-floor.json": {
+    "bytes": 2702,
+    "sha256": "1a08b3340415650e0fa97fefc886ef17d3f36b1b1a637edc0a0c976cb0235be5"
+  },
+  "spread-receipt.json": {
+    "bytes": 4286,
+    "sha256": "5b705019c3a6bbd05b5b2b4d87f8346d7e9d15004d10d199267e355e7d64ef10"
+  },
+  "controller-receipt.json": {
+    "bytes": 4740,
+    "sha256": "aa0321ff54530347119709b0535af89e075dd07bd37787bf1f05b862d95762f5"
+  },
+  "activation-receipt.json": {
+    "bytes": 2032,
+    "sha256": "470aac752c5dbf74d6ec0090c9887a99f80d93d0550842dcb5f961d2de2b0733"
+  },
+  "light-receipt.json": {
+    "bytes": 2984,
+    "sha256": "97b5b6fdc5394386908e0621054be88d60c01188f80493ce4cc278c620a5684a"
+  }
+}

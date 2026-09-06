@@ -1,0 +1,127 @@
+{
+  "at": "2026-09-06T19:47:29.287Z",
+  "genesis": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  "stage": "light",
+  "proposal": {
+    "bump": 255,
+    "config": "Ec5H8jsGvaLU3T3gp6qTayPjY2qF3geBbVKWz4rsaEHB",
+    "id": "10",
+    "councilEpoch": "1",
+    "timingVersion": "2",
+    "timing": {
+      "reviewSlots": "4000000",
+      "delaySlots": "4500",
+      "expirySlots": "7000000"
+    },
+    "created": "494202876",
+    "reviewEnd": "498202876",
+    "notBefore": "494207376",
+    "expires": "501202876",
+    "action": {
+      "kind": "initializeSpreadLightConfig",
+      "target": "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
+      "expectedEpoch": "6",
+      "deployedSlot": "494187634",
+      "compressionAuthority": "99riHvpFvwfz2tbrWbanEMPz5iyhHHThBbM7eY35vMwL",
+      "rent": {
+        "baseRent": 128,
+        "compressionCost": 11000,
+        "lamportsPerBytePerEpoch": 1,
+        "maxFundedEpochs": 2,
+        "maxTopUp": 12416
+      },
+      "writeTopUp": 766,
+      "addressTree": "amt2kaJA14v3urZbZvnc5v2np8jqvc4Z8zDep5wbtzx"
+    },
+    "digest": {
+      "type": "Buffer",
+      "data": [
+        44,
+        175,
+        67,
+        159,
+        129,
+        68,
+        185,
+        234,
+        175,
+        243,
+        59,
+        79,
+        206,
+        34,
+        208,
+        235,
+        199,
+        0,
+        80,
+        97,
+        119,
+        92,
+        27,
+        145,
+        121,
+        244,
+        109,
+        230,
+        50,
+        83,
+        79,
+        192
+      ]
+    },
+    "approvals": 7,
+    "approvalCount": 3,
+    "cancellations": 0,
+    "cancellationCount": 0,
+    "state": 1,
+    "verifiedChunks": {
+      "type": "Buffer",
+      "data": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "verifiedCount": 0,
+    "extensionSlot": "0",
+    "extendedCapacity": "0",
+    "executedSlot": "494220926"
+  },
+  "gate": {
+    "bump": 254,
+    "status": 0,
+    "config": "Ec5H8jsGvaLU3T3gp6qTayPjY2qF3geBbVKWz4rsaEHB",
+    "targetProgram": "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
+    "programdata": "8KR6hgcQehz32jm7CvrAriYNhvT2Bu9JuUWHce81J1oh",
+    "epoch": "6",
+    "activeProposal": "11111111111111111111111111111111",
+    "freezeSlot": "0",
+    "reason": 0,
+    "lastCompletedProposal": "7Ctnh81g5AnRXk4nWTGpZEijdjFbpafuSEkz4Wwhgk4b"
+  },
+  "lightConfig": {
+    "address": "CgsHpYE9PnaJWKJxuN89Eugb5uJy77vsHBKPwJecwUXQ",
+    "contextSlot": 494221076,
+    "account": {
+      "data": [
+        "TGlnaHRDZmcB/gIAADcLFo/lq5Rap3D5t5tjgcmcrZzDUG0llVcY/e1Ym0t3RZrt4a1Xnk7J6m1vJMtvYyi7p5oKub+YETdBXrg65nF5IlnxcAqXz18wHSULeGTBqjEAKZW2rIbusQ9W8sCpJ4AA+CoBAoAwAP7+AQAAAAim6ZiwX+krmKDZ93nZ2+iy8+72eBMoe+ulJkmAkWi9",
+        "base64"
+      ],
+      "executable": false,
+      "lamports": 1442720,
+      "owner": "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
+      "rentEpoch": 18446744073709552000,
+      "space": 156
+    }
+  }
+}

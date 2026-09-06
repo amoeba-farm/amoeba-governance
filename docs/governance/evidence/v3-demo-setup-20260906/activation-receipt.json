@@ -1,0 +1,102 @@
+{
+  "at": "2026-09-06T18:41:38.821Z",
+  "genesis": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  "stage": "activation",
+  "proposal": {
+    "bump": 255,
+    "config": "Ec5H8jsGvaLU3T3gp6qTayPjY2qF3geBbVKWz4rsaEHB",
+    "id": "8",
+    "councilEpoch": "1",
+    "timingVersion": "2",
+    "timing": {
+      "reviewSlots": "4000000",
+      "delaySlots": "4500",
+      "expirySlots": "7000000"
+    },
+    "created": "494190460",
+    "reviewEnd": "498190460",
+    "notBefore": "494194960",
+    "expires": "501190460",
+    "action": {
+      "kind": "setTargetGate",
+      "target": "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
+      "expectedEpoch": "5",
+      "active": true
+    },
+    "digest": {
+      "type": "Buffer",
+      "data": [
+        4,
+        0,
+        189,
+        177,
+        198,
+        154,
+        246,
+        138,
+        15,
+        143,
+        84,
+        177,
+        81,
+        62,
+        128,
+        202,
+        186,
+        248,
+        90,
+        56,
+        161,
+        250,
+        59,
+        3,
+        129,
+        151,
+        193,
+        195,
+        54,
+        132,
+        92,
+        51
+      ]
+    },
+    "approvals": 7,
+    "approvalCount": 3,
+    "cancellations": 0,
+    "cancellationCount": 0,
+    "state": 1,
+    "verifiedChunks": {
+      "type": "Buffer",
+      "data": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "verifiedCount": 0,
+    "extensionSlot": "0",
+    "extendedCapacity": "0",
+    "executedSlot": "494197070"
+  },
+  "gate": {
+    "bump": 254,
+    "status": 0,
+    "config": "Ec5H8jsGvaLU3T3gp6qTayPjY2qF3geBbVKWz4rsaEHB",
+    "targetProgram": "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
+    "programdata": "8KR6hgcQehz32jm7CvrAriYNhvT2Bu9JuUWHce81J1oh",
+    "epoch": "6",
+    "activeProposal": "11111111111111111111111111111111",
+    "freezeSlot": "0",
+    "reason": 0,
+    "lastCompletedProposal": "7Ctnh81g5AnRXk4nWTGpZEijdjFbpafuSEkz4Wwhgk4b"
+  }
+}

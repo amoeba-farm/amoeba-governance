@@ -1,0 +1,80 @@
+{
+  "at": "2026-09-06T17:55:25.692Z",
+  "genesis": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  "simulation": {
+    "context": {
+      "apiVersion": "4.3.0-beta.3",
+      "slot": 494178818
+    },
+    "value": {
+      "accounts": null,
+      "err": {
+        "InstructionError": [
+          2,
+          "InvalidArgument"
+        ]
+      },
+      "fee": 6400,
+      "innerInstructions": null,
+      "loadedAccountsDataSize": 1231802,
+      "loadedAddresses": {
+        "readonly": [],
+        "writable": []
+      },
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program BPFLoaderUpgradeab1e11111111111111111111111 invoke [1]",
+        "ExtendProgram requires a minimum of 10240 additional bytes or to extend to maximum size, but only 5328 were requested",
+        "Program BPFLoaderUpgradeab1e11111111111111111111111 failed: invalid program argument"
+      ],
+      "postBalances": [
+        168243440,
+        833120,
+        6255699960,
+        1,
+        1,
+        1
+      ],
+      "postTokenBalances": [],
+      "preBalances": [
+        168249840,
+        833120,
+        6255699960,
+        1,
+        1,
+        1
+      ],
+      "preTokenBalances": [],
+      "replacementBlockhash": null,
+      "returnData": null,
+      "unitsConsumed": 2670
+    }
+  },
+  "rule": "SIMD-0431 minimum10240bytes for permissionless Loader-v3 extension. Use one exact minimum legal extension; no optional headroom. The existing zero-headroom operator assumption cannot execute on this runtime. ELF bytes/source and council governance unchanged.",
+  "officialSource": "https://raw.githubusercontent.com/anza-xyz/agave/master/programs/bpf_loader/src/lib.rs",
+  "artifacts": [
+    {
+      "name": "controller",
+      "bytes": 202616,
+      "sha256": "50d409bceaebef4ce3edcee9e757b4f995e0405a482ad32f3272e13aa94dca47",
+      "programDataCapacity": 202616,
+      "programDataSha256": "50d409bceaebef4ce3edcee9e757b4f995e0405a482ad32f3272e13aa94dca47",
+      "mandatoryZeroPaddingBytes": 0,
+      "extensionBytes": 11880,
+      "extensionRent": 60350400
+    },
+    {
+      "name": "spread",
+      "bytes": 1236592,
+      "sha256": "0dd6a6def09a8fc690572bf5a430157644b9b1e5ebac60a2f07c481a3bf0d22d",
+      "programDataCapacity": 1241504,
+      "programDataSha256": "23f6d99a47cc79d2babad6758531664414cfc51df313ae82ea2cfd6c32829f87",
+      "mandatoryZeroPaddingBytes": 4912,
+      "extensionBytes": 10240,
+      "extensionRent": 52019200
+    }
+  ]
+}

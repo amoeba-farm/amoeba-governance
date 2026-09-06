@@ -1,0 +1,165 @@
+{
+  "schema": "ameba-v3-governed-demo-setup-release-v1",
+  "genesis": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  "identity": "identity.json",
+  "artifacts": [
+    {
+      "name": "controller",
+      "sourceCommit": "590e3cd65d429338757aca1ca7f21e9bcd012b94",
+      "elf": "governance_controller_v3.so",
+      "bytes": 202616,
+      "sha256": "50d409bceaebef4ce3edcee9e757b4f995e0405a482ad32f3272e13aa94dca47",
+      "features": [],
+      "inputInventorySha256": "1ac9514846f610c3498501767f97a69f40a4649962aa4fb20ab00486a251769b",
+      "independentBuildsMatch": true,
+      "program": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "programData": "7eW9UXcCDrpEAQ93fP7o2zgGMKhAKi3zJLihELjR8xYd",
+      "authority": "Frc28QFQxqUxF9HPgzcmm5VkqorqUb2LeLPE5uKU6Ycp",
+      "sourceCommitment": "30e1eef1e5aa935acb1420e04e63cb98222f77b90735e5ad3b840c622a942bd4",
+      "buildCommitment": "e22e0e32ee1661186dc07f308298d1e6ab0b4b5f3aca457f94cad9ebafde6db9",
+      "merkleRoot": "e280dd6776cdb516bf06b018176635060b42475e64ce9c1625247b91884ad72f",
+      "programDataCapacity": 202616,
+      "mandatoryZeroPaddingBytes": 0,
+      "programDataSha256": "50d409bceaebef4ce3edcee9e757b4f995e0405a482ad32f3272e13aa94dca47",
+      "extensionBytes": 11880
+    },
+    {
+      "name": "spread",
+      "sourceCommit": "d739bcd15068fb79e0b32d0c4eda02703c6417d4",
+      "elf": "light_token_minter.so",
+      "bytes": 1236592,
+      "sha256": "0dd6a6def09a8fc690572bf5a430157644b9b1e5ebac60a2f07c481a3bf0d22d",
+      "features": [
+        "devnet-v3-governance-controller",
+        "devnet-solo-backfill-2026"
+      ],
+      "inputInventorySha256": "edf214041af796af71bdc513ebe81370269a134267a53f91ce2dd20b66fb3afd",
+      "independentBuildsMatch": true,
+      "program": "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
+      "programData": "8KR6hgcQehz32jm7CvrAriYNhvT2Bu9JuUWHce81J1oh",
+      "authority": "4hsEKyThDv85YA4HjUaGWn2nWnVbM5V23XcLrEX3UKzn",
+      "sourceCommitment": "3d6ef2a9be295bde31e154bcf605155e0fc539ff57935e87ba77354e5202db46",
+      "buildCommitment": "3d075bd991d55719d4a7692062e1a901ac3498578e5fc213e64772975b4e17d7",
+      "merkleRoot": "c9acb71cfd85a6ec758ea59e650dabe96e238e06e9c268e1b847db76027fc51f",
+      "programDataCapacity": 1241504,
+      "mandatoryZeroPaddingBytes": 4912,
+      "programDataSha256": "23f6d99a47cc79d2babad6758531664414cfc51df313ae82ea2cfd6c32829f87",
+      "extensionBytes": 10240
+    }
+  ],
+  "actions": {
+    "spread": {
+      "receipt": "spread-receipt.json",
+      "transaction": {
+        "signature": "5E5XQ2PWUNsG5hjNiLdoq9Z3ZKEhf4PFsF4ko5VJ5NKXTsx8nmL7jYFPkwK3YjcJR6VbwQyJhWPwrXJvKjEp5XCi",
+        "confirmationStatus": "finalized",
+        "confirmations": null,
+        "err": null,
+        "slot": 494187634,
+        "status": {
+          "Ok": null
+        }
+      }
+    },
+    "controller": {
+      "receipt": "controller-receipt.json",
+      "transaction": {
+        "signature": "4bjgATxfFcT2r24M778oLZHJDDUicqu4jVMMhCPEsoR9GCZksC1my89CqHz2oBSibKgNwarCJjFmac1MAN6G5dRK",
+        "confirmationStatus": "finalized",
+        "confirmations": null,
+        "err": null,
+        "slot": 494196733,
+        "status": {
+          "Ok": null
+        }
+      }
+    },
+    "activation": {
+      "receipt": "activation-receipt.json",
+      "transaction": {
+        "signature": "7Tz73LyZaJEZg26MM2LqhzFcUUKvFaWwxFBVw13ixzTqaMnVDryS9Vt2nL6nqweBM6oG6Qd38hiP7ZLPmhj4sgG",
+        "confirmationStatus": "finalized",
+        "confirmations": null,
+        "err": null,
+        "slot": 494197070,
+        "status": {
+          "Ok": null
+        }
+      }
+    },
+    "light": {
+      "receipt": "light-receipt.json",
+      "transaction": {
+        "signature": "4eZDXSLV2UTar7jAUeKXTEtXKtmFk7bmQJTNFBotGwucnxMSBdaW8cMBKKERQnHEozABJLAQysjgbwsHpBh2Z9Sq",
+        "confirmationStatus": "finalized",
+        "confirmations": null,
+        "err": null,
+        "slot": 494220926,
+        "status": {
+          "Ok": null
+        }
+      }
+    }
+  },
+  "unchangedCodeOnlyCensuses": {
+    "before-spread": {
+      "at": "2026-09-06T17:10:37.961Z",
+      "startSlot": 494164271,
+      "endSlot": 494164288,
+      "sha256": "514361ee3ee7c4cab9d39512921a0453d10132f3bfe46ff5f3e9e94e401d60da",
+      "programAccountCount": 2459,
+      "externalAccountCount": 48
+    },
+    "after-spread": {
+      "at": "2026-09-06T18:15:38.583Z",
+      "startSlot": 494187785,
+      "endSlot": 494187804,
+      "sha256": "514361ee3ee7c4cab9d39512921a0453d10132f3bfe46ff5f3e9e94e401d60da",
+      "programAccountCount": 2459,
+      "externalAccountCount": 48
+    },
+    "after-controller": {
+      "at": "2026-09-06T18:40:46.031Z",
+      "startSlot": 494196884,
+      "endSlot": 494196894,
+      "sha256": "514361ee3ee7c4cab9d39512921a0453d10132f3bfe46ff5f3e9e94e401d60da",
+      "programAccountCount": 2459,
+      "externalAccountCount": 48
+    }
+  },
+  "runtimeExtension": {
+    "minimumBytes": 10240,
+    "spreadRequestedArtifactGrowthBytes": 5328,
+    "spreadRequiredAllocationGrowthBytes": 10240,
+    "spreadMandatoryZeroPaddingBytes": 4912,
+    "optionalHeadroomBytes": 0,
+    "rejectedExactGrowthSimulation": "runtime-extension-floor.json",
+    "finalizedExtensions": {
+      "spread": {
+        "signature": "5GwmCKAQY8DWmZGukDLbypV4Zsn5G1HtNhjvWS7vheyqY8ykCNP87uLvrVcfjXeZpad6CgXsqawkgevTNj6GhYwa",
+        "confirmationStatus": "finalized",
+        "confirmations": null,
+        "err": null,
+        "slot": 494181065,
+        "status": {
+          "Ok": null
+        }
+      },
+      "controller": {
+        "signature": "wzg5z9amDchwjtKYGvG2nKx6F2HvyEciTxJWTWRh475L1pMVTpD1YQGcgqAtihSDLQzA6XKdgcUuqeJw1SSNPZv",
+        "confirmationStatus": "finalized",
+        "confirmations": null,
+        "err": null,
+        "slot": 494191498,
+        "status": {
+          "Ok": null
+        }
+      }
+    },
+    "evidence": "Finalized extension plus retained rejected exact5328-byte simulation",
+    "primarySource": "https://raw.githubusercontent.com/anza-xyz/agave/master/programs/bpf_loader/src/lib.rs"
+  },
+  "scope": "paired program upgrades, activation, and create-once Light configuration",
+  "marketParityEvidence": "separate final fresh-path audit required",
+  "applicationOrServiceRollout": false
+}
