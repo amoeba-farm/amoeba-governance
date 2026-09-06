@@ -1,0 +1,13 @@
+{
+  "diagnostics": 63,
+  "uniqueUnlinkedFunctions": 17,
+  "diagnosticSymbolsInFinalElf": 0,
+  "controller": {
+    "bytes": 190736,
+    "sha256": "ccde2782b50301290d52387662c4979cc19e186ce0e7461305d4b71598c75e77"
+  },
+  "spread": {
+    "bytes": 1149952,
+    "sha256": "eb03f12a626ce69909c21a2a38c441840fc051ed11f31ee824ae663247859f7a"
+  }
+}

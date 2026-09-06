@@ -135,7 +135,7 @@ async function council() {
   assert.equal(a.executable, false);
   const c = v3.decodeConfigV3(program, v3.deriveConfigV3(program)[0], bytes(a));
   assert(c.treasury.equals(treasury));
-  assert.equal(c.timing.reviewSlots, 1512000n);
+  assert(c.timing.reviewSlots >= 1512000n);
   return c;
 }
 async function proposal() {
@@ -419,6 +419,80 @@ try {
       [],
       true,
     );
+  } else if (stage === "create-timing") {
+    const c = await council();
+    let plan;
+    if (await exists("timing-plan.json")) plan = await load("timing-plan.json");
+    else {
+      plan = {
+        proposalId: c.nextId.toString(),
+        reviewSlots: "4000000",
+        delaySlots: "4500",
+        expirySlots: "7000000",
+      };
+      await save("timing-plan.json", plan);
+    }
+    const timing = {
+      reviewSlots: BigInt(plan.reviewSlots),
+      delaySlots: BigInt(plan.delaySlots),
+      expirySlots: BigInt(plan.expirySlots),
+    };
+    await send(
+      "create-timing",
+      [
+        v3.createV3(
+          { ...c, nextId: BigInt(plan.proposalId) },
+          payer.publicKey,
+          c.seats[0],
+          { kind: "setTiming", timing },
+        ),
+      ],
+      [],
+      [0],
+    );
+    const key = v3.deriveProposalV3(program, BigInt(plan.proposalId))[0],
+      s = await accounts([key]);
+    const p = v3.decodeProposalV3(program, key, bytes(s.value[0]));
+    await save("timing-proposal.json", p);
+    console.log(json({ proposal: key, notBefore: p.notBefore, timing }));
+  } else if (stage === "approve-timing" || stage === "execute-timing") {
+    const c = await council(),
+      plan = await load("timing-plan.json"),
+      key = v3.deriveProposalV3(program, BigInt(plan.proposalId))[0];
+    const s = await accounts([key]),
+      p = v3.decodeProposalV3(program, key, bytes(s.value[0]));
+    if (stage === "approve-timing")
+      await send(
+        "approve-timing",
+        c.seats.slice(0, 3).map((seat) => v3.approveV3(c, p, seat)),
+        [],
+        [0, 1, 2],
+      );
+    else {
+      let now = BigInt(await rpc("getSlot", [{ commitment: "finalized" }]));
+      if (arg === "wait")
+        for (let polls = 0; now < p.notBefore && polls < 120; polls++) {
+          if (polls % 2 === 0)
+            console.log(
+              json({
+                waitingForTimingPolicy: true,
+                remainingSlots: p.notBefore - now,
+                notBefore: p.notBefore,
+              }).trim(),
+            );
+          await delay(30000);
+          now = BigInt(await rpc("getSlot", [{ commitment: "finalized" }]));
+        }
+      assert(now >= p.notBefore);
+      await send("execute-timing", [v3.executePolicyV3(program, p)]);
+      const after = await council();
+      assert.equal(after.timing.reviewSlots, 4000000n);
+      assert.equal(after.timing.expirySlots, 7000000n);
+      await save("timing-finalized.json", after);
+      console.log(
+        json({ timing: after.timing, timingVersion: after.timingVersion }),
+      );
+    }
   } else if (stage === "create-controller") {
     assert(/^[a-f0-9]{40}$/.test(arg), "exact source commit required");
     const c = await council(),
@@ -569,7 +643,22 @@ try {
   } else if (stage === "execute-controller") {
     const c = await council();
     let p = await proposal();
-    const now = BigInt(await rpc("getSlot", [{ commitment: "finalized" }]));
+    let now = BigInt(await rpc("getSlot", [{ commitment: "finalized" }]));
+    if (arg === "wait") {
+      for (let polls = 0; now < p.notBefore && polls < 120; polls++) {
+        if (polls % 2 === 0)
+          console.log(
+            json({
+              waitingForCouncilDelay: true,
+              finalizedSlot: now,
+              notBefore: p.notBefore,
+              remainingSlots: p.notBefore - now,
+            }).trim(),
+          );
+        await delay(30000);
+        now = BigInt(await rpc("getSlot", [{ commitment: "finalized" }]));
+      }
+    }
     assert(now >= p.notBefore, `timelock: ${p.notBefore - now} slots remain`);
     while (
       p.action.artifactLength > (p.extendedCapacity || p.action.capacity)
@@ -592,7 +681,14 @@ try {
     await bufferMatches("spread");
     const c = await council(),
       live = pd((await accounts([v3.deriveProgramdataV3(program)])).value[0]);
-    assert.equal(live.sha256, hash(await artifact("controller")));
+    const candidateHash = hash(await artifact("controller"));
+    const preparedHash = (await exists("top-level-extension.json"))
+      ? (await load("top-level-extension.json")).after.sha256
+      : null;
+    assert(
+      live.sha256 === candidateHash || live.sha256 === preparedHash,
+      "unexpected controller code before fresh deployment",
+    );
     assert(live.authority.equals(c.authority));
     const s = await accounts([target]);
     assert.equal(s.value[0], null, "fresh target already exists");

@@ -53,3 +53,17 @@ the observed Devnet restriction and exercise top-level extension before proposal
 creation. This is not a controller authority bypass: the external instruction can
 allocate bytes but cannot install code or change upgrade authority. Installation
 still requires the council's approved proposal and immutable verified buffer.
+
+## Week window calibrated to current Devnet
+
+The live performance read on September 6 at 02:40 UTC covered 3,600 seconds and
+21,724 slots: about 0.1657 seconds per slot. The original nominal floor of 1,512,000
+slots represents only about 2.9 days at that rate. The council therefore sets its
+live timing profile to 4,000,000 approval slots, 4,500 delay slots, and 7,000,000
+expiry slots. That approval window is about 7.7 days at the measured rate.
+
+The constant named WEEK_SLOTS preserves the initial nominal 400 ms floor and the
+existing proposal validation rules. It is not the live profile after this council
+policy update. Every new action, including program upgrades, snapshots the current
+council timing profile; existing proposals retain their original snapshots. Slot
+counts remain authoritative because their wall-clock duration varies.

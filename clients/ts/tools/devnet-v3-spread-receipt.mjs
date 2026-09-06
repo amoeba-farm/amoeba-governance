@@ -136,9 +136,10 @@ try {
   const council = v3.decodeConfigV3(program, configKey, b(2)),
     proposal = v3.decodeProposalV3(program, proposalKey, b(3)),
     gate = v3.decodeTargetGateV3(program, target, gateKey, b(6));
-  assert.equal(council.timing.reviewSlots, 1512000n);
+  assert.equal(council.timing.reviewSlots, 4000000n);
   assert.equal(council.timing.delaySlots, 4500n);
-  assert.equal(council.timing.expirySlots, 2592000n);
+  assert.equal(council.timing.expirySlots, 7000000n);
+  assert.equal(council.timingVersion, 2n);
   assert.equal(council.councilEpoch, 1n);
   assert.equal(proposal.state, 1);
   assert.equal(proposal.approvalCount, 3);
@@ -196,6 +197,10 @@ try {
     mode: 0o600,
   });
   const stageNames = [
+    "create-timing",
+    "approve-timing",
+    "execute-timing",
+    "extend-top-level",
     "create-controller",
     "approve-controller",
     "execute-controller",
@@ -215,6 +220,21 @@ try {
     stage: "deploy-spread",
     signature: deployResult.signature,
   });
+  const priorRun = "/home/space/.local/state/ameba/spread-v3-devnet-20260905";
+  const prior = async (name) =>
+    JSON.parse(await readFile(priorRun + "/" + name, "utf8"));
+  for (const stage of ["cancel-controller", "close-controller-buffer"]) {
+    signatures.push({
+      stage: "superseded-" + stage,
+      ...(await prior(stage + "-submitted.json")),
+    });
+  }
+  const rejectedExtension = await prior(
+    "extend-controller-169912-simulation.json",
+  );
+  assert.deepEqual(rejectedExtension.value.err, {
+    InstructionError: [2, "ProgramFailedToComplete"],
+  });
   const statuses = await rpc("getSignatureStatuses", [
     signatures.map((s) => s.signature),
     { searchTransactionHistory: true },
@@ -224,6 +244,8 @@ try {
     assert.equal(s.err, null);
     assert.equal(s.confirmationStatus, "finalized");
   });
+  const rate = await load("slot-rate.json");
+  assert(rate.sampleSeconds > 0 && rate.numSlots > 0);
   const receipt = {
     schema: "ameba-fresh-spread-v3-devnet-receipt-v1",
     verifiedAt: new Date().toISOString(),
@@ -240,6 +262,18 @@ try {
       timingVersion: council.timingVersion,
       timing: council.timing,
     },
+    timingCalibration: {
+      observedAt: rate.readAt,
+      sampleCount: rate.sampleCount,
+      sampleSeconds: rate.sampleSeconds,
+      numSlots: rate.numSlots,
+      secondsPerSlot: rate.secondsPerSlot,
+      estimatedApprovalDays:
+        (Number(council.timing.reviewSlots) * rate.secondsPerSlot) / 86400,
+      estimatedDelaySeconds:
+        Number(council.timing.delaySlots) * rate.secondsPerSlot,
+      slotBasedNotWallClockGuaranteed: true,
+    },
     gate: {
       address: gateKey,
       status: "EmergencyFrozen",
@@ -255,6 +289,19 @@ try {
       executedSlot: proposal.executedSlot,
       approvalCount: proposal.approvalCount,
       verifiedChunks: proposal.verifiedCount,
+    },
+    loaderSizing: {
+      mode: "top-level-before-proposal",
+      ...(await load("top-level-extension.json")),
+    },
+    supersededAttempt: {
+      proposalId: "1",
+      submittedExtension: false,
+      cancelledByThreeSeats: true,
+      bufferClosedToTreasury: true,
+      simulationFailure: rejectedExtension.value.logs.find((x) =>
+        x.includes("not supported by inner instructions"),
+      ),
     },
     signatures: signatures.map((s, i) => ({
       ...s,
@@ -282,6 +329,7 @@ try {
       typescriptBuild: true,
       byteIdenticalRepeatBuilds: true,
       independentCleanBuilds: false,
+      checkedExtensionFeatureDisabledInRehearsal: true,
       liveFrozenGateError: 6263,
       artifactChecks: await load("artifact-checks.json"),
       fullHistoricalReleaseSuite: false,
@@ -302,7 +350,7 @@ try {
       `# Fresh Spread under V3 — Devnet\n\n` +
         `Finalized at slot ${snapshot.context.slot}. See [receipt.json](receipt.json) for source, artifact, authority and transaction identities.\n\n` +
         `Spread: \`${target}\`. Controller: \`${program}\`.\n\n` +
-        `The existing KMS council controls both programs through a 3-of-5 quorum. Approval windows are at least 1,512,000 slots (about a week); the independent execution delay is 4,500 slots.\n\n` +
+        `The existing KMS council controls both programs through a 3-of-5 quorum. New proposals receive 4,000,000 approval slots, about 7.7 days at the measured Devnet rate. The independent execution delay is 4,500 slots, and expiry is 7,000,000 slots from creation.\n\n` +
         `Spread's gate is EmergencyFrozen at epoch 1. It owns zero business accounts. No business bootstrap, state migration, activation or application integration was performed.\n\n` +
         `Focused checks: four Rust core checks, three actual-SBF rehearsals (self-upgrade, target adoption/extension/upgrade, and the fresh Spread frozen gate), two TypeScript checks, TypeScript compilation, byte-identical repeat builds and finalized chain verification. Repeat builds reused their caches; this does not claim independent clean reproducible builds or completion of the historical production release suite.\n\n` +
         `Controller artifact source: \`${controllerPlan.sourceCommit}\`. Spread artifact source: \`${spreadPlan.sourceCommit}\`. Artifact diagnostics are recorded in [artifact-checks.json](artifact-checks.json).\n`,
