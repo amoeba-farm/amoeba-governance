@@ -1,7 +1,6 @@
 use crate::{instruction::Instruction, state::*};
 use solana_loader_v3_interface::instruction::{
-    close, extend_program_checked, set_buffer_authority_checked, set_upgrade_authority_checked,
-    upgrade,
+    close, set_buffer_authority_checked, set_upgrade_authority_checked, upgrade,
 };
 use solana_program::{
     account_info::AccountInfo,
@@ -339,12 +338,9 @@ pub fn process(program: &Pubkey, accounts: &[AccountInfo<'_>], data: &[u8]) -> R
         Instruction::ExecuteTargetUpgrade { digest } => {
             execute_upgrade(program, accounts, digest, data, true)
         }
-        Instruction::ExtendTarget { digest } => {
-            extend_controller(program, accounts, digest, data, true)
-        }
         Instruction::ExecuteTargetGate { digest } => execute_target_gate(program, accounts, digest),
-        Instruction::ExtendController { digest } => {
-            extend_controller(program, accounts, digest, data, false)
+        Instruction::ExtendTarget { .. } | Instruction::ExtendController { .. } => {
+            Err(ProgramError::InvalidInstructionData)
         }
     }
 }
@@ -452,6 +448,15 @@ fn create(
     let mut config = config(program, config_info)?;
     seat(&config, creator)?;
     action.validate()?;
+    if action.is_upgrade() {
+        let artifact = action.artifact()?;
+        // Devnet's permissionless top-level Loader extension must be completed
+        // before creating the proposal and snapshotting ProgramData metadata.
+        require(
+            artifact.capacity >= artifact.artifact_length,
+            Error::InvalidArtifact,
+        )?;
+    }
     if action.kind == ROTATE_COUNCIL {
         require(
             !action.seats()?.contains(&config.authority),
@@ -836,85 +841,6 @@ fn execute_upgrade(
         gate.last_completed_proposal = *proposal_info.key;
         save_gate(program, info, &gate)?;
     }
-    save_proposal(program, proposal_info, &p)
-}
-
-/// Grow only toward the approved artifact, in CPI-safe increments. Loader-v3
-/// changes the deployment slot on extension, so installation is a later transaction.
-fn extend_controller(
-    program: &Pubkey,
-    accounts: &[AccountInfo<'_>],
-    digest: [u8; 32],
-    data: &[u8],
-    target_mode: bool,
-) -> Result<()> {
-    let all_accounts = accounts;
-    let (accounts, gate_info) = split_target_accounts(accounts, target_mode)?;
-    let [config_info, proposal_info, controller, programdata, authority, loader, system, payer, ixs] =
-        accounts
-    else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
-    readonly(config_info)?;
-    writable(proposal_info)?;
-    privileges(controller, true, false, true)?;
-    writable(programdata)?;
-    writable(authority)?;
-    executable(loader, &LOADER)?;
-    executable(system, &system_program::ID)?;
-    privileges(payer, true, true, false)?;
-    envelope(program, all_accounts, ixs, data)?;
-    let config = config(program, config_info)?;
-    let mut p = proposal(program, proposal_info, Some(digest))?;
-    let slot = clock()?;
-    p.executable(&config, slot)?;
-    complete(&p)?;
-    let action = p.action.artifact()?;
-    let (key, bump) = upgrade_scope(program, &p, controller, programdata, gate_info)?;
-    require(*authority.key == key, Error::InvalidAccount)?;
-    let before = validate_program_programdata_linkage(controller, programdata, &LOADER)?;
-    let expected_slot = if p.extension_slot == 0 {
-        action.deployed_slot
-    } else {
-        p.extension_slot
-    };
-    let expected_capacity = if p.extension_slot == 0 {
-        action.capacity
-    } else {
-        p.extended_capacity
-    };
-    require(
-        before.upgrade_authority == Some(key)
-            && before.deployed_slot == expected_slot
-            && before.capacity as u64 == expected_capacity
-            && slot > expected_slot
-            && expected_capacity < action.artifact_length,
-        Error::StaleProposal,
-    )?;
-    let delta = (action.artifact_length - expected_capacity).min(10_240) as u32;
-    let bump_bytes = [bump];
-    let seeds = upgrade_authority_seeds(controller.key, &bump_bytes, target_mode);
-    invoke_signed(
-        &extend_program_checked(controller.key, authority.key, Some(payer.key), delta),
-        &[
-            programdata.clone(),
-            controller.clone(),
-            authority.clone(),
-            system.clone(),
-            payer.clone(),
-            loader.clone(),
-        ],
-        &[&seeds],
-    )?;
-    let after = validate_program_programdata_linkage(controller, programdata, &LOADER)?;
-    require(
-        after.upgrade_authority == Some(key)
-            && after.deployed_slot == slot
-            && after.capacity as u64 == expected_capacity + u64::from(delta),
-        Error::InvalidArtifact,
-    )?;
-    p.extension_slot = slot;
-    p.extended_capacity = after.capacity as u64;
     save_proposal(program, proposal_info, &p)
 }
 

@@ -20,7 +20,9 @@ import {
   loadDevnetRpcConfiguration,
   requireSecureDirectory,
 } from "./secure-rpc-env.mjs";
-const run = "/home/space/.local/state/ameba/spread-v3-devnet-20260905";
+const run =
+  process.env.AMEBA_V3_RUN ||
+  "/home/space/.local/state/ameba/spread-v3-devnet-20260905";
 await requireSecureDirectory(run, "fresh Spread run");
 const hash = (x) => createHash("sha256").update(x).digest("hex");
 const json = (x) =>
@@ -295,6 +297,16 @@ try {
   for (const dir of dirs) {
     await mkdir(dir, { recursive: true });
     await writeFile(dir + "/receipt.json", json(receipt));
+    await writeFile(
+      dir + "/README.md",
+      `# Fresh Spread under V3 — Devnet\n\n` +
+        `Finalized at slot ${snapshot.context.slot}. See [receipt.json](receipt.json) for source, artifact, authority and transaction identities.\n\n` +
+        `Spread: \`${target}\`. Controller: \`${program}\`.\n\n` +
+        `The existing KMS council controls both programs through a 3-of-5 quorum. Approval windows are at least 1,512,000 slots (about a week); the independent execution delay is 4,500 slots.\n\n` +
+        `Spread's gate is EmergencyFrozen at epoch 1. It owns zero business accounts. No business bootstrap, state migration, activation or application integration was performed.\n\n` +
+        `Focused checks: four Rust core checks, three actual-SBF rehearsals (self-upgrade, target adoption/extension/upgrade, and the fresh Spread frozen gate), two TypeScript checks, TypeScript compilation, byte-identical repeat builds and finalized chain verification. Repeat builds reused their caches; this does not claim independent clean reproducible builds or completion of the historical production release suite.\n\n` +
+        `Controller artifact source: \`${controllerPlan.sourceCommit}\`. Spread artifact source: \`${spreadPlan.sourceCommit}\`. Artifact diagnostics are recorded in [artifact-checks.json](artifact-checks.json).\n`,
+    );
     await copyFile(
       run + "/artifact-checks.json",
       dir + "/artifact-checks.json",

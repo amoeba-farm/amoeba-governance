@@ -18,7 +18,9 @@ const { loadDevnetRpcConfiguration } = await import(
   root + "/tools/secure-rpc-env.mjs"
 );
 const { stateRpcUrl } = await loadDevnetRpcConfiguration();
-const run = "/home/space/.local/state/ameba/spread-v3-devnet-20260905";
+const run =
+  process.env.AMEBA_V3_RUN ||
+  "/home/space/.local/state/ameba/spread-v3-devnet-20260905";
 const which = process.argv[2];
 assert(["controller", "spread"].includes(which));
 const plan = JSON.parse(

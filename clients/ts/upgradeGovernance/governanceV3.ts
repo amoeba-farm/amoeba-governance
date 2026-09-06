@@ -598,6 +598,12 @@ export function createV3(
     config.seats.some((x) => x.equals(creator)),
     "creator is not a seat",
   );
+  if (action.kind === "upgradeController" || action.kind === "upgradeTarget") {
+    check(
+      action.capacity >= action.artifactLength,
+      "extend ProgramData before creating the upgrade proposal",
+    );
+  }
   if (action.kind === "rotateCouncil")
     check(
       !action.seats.some((s) => s.equals(config.authority)),
@@ -782,23 +788,11 @@ export function extendControllerV3(
   p: ProposalV3,
   payer: PublicKey,
 ): TransactionInstruction {
-  if (p.action.kind !== "upgradeController")
-    throw Error("upgrade proposal required");
-  return build(
-    config.controller,
-    10,
-    [
-      ro(p.config),
-      rw(deriveProposalV3(config.controller, p.id)[0]),
-      rw(config.controller),
-      rw(config.programdata),
-      rw(config.authority),
-      ro(LOADER_V3),
-      ro(SystemProgram.programId),
-      signer(payer, true),
-      ro(SYSVAR_INSTRUCTIONS_PUBKEY),
-    ],
-    hash32(p.digest),
+  void config;
+  void p;
+  void payer;
+  throw Error(
+    "Extend ProgramData with a top-level Loader transaction before creating the upgrade proposal; checked extension CPI is unsupported on Devnet",
   );
 }
 
@@ -864,27 +858,14 @@ export function extendTargetV3(
   p: ProposalV3,
   payer: PublicKey,
 ): TransactionInstruction {
-  if (p.action.kind !== "upgradeTarget") throw Error("target upgrade required");
-  const program = config.controller,
-    target = p.action.target;
-  return build(
-    program,
-    13,
-    [
-      ro(p.config),
-      rw(deriveProposalV3(program, p.id)[0]),
-      rw(target),
-      rw(deriveProgramdataV3(target)),
-      rw(deriveTargetAuthorityV3(program, target)[0]),
-      ro(LOADER_V3),
-      ro(SystemProgram.programId),
-      signer(payer, true),
-      ro(SYSVAR_INSTRUCTIONS_PUBKEY),
-      rw(deriveTargetGateV3(program, target)[0]),
-    ],
-    hash32(p.digest),
+  void config;
+  void p;
+  void payer;
+  throw Error(
+    "Extend ProgramData with a top-level Loader transaction before creating the upgrade proposal; checked extension CPI is unsupported on Devnet",
   );
 }
+
 export function executeTargetGateV3(
   program: PublicKey,
   p: ProposalV3,

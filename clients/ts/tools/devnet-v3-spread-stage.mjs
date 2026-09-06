@@ -33,7 +33,9 @@ import {
 } from "./secure-rpc-env.mjs";
 process.umask(0o077);
 const [stage, arg] = process.argv.slice(2);
-const run = "/home/space/.local/state/ameba/spread-v3-devnet-20260905";
+const run =
+  process.env.AMEBA_V3_RUN ||
+  "/home/space/.local/state/ameba/spread-v3-devnet-20260905";
 await requireSecureDirectory(run, "fresh Spread run");
 const root = path.dirname(fileURLToPath(import.meta.url));
 const program = new PublicKey("8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx");
@@ -352,6 +354,54 @@ try {
         oldSpread: pd(s.value[7]),
       }),
     );
+  } else if (stage === "cancel-controller") {
+    const c = await council(),
+      p = await proposal();
+    await send(
+      "cancel-controller",
+      c.seats.slice(0, 3).map((s) => v3.approveV3(c, p, s, true)),
+      [],
+      [0, 1, 2],
+    );
+    await send("close-controller-buffer", [
+      v3.closeBufferV3(c, await proposal()),
+    ]);
+  } else if (stage === "extend-top-level") {
+    const c = await council(),
+      a = await artifact("controller");
+    const snap = await accounts([v3.deriveProgramdataV3(program)]),
+      before = pd(snap.value[0]);
+    assert.equal(before.sha256, oldControllerHash);
+    assert(before.authority.equals(c.authority));
+    const delta = a.length - before.capacity;
+    assert(delta >= 10240);
+    const data = Buffer.alloc(8);
+    data.writeUInt32LE(6);
+    data.writeUInt32LE(delta, 4);
+    const ix = new TransactionInstruction({
+      programId: v3.LOADER_V3,
+      keys: [
+        {
+          pubkey: v3.deriveProgramdataV3(program),
+          isWritable: true,
+          isSigner: false,
+        },
+        { pubkey: program, isWritable: true, isSigner: false },
+        { pubkey: SystemProgram.programId, isWritable: false, isSigner: false },
+        { pubkey: payer.publicKey, isWritable: true, isSigner: true },
+      ],
+      data,
+    });
+    await send("extend-top-level", [ix]);
+    const afterSnapshot = await accounts([v3.deriveProgramdataV3(program)]),
+      after = pd(afterSnapshot.value[0]);
+    assert(after.authority.equals(c.authority));
+    assert.equal(after.capacity, a.length);
+    const payload = bytes(afterSnapshot.value[0]).subarray(45);
+    assert.equal(hash(payload.subarray(0, before.capacity)), oldControllerHash);
+    assert(payload.subarray(before.capacity).every((x) => x === 0));
+    await save("top-level-extension.json", { before, after, delta });
+    console.log(json({ after, delta }));
   } else if (stage === "fund") {
     assert(/^\d+$/.test(arg));
     const lamports = Number(arg);
@@ -376,7 +426,10 @@ try {
       b = await kp("controller-buffer.json");
     const s = await accounts([v3.deriveProgramdataV3(program)]),
       before = pd(s.value[0]);
-    assert.equal(before.sha256, oldControllerHash);
+    const expectedBefore = (await exists("top-level-extension.json"))
+      ? (await load("top-level-extension.json")).after.sha256
+      : oldControllerHash;
+    assert.equal(before.sha256, expectedBefore);
     assert(before.authority.equals(c.authority));
     let plan;
     if (await exists("controller-plan.json"))

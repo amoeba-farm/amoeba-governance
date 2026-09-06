@@ -103,6 +103,9 @@ async fn actual_sbf_controller_remains_upgradeable_by_three_seats_after_450_slot
     buffer_bytes.extend_from_slice(&artifact);
     let mut test = ProgramTest::default();
     test.prefer_bpf(true);
+    test.deactivate_feature(solana_program::pubkey!(
+        "2oMRZEDWT2tqtYMofhmmfQ8SsjqUFzT6sYXppQDavxwz"
+    ));
     test.add_genesis_account(program, account(LOADER, program_bytes, true));
     test.add_genesis_account(programdata, account(LOADER, pd, false));
     test.add_account(buffer, account(LOADER, buffer_bytes, false));
@@ -149,6 +152,16 @@ async fn actual_sbf_controller_remains_upgradeable_by_three_seats_after_450_slot
         .await,
         "bootstrap"
     );
+    let extend = solana_loader_v3_interface::instruction::extend_program(
+        &program,
+        Some(&ctx.payer.pubkey()),
+        16,
+    );
+    assert!(
+        send(&mut ctx, extend, &[]).await,
+        "top-level extension before proposal"
+    );
+    ctx.warp_to_slot(102).unwrap();
     let pd = ctx
         .banks_client
         .get_account(programdata)
@@ -271,22 +284,6 @@ async fn actual_sbf_controller_remains_upgradeable_by_three_seats_after_450_slot
         GovInstruction::Approve { digest },
     );
     assert!(send(&mut ctx, approve, &[&seats[2]]).await);
-    let extend = ix(
-        program,
-        vec![
-            ro(config_key),
-            rw(proposal_key),
-            rw(program),
-            rw(programdata),
-            rw(authority),
-            ro(LOADER),
-            ro(system_program::ID),
-            AccountMeta::new(ctx.payer.pubkey(), true),
-            ro(sysvar::instructions::ID),
-        ],
-        GovInstruction::ExtendController { digest },
-    );
-    assert!(send(&mut ctx, extend, &[]).await, "council-approved growth");
     ctx.warp_to_slot(proposal.not_before + 2).unwrap();
     assert!(
         send(&mut ctx, execute, &[]).await,

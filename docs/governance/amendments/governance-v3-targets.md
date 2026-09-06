@@ -2,7 +2,7 @@
 
 This user-authorized Devnet extension adds target governance to the existing
 upgradeable V3 council. It preserves the 384-byte council, 400-byte proposal,
-existing action encodings and instruction tags 0–10. It is installed through the
+existing action encodings and instruction tags 0–9. Tags 10 and 13 are retired. It is installed through the
 live V3 council's ordinary self-upgrade mechanism.
 
 New action 3 binds a target program, gate epoch, immutable buffer, exact payload
@@ -18,9 +18,12 @@ one canonical 192-byte gate and atomically transfers Loader-v3 upgrade authority
 to `ameba-governance-v3/target-authority/<target>`. Registration is create-only,
 leaves the gate EmergencyFrozen at epoch 1, and accepts no arbitrary CPI.
 
-Instructions 12/13 install/extend an approved target artifact. The target must
-already be EmergencyFrozen at the action's exact gate epoch. Extension grows only
-toward the approved bytes in Loader-safe 10,240-byte increments. Installation
+Instruction 12 installs an approved target artifact. The target must already be
+EmergencyFrozen at the action's exact gate epoch. ProgramData growth uses the
+cluster's permissionless top-level Loader-v3 ExtendProgram instruction, completed
+before proposal creation. New proposals reject an artifact larger than their
+snapshotted capacity. Tags 10/13 reject before account access; no unsupported
+checked-extension CPI remains reachable. Installation
 checks exact Program/ProgramData linkage and authority, increments the gate epoch,
 records the completed proposal and leaves the gate frozen. Controller upgrades
 cannot consume target proposals and target upgrades cannot address the controller.
@@ -34,3 +37,19 @@ self-upgrade mechanism.
 
 The current deployment scope ends with new Spread registered and frozen. Do not
 initialize business accounts or integrate applications as part of this task.
+
+## Live Devnet loader correction
+
+The initial candidate's extension CPI failed in finalized simulation with
+`Program BPFLoaderUpgradeab1e11111111111111111111111 not supported by inner instructions`.
+No extension or upgrade transaction was submitted for that candidate. Its approved
+proposal was cancelled through the three-seat council and its buffer closed to the
+configured treasury. The replacement first extends ProgramData externally, then
+creates a new proposal against the finalized deployment slot/capacity. This resets
+the ordinary 4,500-slot execution delay while retaining a one-week approval window.
+
+The SBF rehearsals explicitly deactivate `enable_extend_program_checked` to match
+the observed Devnet restriction and exercise top-level extension before proposal
+creation. This is not a controller authority bypass: the external instruction can
+allocate bytes but cannot install code or change upgrade authority. Installation
+still requires the council's approved proposal and immutable verified buffer.

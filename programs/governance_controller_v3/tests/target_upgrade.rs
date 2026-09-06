@@ -106,6 +106,9 @@ async fn actual_sbf_target_adoption_extension_and_upgrade_remain_frozen_after_45
     buffer_bytes.extend_from_slice(&artifact);
     let mut test = ProgramTest::default();
     test.prefer_bpf(true);
+    test.deactivate_feature(solana_program::pubkey!(
+        "2oMRZEDWT2tqtYMofhmmfQ8SsjqUFzT6sYXppQDavxwz"
+    ));
     test.add_genesis_account(program, account(LOADER, program_bytes, true));
     test.add_genesis_account(programdata, account(LOADER, pd.clone(), false));
     let mut target_bytes = 2u32.to_le_bytes().to_vec();
@@ -210,6 +213,16 @@ async fn actual_sbf_target_adoption_extension_and_upgrade_remain_frozen_after_45
         .await,
         "no reinitialization"
     );
+    let extend = solana_loader_v3_interface::instruction::extend_program(
+        &target,
+        Some(&ctx.payer.pubkey()),
+        16,
+    );
+    assert!(
+        send(&mut ctx, extend, &[]).await,
+        "top-level extension before proposal"
+    );
+    ctx.warp_to_slot(102).unwrap();
     let gate_account = ctx
         .banks_client
         .get_account(gate_key)
@@ -348,23 +361,6 @@ async fn actual_sbf_target_adoption_extension_and_upgrade_remain_frozen_after_45
         GovInstruction::Approve { digest },
     );
     assert!(send(&mut ctx, approve, &[&seats[2]]).await);
-    let extend = ix(
-        program,
-        vec![
-            ro(config_key),
-            rw(proposal_key),
-            rw(target),
-            rw(target_pd),
-            rw(target_authority),
-            ro(LOADER),
-            ro(system_program::ID),
-            AccountMeta::new(ctx.payer.pubkey(), true),
-            ro(sysvar::instructions::ID),
-            rw(gate_key),
-        ],
-        GovInstruction::ExtendTarget { digest },
-    );
-    assert!(send(&mut ctx, extend, &[]).await, "council-approved growth");
     ctx.warp_to_slot(proposal.not_before + 2).unwrap();
     assert!(
         send(&mut ctx, execute, &[]).await,
