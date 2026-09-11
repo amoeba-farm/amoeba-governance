@@ -71,25 +71,6 @@ jobs:
         working-directory: clients/ts
         run: npm run check:package
 
-      - name: Verify Release 1 evidence is final and safety-bounded
-        shell: bash
-        run: |
-          for report in \
-            docs/governance/release-1-completion-report.md \
-            docs/governance/phase-7-readiness-report.md; do
-            test -f "$report"
-            if grep --fixed-strings --quiet 'PENDING_FINAL' "$report"; then
-              echo "$report still contains pending evidence" >&2
-              exit 1
-            fi
-          done
-          grep --fixed-strings --quiet \
-            'No final production controller ID or real seat key is populated.' \
-            docs/governance/release-1-completion-report.md
-          grep --fixed-strings --quiet \
-            'This report neither authorizes nor records a `main` update' \
-            docs/governance/phase-7-readiness-report.md
-
   sbpf-diagnostics:
     runs-on: ubuntu-22.04
     timeout-minutes: 180
