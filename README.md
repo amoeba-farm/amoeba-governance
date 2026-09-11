@@ -1,14 +1,14 @@
 # Amoeba Governance
 
-Solana smart contracts for Amoeba's council governance and program upgrades.
-The controller manages proposals, approvals, execution timing, and governance
-gates for registered programs.
+Solana program for a five seated council governance of Amoeba's program upgrades.
+This controller helps to manage proposals, approvals, and governance
+gates and much more for registered programs!
 
 [Website](https://amoeba.farm) · [Amoeba Program](https://github.com/amoeba-farm/amoeba-program) · [Security](SECURITY.md)
 
 ## Architecture
 
-The V3 controller uses a council of five equal seat authorities. Ordinary
+This governance program utilizes a council of five equal seat authorities. Typical
 actions require three approvals. Proposals commit to their action and timing
 parameters; upgrades and gate activation are separate governed operations.
 
