@@ -1,0 +1,43 @@
+{
+  "schema": "amoeba-devnet-refactor-prepared-build-v1",
+  "status": "prepared-not-deployed",
+  "preparedAt": "2026-09-12T10:36:33.497Z",
+  "cluster": "devnet",
+  "genesisHash": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  "programId": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+  "publicRepository": "https://github.com/amoeba-farm/amoeba-governance",
+  "privateSourceCommit": "6b6518c280211c9fc14ea393051092bc3d0b2318",
+  "build": {
+    "tool": "solana-verify 0.5.1",
+    "baseImage": "solanafoundation/solana-verifiable-build@sha256:0b4e3716fad9ca4b4aac3e3f977f43aad93a18c22296c0c0f44fc22e644bdd68",
+    "cargoBuildSbf": "4.0.0",
+    "platformTools": "v1.53",
+    "sbfRustc": "1.89.0",
+    "libraryName": "governance_controller_v3",
+    "architecture": "v0",
+    "mountPath": ".",
+    "workspacePath": ".",
+    "features": [],
+    "cargoBuildSbfArgs": "--tools-version v1.53 --skip-tools-install",
+    "artifactBytes": 203752,
+    "artifactSha256": "93392770af3d0251092d736c3ab8718349b8f5811527bab402ea7a235e947d96",
+    "publicDockerRebuildPerformed": true,
+    "exactPrivateArtifactMatch": true,
+    "publicBuildLogSha256": "d9ad4962d1432024960d0aa27c2ea93065c7c81584fbc5709c06a74d77592c08"
+  },
+  "qualification": {
+    "scope": "User-authorized focused Devnet qualification; the 24 remaining baseline-failing Spread tests were removed at the user request.",
+    "completeSuiteQualificationClaimed": false
+  },
+  "deployment": {
+    "performed": false,
+    "remainingRequirement": "The current Devnet Loader rejects the controller exact 1136-byte extension and requires a minimum 10240-byte allocation. The release specification requires an explicit exception before submission.",
+    "programDataExtensionSubmitted": false,
+    "upgradeSubmitted": false,
+    "verificationMetadataSubmitted": false
+  },
+  "verification": {
+    "hostedRemoteVerificationPerformed": false,
+    "limitation": "Solana hosted remote verification supports Mainnet. Devnet source/build equality and finalized metadata are separate claims."
+  }
+}

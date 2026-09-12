@@ -523,7 +523,7 @@ function ceremonySurfaceCases(): readonly SurfaceCase[] {
     })),
     one("approve-target-authority-handoff", build(authority.buildApproveTargetAuthorityHandoffV1Instruction, approval)),
     one("queue-target-authority-handoff", build(authority.buildQueueTargetAuthorityHandoffV1Instruction, approval)),
-    enveloped("accept-target-authority", handoff, buildCanonicalRelease1LoaderEnvelopeV1(handoff)),
+    one("accept-target-authority", handoff),
     one("create-bootstrap-activation", build(authority.buildCreateBootstrapActivationV1Instruction, {
       expectedControllerImmutabilityDigest: bytes("ceremony-immutability-receipt"),
       expectedHandoffReceiptDigest: bytes("ceremony-handoff-receipt"),
@@ -541,7 +541,7 @@ function ceremonySurfaceCases(): readonly SurfaceCase[] {
       ...approval,
       expectedProposalDigest: bytes("ceremony-activation-proposal"),
     })),
-    enveloped("execute-bootstrap-activation", activation, buildCanonicalRelease1LoaderEnvelopeV1(activation)),
+    one("execute-bootstrap-activation", activation),
   ];
 }
 
@@ -888,18 +888,28 @@ function actualWireBytes(input: Release1PacketPlanningInputV1): number {
 }
 
 test("every current Release 1 operator mutation surface has a bounded packet plan", () => {
-  const surfaces = [
+  const fixtures = [
     ...retainedCouncilSurfaceCases(),
     ...ceremonySurfaceCases(),
     ...currentMutationSurfaceCases(),
   ];
-  assert.equal(surfaces.length, 47);
+  // Preserve real historical payloads as negative planner coverage.
+  const retiredTags = new Set([19, 20, 21, 22, 24, 25, 44, 45, 46, 47, 49, 50, 51, 52]);
+  const retired = fixtures.filter((surface) => retiredTags.has(surface.tag));
+  assert.equal(retired.length, 14);
+  for (const surface of retired) {
+    assert.throws(() => planRelease1TransactionPacketV1(legacyInput(surface)),
+      /controller instruction is not a strict current Release 1 instruction/, surface.label);
+    assert.throws(() => planRelease1TransactionPacketV1(v0Input(surface)),
+      /controller instruction is not a strict current Release 1 instruction/, surface.label);
+  }
+  const surfaces = fixtures.filter((surface) => !retiredTags.has(surface.tag));
+  assert.equal(surfaces.length, 33);
   assert.deepEqual(
     [...new Set(surfaces.map((surface) => surface.tag))].sort((a, b) => a - b),
     [
-      18, 19, 20, 21, 22, 24, 25,
-      ...Array.from({ length: 9 }, (_, index) => index + 39),
-      ...Array.from({ length: 4 }, (_, index) => index + 49),
+      18,
+      ...Array.from({ length: 5 }, (_, index) => index + 39),
       ...Array.from({ length: 27 }, (_, index) => index + 55),
     ],
   );
@@ -944,11 +954,11 @@ test("every current Release 1 operator mutation surface has a bounded packet pla
   }
 
   assert.deepEqual(v0Blockers, [], `non-fitting required v0 surfaces: ${v0Blockers.join(", ")}`);
-  assert.equal(Object.keys(results).length, 47);
+  assert.equal(Object.keys(results).length, 33);
   const evidence = JSON.parse(
     readFileSync(
       new URL(
-        "../../../docs/governance/evidence/release-1-packet-surface-v1.json",
+        "../../../docs/governance/evidence/release-1-current-packet-surface-20260912.json",
         import.meta.url,
       ),
       "utf8",

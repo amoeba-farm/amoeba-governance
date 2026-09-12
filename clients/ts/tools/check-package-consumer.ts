@@ -62,7 +62,7 @@ try {
            "release1LifecycleInstructions" in root ||
            "release1LoaderInstructions" in root ||
            root.artifactMerkleV1.RELEASE1_ARTIFACT_CHUNK_SIZE_V1 !== 16 * 1024 ||
-           root.UPGRADE_GOVERNANCE_CLI_COMMANDS_V1.length !== 49 ||
+           root.UPGRADE_GOVERNANCE_CLI_COMMANDS_V1.length !== 75 ||
            !root.UPGRADE_GOVERNANCE_CLI_COMMANDS_V1.includes("verify-local-ceremony") ||
            !root.OPERATOR_MUTATION_COMMANDS_V1.includes("execute-upgrade") ||
            !root.OPERATOR_MUTATION_COMMANDS_V1.includes("execute-emergency-resolution") ||

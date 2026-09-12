@@ -1,0 +1,149 @@
+{
+  "schema": "amoeba-governance-current-packet-surface-20260912",
+  "packet_limit": 1232,
+  "controller_instruction_tags": "current packet matrix: tag 18, tags 39-43, tags 55-81; retired fixtures remain negative planner tests; liveness tags 82-107 have their separate packet matrix",
+  "measurement": "complete serialized transaction bytes, including shortvec signature count, 64-byte signature slots, and legacy or v0 message",
+  "v0_lookup_policy": "one exact active, warm, operation-bound lookup-table snapshot containing every used nonsigner non-program address",
+  "durable_nonce_policy": "current operator mutation fixtures use the canonical nonce-free envelope; InitializeControllerV2 has a separate exact v0 packet fixture",
+  "surfaces": {
+    "create-candidate-council": {
+      "legacy": 817,
+      "v0": 512
+    },
+    "begin-programdata-observation": {
+      "legacy": 722,
+      "v0": 479
+    },
+    "append-programdata-observation": {
+      "legacy": 499,
+      "v0": 287
+    },
+    "verify-observed-artifact": {
+      "legacy": 737,
+      "v0": 525
+    },
+    "finalize-programdata-observation": {
+      "legacy": 511,
+      "v0": 299
+    },
+    "record-controller-immutability": {
+      "legacy": 662,
+      "v0": 388
+    },
+    "v3-approve-proposal": {
+      "legacy": 696,
+      "v0": 484
+    },
+    "v3-finalize-governance": {
+      "legacy": 525,
+      "v0": 344
+    },
+    "v3-queue-proposal": {
+      "legacy": 490,
+      "v0": 340
+    },
+    "v3-freeze-proposal": {
+      "legacy": 763,
+      "v0": 365
+    },
+    "v3-cancel-proposal": {
+      "legacy": 665,
+      "v0": 484
+    },
+    "v3-expire-proposal": {
+      "legacy": 457,
+      "v0": 338
+    },
+    "v3-guardian-freeze": {
+      "legacy": 696,
+      "v0": 422
+    },
+    "v3-create-emergency-resolution": {
+      "legacy": 848,
+      "v0": 574
+    },
+    "v3-approve-emergency-resolution": {
+      "legacy": 826,
+      "v0": 552
+    },
+    "v3-queue-emergency-resolution": {
+      "legacy": 727,
+      "v0": 453
+    },
+    "v3-execute-emergency-resolution": {
+      "legacy": 1022,
+      "v0": 593
+    },
+    "v3-expire-emergency-resolution": {
+      "legacy": 562,
+      "v0": 443
+    },
+    "v3-create-checkpoint": {
+      "legacy": 1321,
+      "v0": 923
+    },
+    "v3-recast-checkpoint": {
+      "legacy": 1287,
+      "v0": 920
+    },
+    "v3-finalize-checkpoint": {
+      "legacy": 1257,
+      "v0": 797
+    },
+    "v3-bind-programdata-verification": {
+      "legacy": 818,
+      "v0": 482
+    },
+    "v3-finalize-programdata-verification": {
+      "legacy": 775,
+      "v0": 470
+    },
+    "v3-observe-programdata-failure": {
+      "legacy": 1073,
+      "v0": 706
+    },
+    "v3-approve-unfreeze": {
+      "legacy": 1019,
+      "v0": 652
+    },
+    "v3-execute-unfreeze": {
+      "legacy": 1150,
+      "v0": 721
+    },
+    "v3-adopt-buffer": {
+      "legacy": 720,
+      "v0": 446
+    },
+    "v3-verify-buffer": {
+      "legacy": 822,
+      "v0": 641
+    },
+    "v3-finalize-buffer": {
+      "legacy": 625,
+      "v0": 444
+    },
+    "v3-extend-target": {
+      "legacy": 1070,
+      "v0": 672
+    },
+    "v3-execute-upgrade": {
+      "legacy": 1314,
+      "v0": 699
+    },
+    "v3-close-buffer": {
+      "legacy": 634,
+      "v0": 422
+    },
+    "v3-activate-rollback": {
+      "legacy": 1075,
+      "v0": 646
+    }
+  },
+  "legacy_non_fit": {
+    "v3-create-checkpoint": 1321,
+    "v3-recast-checkpoint": 1287,
+    "v3-finalize-checkpoint": 1257,
+    "v3-execute-upgrade": 1314
+  },
+  "v0_non_fit": {}
+}
