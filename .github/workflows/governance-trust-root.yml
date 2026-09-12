@@ -133,7 +133,45 @@ jobs:
               "$(sha256sum "$second" | cut -d ' ' -f 1)"
           done
 
-      # Gates E and F are composed in the current V3 ceremony harness. It
+      - name: Build current V3 council controller
+        shell: bash
+        run: |
+          CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-v3-sbf-target" \
+            cargo-build-sbf --manifest-path programs/governance_controller_v3/Cargo.toml \
+            --arch v1 --tools-version v1.53 \
+            --sbf-out-dir "$RUNNER_TEMP/ameba-gov-v3-sbf" -- --locked
+
+      - name: Build pinned public Spread integration fixture
+        shell: bash
+        run: |
+          # Explicit source and features match the released V3-governed Spread.
+          # This build is only a local ProgramTest fixture; no RPC or keys are used.
+          fixture="$RUNNER_TEMP/amoeba-program-integration"
+          git init "$fixture"
+          git -C "$fixture" remote add origin https://github.com/amoeba-farm/amoeba-program.git
+          git -C "$fixture" fetch --depth 1 origin bed455196bab7471d3f8803aa43e851047401fb2
+          git -C "$fixture" checkout --detach FETCH_HEAD
+          test "$(git -C "$fixture" rev-parse HEAD)" = bed455196bab7471d3f8803aa43e851047401fb2
+          CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-spread-integration-target" \
+            cargo-build-sbf --manifest-path "$fixture/programs/light_token_minter/Cargo.toml" \
+            --arch v1 --tools-version v1.53 --no-default-features \
+            --sbf-out-dir "$RUNNER_TEMP/ameba-spread-integration-sbf" \
+            -- --locked --features devnet-v3-governance-controller,devnet-solo-backfill-2026
+
+      - name: Current V3 council and Spread actual-SBF integration tests
+        shell: bash
+        run: |
+          export AMOEBA_GOV_V3_SBF="$RUNNER_TEMP/ameba-gov-v3-sbf/governance_controller_v3.so"
+          export AMOEBA_FRESH_SPREAD_SBF="$RUNNER_TEMP/ameba-spread-integration-sbf/light_token_minter.so"
+          test -s "$AMOEBA_GOV_V3_SBF"
+          test -s "$AMOEBA_FRESH_SPREAD_SBF"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-host-tests"
+          # Every artifact-dependent V3 test runs here, including self-upgrade,
+          # target upgrade, frozen-gate rejection and create-once Light config.
+          cargo test --locked -p governance_controller_v3 --tests -- --ignored --test-threads=1
+
+      # Legacy controller Gates E and F use the supported V2 handoff and
+      # activation, followed by the V3 custody lifecycle. It
       # executes the production dispatcher as actual controller SBF and invokes
       # the real Loader-v3, including the complete happy path,
       # former-authority rejection, and continuously frozen recoverable
@@ -148,7 +186,7 @@ jobs:
             "$RUNNER_TEMP/ameba-gov-sbpf/v0/receipt.txt")"
           test -f "$AMOEBA_SACRIFICIAL_TARGET_ARTIFACT"
           export AMOEBA_SBPF_TARGET=v0
-          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-v3-happy-v0"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-host-tests"
           cargo test --locked -p upgrade_controller --test ceremony_closure_program_test \
             actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation \
             -- --ignored --exact --test-threads=1
@@ -162,7 +200,7 @@ jobs:
           test -f "$AMOEBA_SACRIFICIAL_TARGET_ARTIFACT"
           export AMOEBA_V3_ROLLBACK_REHEARSAL=1
           export AMOEBA_SBPF_TARGET=v0
-          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-v3-rollback-v0"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-host-tests"
           cargo test --locked -p upgrade_controller --test ceremony_closure_program_test \
             actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation \
             -- --ignored --exact --test-threads=1
@@ -176,7 +214,7 @@ jobs:
           test -f "$AMOEBA_SACRIFICIAL_TARGET_ARTIFACT"
           export AMOEBA_MAXIMUM_GEOMETRY=1
           export AMOEBA_SBPF_TARGET=v0
-          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-max-artifact-v0"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-host-tests"
           cargo test --locked -p upgrade_controller --test ceremony_closure_program_test \
             actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation \
             -- --ignored --exact --test-threads=1
@@ -189,7 +227,7 @@ jobs:
             "$RUNNER_TEMP/ameba-gov-sbpf/v2/receipt.txt")"
           test -f "$AMOEBA_SACRIFICIAL_TARGET_ARTIFACT"
           export AMOEBA_SBPF_TARGET=v2
-          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-v3-happy-v2"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-host-tests"
           cargo test --locked -p upgrade_controller --test ceremony_closure_program_test \
             actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation \
             -- --ignored --exact --test-threads=1
@@ -203,7 +241,7 @@ jobs:
           test -f "$AMOEBA_SACRIFICIAL_TARGET_ARTIFACT"
           export AMOEBA_V3_ROLLBACK_REHEARSAL=1
           export AMOEBA_SBPF_TARGET=v2
-          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-v3-rollback-v2"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-host-tests"
           cargo test --locked -p upgrade_controller --test ceremony_closure_program_test \
             actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation \
             -- --ignored --exact --test-threads=1
@@ -217,7 +255,7 @@ jobs:
           test -f "$AMOEBA_SACRIFICIAL_TARGET_ARTIFACT"
           export AMOEBA_MAXIMUM_GEOMETRY=1
           export AMOEBA_SBPF_TARGET=v2
-          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-max-artifact-v2"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-host-tests"
           cargo test --locked -p upgrade_controller --test ceremony_closure_program_test \
             actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation \
             -- --ignored --exact --test-threads=1

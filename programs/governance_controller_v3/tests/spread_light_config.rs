@@ -89,6 +89,7 @@ async fn send(
 }
 
 #[tokio::test]
+#[ignore = "requires the exact controller/Spread SBF artifacts; explicitly run by the SBF CI job"]
 async fn actual_sbf_council_initializes_exact_spread_light_config_once() {
     let controller = pubkey!("8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx");
     let controller_pd = Pubkey::find_program_address(&[controller.as_ref()], &LOADER).0;

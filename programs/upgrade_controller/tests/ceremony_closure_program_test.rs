@@ -42,16 +42,14 @@ use upgrade_controller::{
     council::compute_council_set_hash,
     error::GovernanceError,
     pda::{
-        derive_authority_pda, derive_bootstrap_activation_pda,
-        derive_bootstrap_activation_receipt_pda, derive_buffer_check_pda,
+        derive_authority_pda, derive_bootstrap_activation_receipt_pda, derive_buffer_check_pda,
         derive_capacity_policy_pda, derive_checkpoint_attestation_pda, derive_checkpoint_pda,
         derive_controller_config_pda, derive_controller_immutability_receipt_pda,
         derive_controller_release_commitment_pda, derive_council_pda,
         derive_current_deployment_state_pda, derive_gate_pda, derive_policy_pda,
         derive_programdata_check_pda, derive_programdata_failure_observation_pda,
-        derive_programdata_observation_pda, derive_proposal_pda, derive_target_handoff_pda,
-        derive_target_handoff_receipt_pda, derive_upgradeable_programdata_address,
-        UPGRADEABLE_LOADER_ID,
+        derive_programdata_observation_pda, derive_proposal_pda, derive_target_handoff_receipt_pda,
+        derive_upgradeable_programdata_address, UPGRADEABLE_LOADER_ID,
     },
     policy::compute_policy_hash,
     programdata_observation_merkle::{
@@ -59,12 +57,7 @@ use upgrade_controller::{
         PROGRAMDATA_OBSERVATION_CHUNK_SIZE_16_KIB, PROGRAMDATA_OBSERVATION_FRONTIER_SLOTS_V1,
         PROGRAMDATA_OBSERVATION_MERKLE_SCHEME_ID_V1,
     },
-    release1_authority_instruction::{
-        AcceptTargetAuthorityCheckedV1, ApproveBootstrapActivationV1,
-        ApproveTargetAuthorityHandoffV1, CeremonyEnvelopeV1, CreateBootstrapActivationV1,
-        CreateTargetAuthorityHandoffV1, ExecuteBootstrapActivationV1, QueueBootstrapActivationV1,
-        QueueTargetAuthorityHandoffV1, RecordControllerImmutabilityV1,
-    },
+    release1_authority_instruction::{CeremonyEnvelopeV1, RecordControllerImmutabilityV1},
     release1_ceremony_digest::{
         compute_bootstrap_activation_deployment_plan_digest_v1,
         compute_bootstrap_activation_receipt_digest_v1,
@@ -81,10 +74,9 @@ use upgrade_controller::{
         VerifyObservedArtifactChunkV1,
     },
     release1_ceremony_state::{
-        BootstrapActivationProposalV1, BootstrapActivationReceiptV1, CeremonyProposalStateV1,
-        ControllerImmutabilityReceiptV1, ControllerReleaseCommitmentV1, CurrentDeploymentStateV1,
-        ProgramDataCapacityPolicyV1, ProgramDataObservationPurposeV1,
-        ProgramDataObservationStatusV1, ProgramDataObservationV1, TargetAuthorityHandoffProposalV1,
+        BootstrapActivationReceiptV1, ControllerImmutabilityReceiptV1,
+        ControllerReleaseCommitmentV1, CurrentDeploymentStateV1, ProgramDataCapacityPolicyV1,
+        ProgramDataObservationPurposeV1, ProgramDataObservationStatusV1, ProgramDataObservationV1,
         TargetAuthorityHandoffReceiptV1, ARTIFACT_BINDING_CHUNK_SIZE_V1,
         BOOTSTRAP_ACTIVATION_RECEIPT_V1_DISCRIMINATOR,
         BOOTSTRAP_ACTIVATION_RECEIPT_V1_RESERVED_LEN, CEREMONY_ACCOUNT_VERSION_V1,
@@ -97,6 +89,17 @@ use upgrade_controller::{
         PROGRAMDATA_CAPACITY_POLICY_V1_RESERVED_LEN, SET_AUTHORITY_CHECKED_FEATURE_ID_V1,
     },
     release1_digest::STATE_CHECKPOINT_HARD_ROOT_DOMAIN_V1,
+    release1_governance_v2::{
+        derive_governance_action_proposal_v2, derive_governance_lifecycle_registry_v2,
+        derive_governance_timing_profile_v1, nominal_governance_timing_profile_v1,
+        ApproveBootstrapActivationProposalV2, ApproveTargetAuthorityHandoffProposalV2,
+        BootstrapActivationProposalV2, CreateBootstrapActivationProposalV2,
+        CreateTargetAuthorityHandoffProposalV2, ExecuteBootstrapActivationProposalV2,
+        ExecuteTargetAuthorityHandoffProposalV2, GovernanceActionGuardV2, GovernanceActionKindV2,
+        GovernanceLifecycleStateV2, GovernanceTimingProfileV1,
+        InitializeGovernanceLifecycleRegistryV2, QueueBootstrapActivationProposalV2,
+        QueueTargetAuthorityHandoffProposalV2, TargetAuthorityHandoffProposalV2,
+    },
     release1_loader_accounts::{
         parse_upgradeable_programdata, LOADER_BUFFER_METADATA_LEN, LOADER_PROGRAMDATA_METADATA_LEN,
         LOADER_PROGRAM_ACCOUNT_LEN, LOADER_STATE_TAG_BUFFER, LOADER_STATE_TAG_PROGRAM,
@@ -1272,6 +1275,8 @@ struct CeremonyHarness {
     capacity_policy: Pubkey,
     controller_release: Pubkey,
     immutability_receipt: Pubkey,
+    lifecycle_registry: Pubkey,
+    timing_profile: Pubkey,
     handoff_proposal: Pubkey,
     handoff_receipt: Pubkey,
     activation_proposal: Pubkey,
@@ -1995,6 +2000,48 @@ async fn record_controller_immutability(
     observed
 }
 
+// Fresh controllers use the V2 registry and timing profile before authority handoff.
+// This is isolated legacy-controller coverage, separate from the upgradeable V3 core.
+async fn initialize_lifecycle_registry(context: &mut CeremonyContext, harness: &CeremonyHarness) {
+    let config: ControllerConfigV1 = state(context, harness.config).await;
+    let council: GovernanceCouncilSetV1 = state(context, harness.council).await;
+    let profile = nominal_governance_timing_profile_v1(
+        derive_governance_timing_profile_v1(&harness.controller, &harness.target, 1).1,
+        harness.config,
+        harness.target,
+        council.version,
+        current_slot(context).await,
+    )
+    .expect("nominal timing profile");
+    let initialize = typed_instruction(
+        harness.controller,
+        vec![
+            sw(context.payer.pubkey()),
+            sr(harness.initializer.pubkey()),
+            ro(harness.controller),
+            ro(harness.controller_programdata),
+            ro(harness.config),
+            ro(harness.policy),
+            ro(harness.council),
+            ro(harness.gate),
+            rw(harness.lifecycle_registry),
+            rw(harness.timing_profile),
+            ro(system_program::ID),
+        ],
+        InitializeGovernanceLifecycleRegistryV2 {
+            expected_initial_timing_profile_version: profile.profile_version,
+            expected_initial_timing_profile_hash: profile.profile_hash,
+            expected_initial_next_proposal_id: config.next_proposal_id,
+            expected_initial_rotation_nonce: 1,
+        }
+        .pack()
+        .expect("initialize lifecycle registry payload"),
+    );
+    submit(context, &[initialize], &[&harness.initializer])
+        .await
+        .expect("initialize supported governance lifecycle");
+}
+
 fn handoff_review_accounts(harness: &CeremonyHarness, observation: Pubkey) -> Vec<AccountMeta> {
     vec![
         ro(harness.controller),
@@ -2010,6 +2057,8 @@ fn handoff_review_accounts(harness: &CeremonyHarness, observation: Pubkey) -> Ve
         ro(harness.target_programdata),
         ro(harness.legacy_authority.pubkey()),
         ro(harness.authority),
+        ro(harness.lifecycle_registry),
+        ro(harness.timing_profile),
         rw(harness.handoff_proposal),
         ro(UPGRADEABLE_LOADER_ID),
     ]
@@ -2025,6 +2074,7 @@ async fn governed_handoff(
         state(context, harness.config).await;
     let council: GovernanceCouncilSetV1 = state(context, harness.council).await;
     let gate: ProtocolGateV1 = state(context, harness.gate).await;
+    let profile: GovernanceTimingProfileV1 = state(context, harness.timing_profile).await;
     let create = typed_instruction(
         harness.controller,
         vec![
@@ -2043,11 +2093,16 @@ async fn governed_handoff(
             ro(harness.target_programdata),
             ro(harness.legacy_authority.pubkey()),
             ro(harness.authority),
+            rw(harness.lifecycle_registry),
+            ro(harness.timing_profile),
             rw(harness.handoff_proposal),
             ro(UPGRADEABLE_LOADER_ID),
             ro(system_program::ID),
         ],
-        CreateTargetAuthorityHandoffV1 {
+        CreateTargetAuthorityHandoffProposalV2 {
+            expected_proposal_id: 1,
+            expected_timing_profile_version: profile.profile_version,
+            expected_timing_profile_hash: profile.profile_hash,
             expected_gate_epoch: gate.epoch,
             expected_target_nonce: config.target_nonce,
             expected_council_version: council.version,
@@ -2055,7 +2110,6 @@ async fn governed_handoff(
             bridge_build_inputs_commitment: digest("spread-bridge-build-inputs"),
             bridge_package_commitment: digest("spread-bridge-package"),
             bridge_release_manifest_commitment: digest("spread-bridge-release-manifest"),
-            plan_valid_until_slot: 10_000,
         }
         .pack()
         .expect("create handoff payload"),
@@ -2063,7 +2117,7 @@ async fn governed_handoff(
     submit(context, &[create], &[&harness.seats[0]])
         .await
         .expect("create governed handoff");
-    let draft: TargetAuthorityHandoffProposalV1 = state(context, harness.handoff_proposal).await;
+    let draft: TargetAuthorityHandoffProposalV2 = state(context, harness.handoff_proposal).await;
     advance_to_slot(context, draft.review_start_slot)
         .await
         .expect("handoff review slot");
@@ -2073,11 +2127,14 @@ async fn governed_handoff(
         let approve = typed_instruction(
             harness.controller,
             accounts,
-            ApproveTargetAuthorityHandoffV1 {
-                expected_proposal_digest: draft.proposal_digest,
-                expected_council_version: council.version,
-                expected_gate_epoch: gate.epoch,
-                expected_target_nonce: config.target_nonce,
+            ApproveTargetAuthorityHandoffProposalV2 {
+                guard: GovernanceActionGuardV2 {
+                    proposal_id: draft.proposal_id,
+                    expected_proposal_digest: draft.proposal_digest,
+                    expected_council_version: council.version,
+                    expected_timing_profile_version: profile.profile_version,
+                    expected_timing_profile_hash: profile.profile_hash,
+                },
             }
             .pack()
             .expect("approve handoff payload"),
@@ -2086,16 +2143,19 @@ async fn governed_handoff(
             .await
             .expect("approve governed handoff");
     }
-    let approved: TargetAuthorityHandoffProposalV1 = state(context, harness.handoff_proposal).await;
-    assert_eq!(approved.state, CeremonyProposalStateV1::CouncilApproved);
+    let approved: TargetAuthorityHandoffProposalV2 = state(context, harness.handoff_proposal).await;
+    assert_eq!(approved.state, GovernanceLifecycleStateV2::CouncilApproved);
     let queue = typed_instruction(
         harness.controller,
         handoff_review_accounts(harness, observation_key),
-        QueueTargetAuthorityHandoffV1 {
-            expected_proposal_digest: approved.proposal_digest,
-            expected_council_version: council.version,
-            expected_gate_epoch: gate.epoch,
-            expected_target_nonce: config.target_nonce,
+        QueueTargetAuthorityHandoffProposalV2 {
+            guard: GovernanceActionGuardV2 {
+                proposal_id: approved.proposal_id,
+                expected_proposal_digest: approved.proposal_digest,
+                expected_council_version: council.version,
+                expected_timing_profile_version: profile.profile_version,
+                expected_timing_profile_hash: profile.profile_hash,
+            },
         }
         .pack()
         .expect("queue handoff payload"),
@@ -2103,12 +2163,18 @@ async fn governed_handoff(
     submit(context, &[queue], &[])
         .await
         .expect("queue governed handoff");
-    let queued: TargetAuthorityHandoffProposalV1 = state(context, harness.handoff_proposal).await;
+    let queued: TargetAuthorityHandoffProposalV2 = state(context, harness.handoff_proposal).await;
     advance_to_slot(context, queued.not_before_slot)
         .await
         .expect("handoff execution slot");
-    let accept_payload = AcceptTargetAuthorityCheckedV1 {
-        expected_proposal_digest: queued.proposal_digest,
+    let accept_payload = ExecuteTargetAuthorityHandoffProposalV2 {
+        guard: GovernanceActionGuardV2 {
+            proposal_id: queued.proposal_id,
+            expected_proposal_digest: queued.proposal_digest,
+            expected_council_version: council.version,
+            expected_timing_profile_version: profile.profile_version,
+            expected_timing_profile_hash: profile.profile_hash,
+        },
         expected_bridge_observation_digest: observation.observation_digest,
         expected_gate_epoch: gate.epoch,
         expected_target_nonce: config.target_nonce,
@@ -2126,6 +2192,8 @@ async fn governed_handoff(
             ro(harness.gate),
             ro(harness.capacity_policy),
             ro(harness.immutability_receipt),
+            ro(harness.lifecycle_registry),
+            ro(harness.timing_profile),
             rw(harness.handoff_proposal),
             ro(observation_key),
             ro(harness.target),
@@ -2168,6 +2236,8 @@ fn activation_review_accounts(harness: &CeremonyHarness, observation: Pubkey) ->
         ro(harness.target),
         ro(harness.target_programdata),
         ro(harness.authority),
+        ro(harness.lifecycle_registry),
+        ro(harness.timing_profile),
         rw(harness.activation_proposal),
         ro(UPGRADEABLE_LOADER_ID),
     ]
@@ -2182,7 +2252,7 @@ fn activation_expected_accounts(
     gate: &ProtocolGateV1,
     immutable: &ControllerImmutabilityReceiptV1,
     handoff: &TargetAuthorityHandoffReceiptV1,
-    proposal: &BootstrapActivationProposalV1,
+    proposal: &BootstrapActivationProposalV2,
     observation_key: Pubkey,
     observation: &ProgramDataObservationV1,
     execution_slot: u64,
@@ -2296,6 +2366,7 @@ async fn governed_activation(
     let policy: GovernancePolicyV1 = state(context, harness.policy).await;
     let council: GovernanceCouncilSetV1 = state(context, harness.council).await;
     let gate: ProtocolGateV1 = state(context, harness.gate).await;
+    let profile: GovernanceTimingProfileV1 = state(context, harness.timing_profile).await;
     let create = typed_instruction(
         harness.controller,
         vec![
@@ -2314,20 +2385,22 @@ async fn governed_activation(
             ro(harness.target),
             ro(harness.target_programdata),
             ro(harness.authority),
+            rw(harness.lifecycle_registry),
+            ro(harness.timing_profile),
             rw(harness.activation_proposal),
-            rw(harness.activation_receipt),
-            rw(harness.deployment),
             ro(UPGRADEABLE_LOADER_ID),
             ro(system_program::ID),
         ],
-        CreateBootstrapActivationV1 {
+        CreateBootstrapActivationProposalV2 {
+            expected_proposal_id: 2,
+            expected_timing_profile_version: profile.profile_version,
+            expected_timing_profile_hash: profile.profile_hash,
             expected_controller_immutability_digest: immutable.receipt_digest,
             expected_handoff_receipt_digest: handoff.receipt_digest,
             expected_bridge_observation_digest: observation.observation_digest,
             expected_gate_epoch: gate.epoch,
             expected_target_nonce: config.target_nonce,
             expected_council_version: council.version,
-            plan_valid_until_slot: 10_000,
         }
         .pack()
         .expect("create activation payload"),
@@ -2335,7 +2408,7 @@ async fn governed_activation(
     submit(context, &[create], &[&harness.seats[0]])
         .await
         .expect("create governed bootstrap activation");
-    let draft: BootstrapActivationProposalV1 = state(context, harness.activation_proposal).await;
+    let draft: BootstrapActivationProposalV2 = state(context, harness.activation_proposal).await;
     advance_to_slot(context, draft.review_start_slot)
         .await
         .expect("activation review slot");
@@ -2345,11 +2418,14 @@ async fn governed_activation(
         let approve = typed_instruction(
             harness.controller,
             accounts,
-            ApproveBootstrapActivationV1 {
-                expected_proposal_digest: draft.proposal_digest,
-                expected_council_version: council.version,
-                expected_gate_epoch: gate.epoch,
-                expected_target_nonce: config.target_nonce,
+            ApproveBootstrapActivationProposalV2 {
+                guard: GovernanceActionGuardV2 {
+                    proposal_id: draft.proposal_id,
+                    expected_proposal_digest: draft.proposal_digest,
+                    expected_council_version: council.version,
+                    expected_timing_profile_version: profile.profile_version,
+                    expected_timing_profile_hash: profile.profile_hash,
+                },
             }
             .pack()
             .expect("approve activation payload"),
@@ -2358,15 +2434,18 @@ async fn governed_activation(
             .await
             .expect("approve bootstrap activation");
     }
-    let approved: BootstrapActivationProposalV1 = state(context, harness.activation_proposal).await;
+    let approved: BootstrapActivationProposalV2 = state(context, harness.activation_proposal).await;
     let queue = typed_instruction(
         harness.controller,
         activation_review_accounts(harness, observation_key),
-        QueueBootstrapActivationV1 {
-            expected_proposal_digest: approved.proposal_digest,
-            expected_council_version: council.version,
-            expected_gate_epoch: gate.epoch,
-            expected_target_nonce: config.target_nonce,
+        QueueBootstrapActivationProposalV2 {
+            guard: GovernanceActionGuardV2 {
+                proposal_id: approved.proposal_id,
+                expected_proposal_digest: approved.proposal_digest,
+                expected_council_version: council.version,
+                expected_timing_profile_version: profile.profile_version,
+                expected_timing_profile_hash: profile.profile_hash,
+            },
         }
         .pack()
         .expect("queue activation payload"),
@@ -2374,7 +2453,7 @@ async fn governed_activation(
     submit(context, &[queue], &[])
         .await
         .expect("queue bootstrap activation");
-    let queued: BootstrapActivationProposalV1 = state(context, harness.activation_proposal).await;
+    let queued: BootstrapActivationProposalV2 = state(context, harness.activation_proposal).await;
     advance_to_slot(context, queued.not_before_slot)
         .await
         .expect("activation execution slot");
@@ -2394,6 +2473,7 @@ async fn governed_activation(
     let execute = typed_instruction(
         harness.controller,
         vec![
+            sw(context.payer.pubkey()),
             ro(harness.controller),
             ro(harness.controller_programdata),
             ro(harness.config),
@@ -2403,6 +2483,8 @@ async fn governed_activation(
             ro(harness.capacity_policy),
             ro(harness.immutability_receipt),
             ro(harness.handoff_receipt),
+            ro(harness.lifecycle_registry),
+            ro(harness.timing_profile),
             rw(harness.activation_proposal),
             ro(observation_key),
             ro(harness.target),
@@ -2411,10 +2493,17 @@ async fn governed_activation(
             ro(UPGRADEABLE_LOADER_ID),
             rw(harness.activation_receipt),
             rw(harness.deployment),
+            ro(system_program::ID),
             ro(sysvar_ids::instructions::ID),
         ],
-        ExecuteBootstrapActivationV1 {
-            expected_proposal_digest: queued.proposal_digest,
+        ExecuteBootstrapActivationProposalV2 {
+            guard: GovernanceActionGuardV2 {
+                proposal_id: queued.proposal_id,
+                expected_proposal_digest: queued.proposal_digest,
+                expected_council_version: council.version,
+                expected_timing_profile_version: profile.profile_version,
+                expected_timing_profile_hash: profile.profile_hash,
+            },
             expected_bridge_observation_digest: observation.observation_digest,
             expected_gate_epoch: gate.epoch,
             expected_target_nonce: config.target_nonce,
@@ -3443,9 +3532,23 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         capacity_policy: derive_capacity_policy_pda(&controller, &target).0,
         controller_release: derive_controller_release_commitment_pda(&controller, &target).0,
         immutability_receipt: derive_controller_immutability_receipt_pda(&controller, &target).0,
-        handoff_proposal: derive_target_handoff_pda(&controller, &target, 1).0,
+        lifecycle_registry: derive_governance_lifecycle_registry_v2(&controller, &target).0,
+        timing_profile: derive_governance_timing_profile_v1(&controller, &target, 1).0,
+        handoff_proposal: derive_governance_action_proposal_v2(
+            &controller,
+            &target,
+            GovernanceActionKindV2::TargetAuthorityHandoff,
+            1,
+        )
+        .0,
         handoff_receipt: derive_target_handoff_receipt_pda(&controller, &target).0,
-        activation_proposal: derive_bootstrap_activation_pda(&controller, &target, 1).0,
+        activation_proposal: derive_governance_action_proposal_v2(
+            &controller,
+            &target,
+            GovernanceActionKindV2::BootstrapActivation,
+            2,
+        )
+        .0,
         activation_receipt: derive_bootstrap_activation_receipt_pda(&controller, &target).0,
         deployment: derive_current_deployment_state_pda(&controller, &target).0,
         initializer,
@@ -3624,6 +3727,7 @@ async fn actual_controller_sbf_checked_handoff_and_governed_bootstrap_activation
         .await
         .expect("activate exact Loader-upgraded SBF programs");
     initialize_controller(&mut context, &harness, &controller_artifact).await;
+    initialize_lifecycle_registry(&mut context, &harness).await;
     let bootstrap_gate: ProtocolGateV1 = state(&mut context, harness.gate).await;
     assert_eq!(bootstrap_gate.status, GateStatusV1::EmergencyFrozen);
     assert_eq!(bootstrap_gate.epoch, 1);

@@ -40,6 +40,7 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
     "check:package": "npm run build && node --import tsx tools/check-package-consumer.ts && npm pack --dry-run --json",
+    "pretest": "npm run build",
     "test": "npm run check:vectors && npm run check:bridge && npm run check:release1-vectors && node --import tsx --test upgradeGovernance/*.test.ts"
   },
   "dependencies": {

@@ -72,6 +72,7 @@ async fn send(
 }
 
 #[tokio::test]
+#[ignore = "requires AMOEBA_GOV_V3_SBF; explicitly run by the SBF CI job"]
 async fn actual_sbf_controller_remains_upgradeable_by_three_seats_after_450_slots() {
     let file = std::env::var("AMOEBA_GOV_V3_SBF")
         .expect("AMOEBA_GOV_V3_SBF must select this worktree's final ELF");

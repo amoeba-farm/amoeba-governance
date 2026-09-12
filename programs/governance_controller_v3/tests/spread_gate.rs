@@ -15,6 +15,7 @@ use solana_sdk_ids::bpf_loader_upgradeable::ID as LOADER;
 use upgrade_controller::state::{GateStatusV1, ProtocolGateV1};
 
 #[tokio::test]
+#[ignore = "requires the exact controller/Spread SBF artifacts; explicitly run by the SBF CI job"]
 async fn fresh_spread_elf_rejects_business_dispatch_while_v3_gate_is_frozen() {
     let program = pubkey!("2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw");
     let controller = pubkey!("8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx");
