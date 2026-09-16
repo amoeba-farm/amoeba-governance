@@ -163,6 +163,8 @@ jobs:
         run: |
           export AMOEBA_GOV_V3_SBF="$RUNNER_TEMP/ameba-gov-v3-sbf/governance_controller_v3.so"
           export AMOEBA_FRESH_SPREAD_SBF="$RUNNER_TEMP/ameba-spread-integration-sbf/light_token_minter.so"
+          export AMOEBA_OTTER_VERIFY_SBF="$RUNNER_TEMP/otter-verify-pinned.so"
+          node clients/ts/tools/fetch-otter-verification-fixture.mjs "$AMOEBA_OTTER_VERIFY_SBF"
           test -s "$AMOEBA_GOV_V3_SBF"
           test -s "$AMOEBA_FRESH_SPREAD_SBF"
           export CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-host-tests"

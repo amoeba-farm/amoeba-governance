@@ -1,0 +1,27 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {PublicKey, Transaction} from "@solana/web3.js";
+import {DEFAULT_TIMING_V3, DEVNET_SPREAD_V3, deriveAuthorityV3, deriveConfigV3, deriveProgramdataV3, deriveTargetAuthorityV3, deriveVerificationMetadataV3, encodeActionV3, publishVerificationV3, verificationParamsV3, type ConfigV3, type ProposalV3} from "./governanceV3.js";
+const controller = new PublicKey(Buffer.alloc(32,31));
+const key=(n:number)=>new PublicKey(Buffer.alloc(32,n));
+const config:ConfigV3={bump:deriveConfigV3(controller)[1],controller,programdata:deriveProgramdataV3(controller),authority:deriveAuthorityV3(controller)[0],treasury:key(32),seats:[40,41,42,43,44].map(key),councilEpoch:1n,timingVersion:1n,timing:DEFAULT_TIMING_V3,nextId:2n};
+function proposal(target:PublicKey):ProposalV3 {return {bump:0,config:deriveConfigV3(controller)[0],id:1n,councilEpoch:1n,timingVersion:1n,timing:DEFAULT_TIMING_V3,created:100n,reviewEnd:1512100n,notBefore:4600n,expires:2592100n,action:{kind:"publishVerification",target,deployedSlot:123n,commit:"ab".repeat(20)},digest:Buffer.alloc(32,42),approvals:7,approvalCount:3,cancellations:0,cancellationCount:0,state:0,verifiedChunks:Buffer.alloc(12),verifiedCount:0,extensionSlot:0n,extendedCapacity:0n,executedSlot:0n};}
+test("fixed verification action wire; rejects malformed commits and targets",()=>{
+ const p=proposal(controller);assert.equal(encodeActionV3(p.action).toString("hex"),"06"+"1f".repeat(32)+"7b00000000000000"+"ab".repeat(20)+"00".repeat(132));
+ for(const commit of ["", "00".repeat(20), "AB".repeat(20), "ab".repeat(21), "not a sha"]){assert.throws(()=>encodeActionV3({kind:"publishVerification",target:controller,deployedSlot:123n,commit}));}
+ assert.throws(()=>verificationParamsV3(controller,{kind:"publishVerification",target:key(99),deployedSlot:123n,commit:"ab".repeat(20)}));
+});
+test("pinned public recipes and instruction accounts stay bounded",()=>{
+ for(const target of [controller,DEVNET_SPREAD_V3]){
+  const p=proposal(target);assert(p.action.kind==="publishVerification");const bytes=verificationParamsV3(controller,p.action);
+  let offset=0;const string=()=>{const size=bytes.readUInt32LE(offset);offset+=4;const s=bytes.subarray(offset,offset+size).toString();offset+=size;return s;};
+  assert.equal(string(),"0.5.1");assert.equal(string(),`https://github.com/amoeba-farm/${target.equals(controller)?"amoeba-governance":"amoeba-program"}`);assert.equal(string(),"ab".repeat(20));
+  const count=bytes.readUInt32LE(offset);offset+=4;const args=Array.from({length:count},string);assert(!args.includes("--locked"));assert(args.includes("v1"));assert.equal(bytes.readBigUInt64LE(offset),123n);assert.equal(offset+8,bytes.length);assert(bytes.length<=640);
+  if(!target.equals(controller))assert(args.includes("mainnet-v3,devnet-solo-backfill-2026"));
+  const ix=publishVerificationV3(config,p,key(50));assert.equal(ix.data.toString("hex"),"10"+"2a".repeat(32));
+  const authority=target.equals(controller)?config.authority:deriveTargetAuthorityV3(controller,target)[0];
+  assert(ix.keys[5]!.pubkey.equals(authority));assert(ix.keys[6]!.pubkey.equals(deriveVerificationMetadataV3(authority,target)[0]));assert.equal(ix.keys[5]!.isSigner,false);
+  assert.equal(ix.keys.length,target.equals(controller)?10:11);
+  const tx=new Transaction({feePayer:key(50),recentBlockhash:PublicKey.default.toBase58()}).add(ix);assert(tx.serialize({requireAllSignatures:false,verifySignatures:false}).length<=1232);
+ }
+});

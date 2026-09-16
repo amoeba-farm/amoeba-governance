@@ -38,6 +38,34 @@ export const DEFAULT_TIMING_V3: Readonly<TimingV3> = Object.freeze({
   delaySlots: 4_500n,
   expirySlots: 2_592_000n,
 });
+export const OTTER_VERIFY_PROGRAM_V3 = new PublicKey("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
+export const VERIFICATION_BUILD_IMAGE_V3 = "solanafoundation/solana-verifiable-build@sha256:0b4e3716fad9ca4b4aac3e3f977f43aad93a18c22296c0c0f44fc22e644bdd68";
+export function deriveVerificationMetadataV3(authority: PublicKey, target: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([Buffer.from("otter_verify"), authority.toBuffer(), target.toBuffer()], OTTER_VERIFY_PROGRAM_V3);
+}
+/** Exact bounded recipe constructed by instruction 16; never includes RPC credentials. */
+export function verificationParamsV3(controller: PublicKey, action: Extract<ActionV3, {kind: "publishVerification"}>): Buffer {
+  encodeActionV3(action);
+  const own = action.target.equals(controller);
+  check(own || action.target.equals(DEVNET_SPREAD_V3), "unsupported verification target");
+  const args = own ? [] : ["--mount-path", "programs/light_token_minter", "--workspace-path", "programs/light_token_minter"];
+  args.push("--library-name", own ? "governance_controller_v3" : "light_token_minter", "--base-image", VERIFICATION_BUILD_IMAGE_V3, "--arch", "v1");
+  if (!own) args.push("--", "--no-default-features", "--features", "mainnet-v3,devnet-solo-backfill-2026");
+  const string = (s: string) => Buffer.concat([uint(Buffer.byteLength(s), 4), Buffer.from(s)]);
+  return Buffer.concat([string("0.5.1"), string(`https://github.com/amoeba-farm/${own ? "amoeba-governance" : "amoeba-program"}`), string(action.commit), uint(args.length, 4), ...args.map(string), u64(action.deployedSlot)]);
+}
+export function publishVerificationV3(config: ConfigV3, proposal: ProposalV3, payer: PublicKey): TransactionInstruction {
+  check(proposal.action.kind === "publishVerification", "verification proposal required");
+  const action = proposal.action as Extract<ActionV3, {kind: "publishVerification"}>;
+  verificationParamsV3(config.controller, action);
+  check(proposal.config.equals(deriveConfigV3(config.controller)[0]), "proposal config mismatch");
+  const own = action.target.equals(config.controller);
+  const authority = own ? deriveAuthorityV3(config.controller)[0] : deriveTargetAuthorityV3(config.controller, action.target)[0];
+  const keys = [signer(payer, true), ro(proposal.config), rw(deriveProposalV3(config.controller, proposal.id)[0]), ro(action.target), ro(deriveProgramdataV3(action.target)), rw(authority), rw(deriveVerificationMetadataV3(authority, action.target)[0]), ro(OTTER_VERIFY_PROGRAM_V3), ro(SystemProgram.programId), ro(SYSVAR_INSTRUCTIONS_PUBKEY)];
+  if (!own) keys.push(ro(deriveTargetGateV3(config.controller, action.target)[0]));
+  check(new Set(keys.map(k => k.pubkey.toBase58())).size === keys.length, "duplicate verification accounts");
+  return build(config.controller, 16, keys, hash32(proposal.digest));
+}
 export interface ConfigV3 {
   bump: number;
   controller: PublicKey;
@@ -91,6 +119,12 @@ export type ActionV3 =
       rent: LightRentPolicyV3;
       writeTopUp: number;
       addressTree: PublicKey;
+    }
+  | {
+      kind: "publishVerification";
+      target: PublicKey;
+      deployedSlot: bigint;
+      commit: string;
     };
 export interface ProposalV3 {
   bump: number;
@@ -226,6 +260,11 @@ export const deriveSpreadRentSponsorV3 = () =>
 export function encodeActionV3(action: ActionV3): Buffer {
   let tag: number, body: Buffer;
   switch (action.kind) {
+    case "publishVerification":
+      check(!action.target.equals(PublicKey.default) && /^[0-9a-f]{40}$/.test(action.commit) && !/^0{40}$/.test(action.commit), "invalid verification policy");
+      tag = 6;
+      body = Buffer.concat([action.target.toBuffer(), u64(action.deployedSlot), Buffer.from(action.commit, "hex")]);
+      break;
     case "upgradeController":
       check(
         !action.buffer.equals(PublicKey.default) &&
@@ -404,6 +443,8 @@ function decodeActionV3(data: Buffer): ActionV3 {
       },
       writeTopUp: r.bytes(4).readUInt32LE(), addressTree: r.key(),
     };
+  } else if (kind === 6) {
+    result = { kind: "publishVerification", target: r.key(), deployedSlot: r.u64(), commit: r.bytes(20).toString("hex") };
   } else throw Error("unknown action");
   r.reserved(data.length - r.offset);
   check(encodeActionV3(result).equals(data), "noncanonical action");

@@ -157,7 +157,7 @@ fn fixed_accounts_and_digest_reject_timing_action_padding_and_trailing_drift() {
 #[test]
 fn closed_dispatch_rejects_every_unknown_tag_before_accounts() {
     let program = Pubkey::new_unique();
-    for tag in 16..=255u8 {
+    for tag in 17..=255u8 {
         assert_eq!(
             governance_controller_v3::process_instruction(&program, &[], &[tag]),
             Err(solana_program::program_error::ProgramError::InvalidInstructionData)
@@ -166,6 +166,92 @@ fn closed_dispatch_rejects_every_unknown_tag_before_accounts() {
     assert!(Instruction::unpack(&vec![0; MAX_DATA + 1]).is_err());
     assert!(Instruction::unpack(&[6, 0]).is_err());
     assert!(Instruction::unpack(&[]).is_err());
+}
+
+#[test]
+fn verification_policy_fixed_wire_and_existing_governance_rules() {
+    use governance_controller_v3::verification::*;
+    let (program, config, mut proposal) = sample();
+    let policy = VerificationPolicy {
+        target: program,
+        deployed_slot: 123,
+        commit: [0xab; 20],
+    };
+    let body = policy.try_to_vec().unwrap();
+    assert_eq!(body.len(), 60);
+    proposal.action = Action {
+        kind: PUBLISH_VERIFICATION,
+        data: [0; 192],
+    };
+    proposal.action.data[..60].copy_from_slice(&body);
+    assert_eq!(
+        proposal.action.try_to_vec().unwrap(),
+        [
+            vec![6],
+            vec![31; 32],
+            123u64.to_le_bytes().to_vec(),
+            vec![0xab; 20],
+            vec![0; 132]
+        ]
+        .concat()
+    );
+    proposal.action.validate().unwrap();
+    assert!(!proposal.action.is_upgrade());
+    for offset in 60..192 {
+        let mut bad = proposal.action.clone();
+        bad.data[offset] = 1;
+        assert!(bad.validate().is_err());
+    }
+    let params = policy.params(&program).unwrap();
+    assert!(params
+        .windows(b"https://github.com/amoeba-farm/amoeba-governance".len())
+        .any(|w| w == b"https://github.com/amoeba-farm/amoeba-governance"));
+    assert!(!params.windows(8).any(|w| w == b"api-key="));
+    let foreign = VerificationPolicy {
+        target: Pubkey::new_unique(),
+        ..policy.clone()
+    };
+    assert!(foreign.params(&program).is_err());
+    let zero_commit = VerificationPolicy {
+        commit: [0; 20],
+        ..policy.clone()
+    };
+    assert!(zero_commit.validate().is_err());
+    let target = VerificationPolicy {
+        target: DEVNET_SPREAD,
+        ..policy.clone()
+    };
+    assert!(target.params(&program).unwrap().len() <= 640);
+    let encoded = Instruction::PublishVerification { digest: [42; 32] }
+        .try_to_vec()
+        .unwrap();
+    assert_eq!(encoded, [vec![16], vec![42; 32]].concat());
+    assert!(Instruction::unpack(&encoded).is_ok());
+    assert!(Instruction::unpack(&encoded[..32]).is_err());
+    assert!(Instruction::unpack(&[encoded, vec![0]].concat()).is_err());
+    proposal.digest = proposal.compute_digest(&program).unwrap();
+    let key = proposal_pda(&program, proposal.id).0;
+    proposal.validate(&program, &key).unwrap();
+    let digest = proposal.digest;
+    for offset in [0, 32, 40] {
+        let mut changed = proposal.clone();
+        changed.action.data[offset] ^= 1;
+        assert_ne!(changed.compute_digest(&program).unwrap(), digest);
+    }
+    for mask in 0..32u8 {
+        let mut p = proposal.clone();
+        p.approvals = mask;
+        p.approval_count = mask.count_ones() as u8;
+        assert_eq!(
+            p.executable(&config, p.not_before).is_ok(),
+            mask.count_ones() >= 3
+        );
+        assert!(p.executable(&config, p.not_before - 1).is_err());
+        assert!(p.executable(&config, p.expires).is_err());
+        let mut newer = config.clone();
+        newer.council_epoch += 1;
+        assert!(p.executable(&newer, p.not_before).is_err());
+    }
 }
 
 #[test]

@@ -21,6 +21,7 @@ pub const ROTATE_COUNCIL: u8 = 2;
 pub const UPGRADE_TARGET: u8 = 3;
 pub const SET_TARGET_GATE: u8 = 4;
 pub const INITIALIZE_SPREAD_LIGHT_CONFIG: u8 = 5;
+pub const PUBLISH_VERIFICATION: u8 = 6;
 pub const DEVNET_SPREAD: Pubkey =
     solana_program::pubkey!("2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw");
 
@@ -246,6 +247,18 @@ pub struct Artifact {
     pub build_commitment: [u8; 32],
 }
 impl Action {
+    pub fn verification_policy(&self) -> Result<crate::verification::VerificationPolicy> {
+        use crate::verification::VerificationPolicy;
+        require(
+            self.kind == PUBLISH_VERIFICATION
+                && self.data[VerificationPolicy::LEN..].iter().all(|b| *b == 0),
+            Error::InvalidAccount,
+        )?;
+        let value = VerificationPolicy::try_from_slice(&self.data[..VerificationPolicy::LEN])
+            .map_err(|_| Error::InvalidAccount)?;
+        value.validate()?;
+        Ok(value)
+    }
     pub fn light_config_policy(&self) -> Result<SpreadLightConfigPolicy> {
         require(
             self.kind == INITIALIZE_SPREAD_LIGHT_CONFIG
@@ -352,6 +365,7 @@ impl Action {
                 )
             }
             INITIALIZE_SPREAD_LIGHT_CONFIG => self.light_config_policy()?.validate(),
+            PUBLISH_VERIFICATION => self.verification_policy()?.validate(),
             _ => Err(ProgramError::InvalidInstructionData),
         }
     }

@@ -2,6 +2,7 @@
 pub mod instruction;
 pub mod processor;
 pub mod state;
+pub mod verification;
 
 #[cfg(not(feature = "no-entrypoint"))]
 solana_program::entrypoint!(process_instruction);

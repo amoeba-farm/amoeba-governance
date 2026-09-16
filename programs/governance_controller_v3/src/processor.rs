@@ -1,4 +1,5 @@
 use crate::{instruction::Instruction, state::*};
+mod verification;
 use borsh::BorshSerialize;
 use solana_loader_v3_interface::instruction::{
     close, set_buffer_authority_checked, set_upgrade_authority_checked, upgrade,
@@ -467,6 +468,9 @@ pub fn process(program: &Pubkey, accounts: &[AccountInfo<'_>], data: &[u8]) -> R
         Instruction::ExecuteTargetGate { digest } => execute_target_gate(program, accounts, digest),
         Instruction::ExecuteSpreadLightConfig { digest } => {
             execute_spread_light_config(program, accounts, digest, data)
+        }
+        Instruction::PublishVerification { digest } => {
+            verification::publish(program, accounts, digest, data)
         }
         Instruction::ExtendTarget { .. } | Instruction::ExtendController { .. } => {
             Err(ProgramError::InvalidInstructionData)
