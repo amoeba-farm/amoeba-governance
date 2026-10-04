@@ -39,56 +39,50 @@ npm test
 
 The V3 client entry point is `@amoeba/upgrade-governance/governance-v3`.
 
-## Deployment
+## Mainnet upgrade and verification (2026-10-04)
 
-The V3 controller is deployed on **Solana Mainnet Beta and Devnet** at:
-`8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx`.
+The Mainnet controller [8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx](https://solscan.io/account/8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx)
+was upgraded through the existing three-of-five council. It now accepts artifacts
+up to **2 MiB (128 chunks)**. ProgramData growth no longer invalidates an upgrade
+proposal; installation still requires sufficient capacity.
 
-The [deployment identity](docs/governance/evidence/v3-demo-setup-20260906/identity.json)
-and [release receipt](docs/governance/evidence/v3-demo-setup-20260906/receipt.json)
-record the associated program identities and artifact evidence. These are
-historical Devnet records; query each chain for current council, timing, and gate state.
+**Public source verification passed.** [Verifier status](https://verify.osec.io/status/8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx) ·
+[Verified source commit 1f9befd](https://github.com/amoeba-farm/amoeba-governance/commit/1f9befd30d46367bac8ee0ac7527613dadec10ad) ·
+[Finalized release receipt](docs/governance/evidence/mainnet-controller-20261004.json).
 
-The [verification metadata amendment](docs/governance/amendments/governance-v3-verification-metadata.md)
-adds a closed, council-approved way for the existing authority PDAs to publish
-Otter Verify build metadata. Publishing source does not itself upgrade either
-deployment or prove a hosted verification result.
+| Evidence | Value |
+| --- | --- |
+| Controller deployment slot | 453329188 |
+| ELF size | 219,928 bytes |
+| ELF SHA-256 | `1442c507f6f40f666e4191d767f8a892d61ddf73c82ab80da593c611c7312780` |
+| Verified executable hash | `d94509fe0c18d32d4eab18c49942dee769984c78a5688ae8d8db75555bccb0cd` |
+| ProgramData capacity | 223,096 bytes; no extension |
+| Upgrade authority | `Frc28QFQxqUxF9HPgzcmm5VkqorqUb2LeLPE5uKU6Ycp` |
+| Execution delay | 4,500 slots per proposal |
 
-Reproduce the Mainnet verification candidate using solana-verify 0.5.1:
+[Upgrade transaction](https://solscan.io/tx/QpM1e1CEKqtcTM2P6Y4buvfzp5vXY67cC7YNbQqRuXStuJbJYkxG7cp8bDy66uFYG8YSjCiPtWbgEkXE2xCmTMm) and
+[verification metadata transaction](https://solscan.io/tx/2ZYCf9bJPMDT56EkZZbHvtVaxWyc2TH2dp2HBoXhD9sxmudZVVXNxkD3fb8sDEg1MeReuX4p9mpoiR8hcHWoG5MS)
+both finalized with three council approvals. The full buffer balance of 1.118072441 SOL,
+including the 1.11807244 SOL funded rent, returned to the KMS treasury. Existing council settings and account layouts
+were preserved, and Spread's gate remained Active at epoch 21.
+
+Reproduce the verified commit using solana-verify 0.5.1:
 
 ```sh
+git clone https://github.com/amoeba-farm/amoeba-governance.git amoeba-governance-verified
+cd amoeba-governance-verified
+git checkout 1f9befd30d46367bac8ee0ac7527613dadec10ad
 solana-verify build --library-name governance_controller_v3 \
   --base-image solanafoundation/solana-verifiable-build@sha256:0b4e3716fad9ca4b4aac3e3f977f43aad93a18c22296c0c0f44fc22e644bdd68 \
   --arch v1
 ```
 
-The currently deployed ELF is 219,584 bytes, SHA-256
-`e06bf76acfacbf7e58f9bcdd0637051ea1ca629951e41a7b47738e082e51a8eb`.
-Independent local and Docker builds matched exactly. The existing three-of-five
-council, 4,500-slot execution delay, upgrade flow, and separate gate activation remain unchanged.
+The pinned Docker build matched two independent clean local builds byte for byte.
+See [the controller change and focused checks](docs/CONTROLLER_2MIB_CAP.md).
 
-### Prepared controller upgrade (2026-10-04)
+## Earlier deployment records
 
-This source candidate raises the artifact ceiling to 2 MiB and 128 chunks,
-preserves account layouts, and binds self-upgrade proposals to the running
-controller release. ProgramData growth no longer stales an approved upgrade;
-installation still requires enough live capacity. Retired instructions 10 and
-13 remain rejected. [Change details and checks](docs/CONTROLLER_2MIB_CAP.md).
-
-The candidate ELF is **219,928 bytes**, SHA-256
-`1442c507f6f40f666e4191d767f8a892d61ddf73c82ab80da593c611c7312780`.
-The exact Docker command above reproduced the independently built local bytes.
-Its normalized executable hash is
-`d94509fe0c18d32d4eab18c49942dee769984c78a5688ae8d8db75555bccb0cd`.
-It fits the existing 223,096-byte allocation.
-
-**Deployment is pending.** The existing hosted verification still describes
-commit `7b5930dc290fe2955e16aac05c8baa90ff2f96ac`, with normalized hash
-`ef4ff09b7fd3a7b813a4a575efc3dfea6556d2eb6ec44fdbc7445761c9fdabb1`.
-After installation, a separate council-approved action 6 and instruction 16
-must publish the new deployment slot and public source commit before requesting
-hosted verification. This README will record the finalized deployment and
-verification evidence when those operations complete.
+The same program address also exists on Devnet. The [September 6 Devnet receipt](docs/governance/evidence/v3-demo-setup-20260906/receipt.json) is historical; the Mainnet evidence above describes this release.
 
 ## License
 

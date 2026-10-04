@@ -1,14 +1,15 @@
 # V3 controller: 2 MiB artifact ceiling and growth-proof upgrade proposals
 
-Status: prepared source candidate exported from source commit
-`5ece06e2570b8667e3edc33ec1fd49348ca2c90e` on 2026-10-04. Mainnet deployment
-and updated hosted verification are pending. The closed Docker recipe now
-reproduces the candidate bytes, as recorded below.
+Status: deployed and publicly verified on Mainnet on 2026-10-04.
+[Finalized release and verification evidence](governance/evidence/mainnet-controller-20261004.json).
+
+The implementation and test notes below describe the preparation baseline.
+The release used the same 219,928-byte artifact; Spread upgrades remain a separate operation.
 
 ## Why
 
 Amoeba Spread (`2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw`) needs room for
-the Earn Fund, but its governing controller rejects any artifact above
+the Earn Fund, but its previous governing controller rejected any artifact above
 1,572,864 B.
 
 An earlier revision of this branch also added council-approved
@@ -22,7 +23,7 @@ on the Feature Gate Tracker. The legacy permissionless top-level
 never succeed on any cluster, so they were removed. That removal also brings
 the controller back under its deployed allocation.
 
-## Live controller identification
+## Controller identification before this upgrade
 
 - Mainnet controller `8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx`, ProgramData
   `7eW9UXcCDrpEAQ93fP7o2zgGMKhAKi3zJLihELjR8xYd`. The Spread profile

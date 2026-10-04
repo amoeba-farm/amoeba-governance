@@ -1,0 +1,121 @@
+{
+  "schema": "amoeba-mainnet-controller-upgrade-and-verification-v1",
+  "recordedAt": "2026-10-04T18:18:41.887Z",
+  "network": "mainnet-beta",
+  "genesis": "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+  "program": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+  "programData": "7eW9UXcCDrpEAQ93fP7o2zgGMKhAKi3zJLihELjR8xYd",
+  "upgradeAuthority": "Frc28QFQxqUxF9HPgzcmm5VkqorqUb2LeLPE5uKU6Ycp",
+  "source": {
+    "repository": "https://github.com/amoeba-farm/amoeba-governance",
+    "commit": "1f9befd30d46367bac8ee0ac7527613dadec10ad",
+    "implementationCommit": "5ece06e2570b8667e3edc33ec1fd49348ca2c90e"
+  },
+  "artifact": {
+    "library": "governance_controller_v3",
+    "bytes": 219928,
+    "sha256": "1442c507f6f40f666e4191d767f8a892d61ddf73c82ab80da593c611c7312780",
+    "normalizedExecutableHash": "d94509fe0c18d32d4eab18c49942dee769984c78a5688ae8d8db75555bccb0cd",
+    "architecture": "v1",
+    "verifierVersion": "0.5.1",
+    "buildImage": "solanafoundation/solana-verifiable-build@sha256:0b4e3716fad9ca4b4aac3e3f977f43aad93a18c22296c0c0f44fc22e644bdd68",
+    "allocatedCapacityBytes": 223096,
+    "zeroPaddingBytes": 3168,
+    "allocatedPayloadSha256": "936de3e97bb3e84f1e82a5bb987b2c1b3e9fe0e577ea5b22bff5935b499164e1",
+    "twoIndependentCleanLocalBuildsMatch": true,
+    "closedDockerRecipeMatches": true
+  },
+  "upgrade": {
+    "proposalId": "25",
+    "proposal": "6C1isXVRyaFJX7ZPHXyhGuTBs1KXGzknhpSAxisRC5y3",
+    "creationSlot": "453320095",
+    "notBefore": "453324595",
+    "deployedSlot": "453329188",
+    "executionSignature": "QpM1e1CEKqtcTM2P6Y4buvfzp5vXY67cC7YNbQqRuXStuJbJYkxG7cp8bDy66uFYG8YSjCiPtWbgEkXE2xCmTMm",
+    "approvalCount": 3,
+    "approvedSeats": [
+      "pSutXCyMTkwvzG1kpiHXULkVKyzz8NPSNgnjLgwNcTu",
+      "4vrxWeSfCoJA8KvzCcWGgG4C5S4gPYrLaRWysycJeVpz",
+      "DgMGtSjUg1wXPZuPBT6HqGN3qRLVBJCqYrv31XtcwcBR"
+    ],
+    "verifiedChunks": 14,
+    "controllerReleaseBefore": 0,
+    "controllerReleaseAfter": 1,
+    "maxArtifactBytesAfter": 2097152,
+    "artifactChunkBytes": 16384,
+    "maxArtifactChunksAfter": 128,
+    "buffer": "6DBqxHqEs2d41rdJWcQtCx9MocSDaSezRxM4Up89BDnQ",
+    "bufferRentLamports": 1118072440,
+    "bufferBalanceAboveFundedRentLamports": "1",
+    "treasuryRefundLamports": "1118072441",
+    "bufferDeltaLamports": "-1118072441",
+    "programDataDeltaLamports": "0",
+    "feePayer": "G2f6Fv477ZyFbmRFtVr21jf9VufXpiRCxf1e91J6SxxT",
+    "signature": "QpM1e1CEKqtcTM2P6Y4buvfzp5vXY67cC7YNbQqRuXStuJbJYkxG7cp8bDy66uFYG8YSjCiPtWbgEkXE2xCmTMm",
+    "slot": 453329188,
+    "feeLamports": 6400,
+    "messageSha256": "106f035e87f155c774c71648b471c7fc685d90a87690ffd72a048fd253b9946c"
+  },
+  "preservation": {
+    "existingControllerAccounts": 26,
+    "accountsAfterUpgrade": 27,
+    "existingAccountBytesPreservedExceptConfigNextId": true,
+    "accountLayoutsPreserved": true,
+    "councilEpoch": 1,
+    "timingVersion": 1,
+    "reviewSlots": 1512000,
+    "delaySlots": 4500,
+    "expirySlots": 2592000,
+    "spreadGate": {
+      "status": "Active",
+      "epoch": 21,
+      "bytesUnchanged": true
+    },
+    "programDataExtended": false,
+    "upgradeAuthorityRetained": true
+  },
+  "verification": {
+    "proposalId": "26",
+    "proposal": "Cnij9fqw9QWdKvxiCB36xhZG1Wy4Qm7QHtVdeVnQLMEE",
+    "metadataAccount": "H6TGQ8KDAf7MWixKwTKRzLZetCiEhzZXAbpF3bahWDwQ",
+    "sourceCommit": "1f9befd30d46367bac8ee0ac7527613dadec10ad",
+    "deployedSlot": "453329188",
+    "metadataRecipeSha256": "5940908177fe3f244ae44fea3a1887111186a05739f3c76f99ec6143cf577431",
+    "metadataRentIncreaseLamports": "0",
+    "authorityDeltaLamports": "0",
+    "feePayer": "8XUjnzVzR71DaVuqbSHaNev5H4vrxofyFP4iZt2FXa1j",
+    "signature": "2ZYCf9bJPMDT56EkZZbHvtVaxWyc2TH2dp2HBoXhD9sxmudZVVXNxkD3fb8sDEg1MeReuX4p9mpoiR8hcHWoG5MS",
+    "slot": 453334108,
+    "feeLamports": 6400,
+    "messageSha256": "afdabf3377641183b017aeb5550aef498096e579adfc470aa92a3106ef924bdb",
+    "hosted": {
+      "observedAt": "2026-10-04T18:18:39.206Z",
+      "is_verified": true,
+      "message": "On chain program verified",
+      "on_chain_hash": "d94509fe0c18d32d4eab18c49942dee769984c78a5688ae8d8db75555bccb0cd",
+      "executable_hash": "d94509fe0c18d32d4eab18c49942dee769984c78a5688ae8d8db75555bccb0cd",
+      "repo_url": "https://github.com/amoeba-farm/amoeba-governance/tree/1f9befd30d46367bac8ee0ac7527613dadec10ad",
+      "commit": "1f9befd30d46367bac8ee0ac7527613dadec10ad",
+      "last_verified_at": "2026-10-04T18:17:25.660331",
+      "is_frozen": false,
+      "is_closed": false
+    }
+  },
+  "validation": {
+    "rustFormatting": "passed",
+    "typescriptTypecheck": "passed",
+    "typescriptBuild": "passed",
+    "frozenVectorsAndBridge": "passed",
+    "retainedExactArtifactTests": {
+      "hostArtifactAndCore": 14,
+      "actualSbfSelfUpgrade": 1,
+      "actualSbfTwoMib": 5,
+      "actualSbfTargetUpgrade": 1
+    },
+    "unchangedPathsNotRerun": [
+      "spread_gate",
+      "spread_light_config",
+      "verification_metadata SBF"
+    ]
+  }
+}
