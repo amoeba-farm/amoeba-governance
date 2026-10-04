@@ -180,9 +180,10 @@ async fn actual_sbf_controller_remains_upgradeable_by_three_seats_after_450_slot
         capacity: before.capacity as u64,
         source_commitment: [1; 32],
         build_commitment: [2; 32],
+        controller_release: CONTROLLER_RELEASE,
     };
     let mut data = [0; 192];
-    data[..184].copy_from_slice(&upgrade.try_to_vec().unwrap());
+    data.copy_from_slice(&upgrade.try_to_vec().unwrap());
     let create = ix(
         program,
         vec![

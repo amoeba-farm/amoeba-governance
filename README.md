@@ -62,10 +62,33 @@ solana-verify build --library-name governance_controller_v3 \
   --arch v1
 ```
 
-The candidate ELF is 219,584 bytes, SHA-256
+The currently deployed ELF is 219,584 bytes, SHA-256
 `e06bf76acfacbf7e58f9bcdd0637051ea1ca629951e41a7b47738e082e51a8eb`.
 Independent local and Docker builds matched exactly. The existing three-of-five
 council, 4,500-slot execution delay, upgrade flow, and separate gate activation remain unchanged.
+
+### Prepared controller upgrade (2026-10-04)
+
+This source candidate raises the artifact ceiling to 2 MiB and 128 chunks,
+preserves account layouts, and binds self-upgrade proposals to the running
+controller release. ProgramData growth no longer stales an approved upgrade;
+installation still requires enough live capacity. Retired instructions 10 and
+13 remain rejected. [Change details and checks](docs/CONTROLLER_2MIB_CAP.md).
+
+The candidate ELF is **219,928 bytes**, SHA-256
+`1442c507f6f40f666e4191d767f8a892d61ddf73c82ab80da593c611c7312780`.
+The exact Docker command above reproduced the independently built local bytes.
+Its normalized executable hash is
+`d94509fe0c18d32d4eab18c49942dee769984c78a5688ae8d8db75555bccb0cd`.
+It fits the existing 223,096-byte allocation.
+
+**Deployment is pending.** The existing hosted verification still describes
+commit `7b5930dc290fe2955e16aac05c8baa90ff2f96ac`, with normalized hash
+`ef4ff09b7fd3a7b813a4a575efc3dfea6556d2eb6ec44fdbc7445761c9fdabb1`.
+After installation, a separate council-approved action 6 and instruction 16
+must publish the new deployment slot and public source commit before requesting
+hosted verification. This README will record the finalized deployment and
+verification evidence when those operations complete.
 
 ## License
 

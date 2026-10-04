@@ -135,7 +135,8 @@ async fn run(own: bool) {
         extension_slot: 0,
         extended_capacity: 0,
         executed_slot: 0,
-        reserved: [0; 7],
+        verified_chunks_high: [0; 4],
+        reserved: [0; 3],
     };
     proposal.digest = proposal.compute_digest(&controller).unwrap();
     let pkey = proposal_pda(&controller, 1).0;

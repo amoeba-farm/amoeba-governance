@@ -1,4 +1,8 @@
-use crate::{instruction::Instruction, state::*};
+use crate::{
+    artifact::{self, CHUNK, MAX_CHUNKS},
+    instruction::Instruction,
+    state::*,
+};
 mod verification;
 use borsh::BorshSerialize;
 use solana_loader_v3_interface::instruction::{
@@ -18,9 +22,6 @@ use solana_sdk_ids::{
     bpf_loader_upgradeable::ID as LOADER, compute_budget, system_program, sysvar,
 };
 use upgrade_controller::{
-    artifact_merkle::{
-        artifact_chunk_count, verify_artifact_chunk_proof, RELEASE1_ARTIFACT_CHUNK_SIZE_V1 as CHUNK,
-    },
     release1_account_io::{
         create_fixed_pda_account, load_fixed_controller_account, require_distinct_accounts,
         store_fixed_controller_account, validate_exact_privileges,
@@ -94,12 +95,14 @@ fn sealed(
         Error::InvalidArtifact,
     )
 }
+/// Every real chunk, and no bit beyond them, across the full 128-bit bitmap.
 fn complete(proposal: &Proposal) -> Result<()> {
     let action = proposal.action.artifact()?;
-    let chunks = artifact_chunk_count(action.artifact_length, CHUNK)?;
+    let chunks = artifact::chunk_count(action.artifact_length)?;
     require(proposal.verified_count == chunks, Error::InvalidArtifact)?;
-    for index in 0..96 {
-        let set = proposal.verified_chunks[index / 8] & (1 << (index % 8)) != 0;
+    let bitmap = proposal.verified_bitmap();
+    for index in 0..MAX_CHUNKS {
+        let set = bitmap[index / 8] & (1 << (index % 8)) != 0;
         require(set == (index < chunks as usize), Error::InvalidArtifact)?;
     }
     Ok(())
@@ -179,6 +182,11 @@ fn upgrade_scope(
         require(
             p.action.kind == UPGRADE_CONTROLLER && *target.key == *program,
             Error::InvalidAccount,
+        )?;
+        // Installing any other controller release retires this proposal.
+        require(
+            p.action.upgrade()?.controller_release == CONTROLLER_RELEASE,
+            Error::StaleProposal,
         )?;
         Ok(authority_pda(program))
     }
@@ -472,6 +480,7 @@ pub fn process(program: &Pubkey, accounts: &[AccountInfo<'_>], data: &[u8]) -> R
         Instruction::PublishVerification { digest } => {
             verification::publish(program, accounts, digest, data)
         }
+        // Retired tags: `Instruction::unpack` rejects them before this match.
         Instruction::ExtendTarget { .. } | Instruction::ExtendController { .. } => {
             Err(ProgramError::InvalidInstructionData)
         }
@@ -581,13 +590,15 @@ fn create(
     let mut config = config(program, config_info)?;
     seat(&config, creator)?;
     action.validate()?;
-    if action.is_upgrade() {
-        let artifact = action.artifact()?;
-        // Devnet's permissionless top-level Loader extension must be completed
-        // before creating the proposal and snapshotting ProgramData metadata.
+    // The ProgramData slot/capacity in an upgrade action are an informational
+    // snapshot. Anyone may grow ProgramData with the permissionless top-level
+    // Loader-v3 ExtendProgram at any time, so neither value gates execution:
+    // ordering comes from the target gate epoch or the controller release, and
+    // installation needs live capacity >= artifact length.
+    if action.kind == UPGRADE_CONTROLLER {
         require(
-            artifact.capacity >= artifact.artifact_length,
-            Error::InvalidArtifact,
+            action.upgrade()?.controller_release == CONTROLLER_RELEASE,
+            Error::StaleProposal,
         )?;
     }
     if action.kind == ROTATE_COUNCIL {
@@ -628,7 +639,8 @@ fn create(
         extension_slot: 0,
         extended_capacity: 0,
         executed_slot: 0,
-        reserved: [0; 7],
+        verified_chunks_high: [0; 4],
+        reserved: [0; 3],
     };
     value.digest = value.compute_digest(program)?;
     value.validate(program, proposal_info.key)?;
@@ -703,7 +715,7 @@ fn verify(
     p.current(&config, clock()?)?;
     let action = p.action.artifact()?;
     sealed(program, proposal_info.key, buffer, &action)?;
-    let count = artifact_chunk_count(action.artifact_length, CHUNK)?;
+    let count = artifact::chunk_count(action.artifact_length)?;
     require(
         index < count
             && proof_len <= 7
@@ -712,24 +724,20 @@ fn verify(
                 .all(|v| *v == [0; 32]),
         Error::InvalidArtifact,
     )?;
-    let byte = index as usize / 8;
-    let bit = 1 << (index % 8);
-    require(p.verified_chunks[byte] & bit == 0, Error::DuplicateApproval)?;
+    // Duplicate chunks fail before hashing; nothing persists unless the proof verifies.
+    p.mark_chunk_verified(index)?;
     let start = 37 + index as usize * CHUNK as usize;
     let end = (start + CHUNK as usize).min(37 + action.artifact_length as usize);
     {
         let bytes = buffer.try_borrow_data()?;
-        verify_artifact_chunk_proof(
+        artifact::verify_chunk(
             &action.merkle_root,
             action.artifact_length,
-            CHUNK,
             index,
             &bytes[start..end],
             &proof[..usize::from(proof_len)],
         )?;
     }
-    p.verified_chunks[byte] |= bit;
-    p.verified_count += 1;
     save_proposal(program, proposal_info, &p)
 }
 
@@ -893,6 +901,14 @@ fn execute_upgrade(
     let action = p.action.artifact()?;
     let (authority_key, authority_bump) =
         upgrade_scope(program, &p, controller, programdata, gate_info)?;
+    // ProgramData length and slot are deliberately not compared with the
+    // snapshot: third-party top-level growth must not stale a proposal.
+    let before = validate_program_programdata_linkage(controller, programdata, &LOADER)?;
+    let capacity = before.capacity as u64;
+    require(
+        before.upgrade_authority == Some(authority_key) && capacity >= action.artifact_length,
+        Error::StaleProposal,
+    )?;
     let (buffer_key, buffer_bump) = buffer_authority_pda(program, proposal_info.key);
     require(
         *treasury.key == config.treasury
@@ -901,25 +917,6 @@ fn execute_upgrade(
             && *rent.key == sysvar::rent::ID
             && *clock_info.key == sysvar::clock::ID,
         Error::InvalidAccount,
-    )?;
-    let before = validate_program_programdata_linkage(controller, programdata, &LOADER)?;
-    require(
-        before.upgrade_authority == Some(authority_key)
-            && before.deployed_slot
-                == if p.extension_slot == 0 {
-                    action.deployed_slot
-                } else {
-                    p.extension_slot
-                }
-            && before.capacity as u64
-                == if p.extension_slot == 0 {
-                    action.capacity
-                } else {
-                    p.extended_capacity
-                }
-            && before.capacity as u64 >= action.artifact_length
-            && slot > before.deployed_slot,
-        Error::StaleProposal,
     )?;
     sealed(program, proposal_info.key, buffer, &action)?;
     let authority_bump_bytes = [authority_bump];
@@ -932,7 +929,10 @@ fn execute_upgrade(
         &[buffer_bump],
     ];
     // Both CPIs are fixed Loader-v3 instructions. The buffer-authority change
-    // and code installation roll back together if either fails.
+    // and code installation roll back together if either fails. Loader-v3
+    // Upgrade copies the sealed, fully verified buffer and zero-fills every
+    // ProgramData byte beyond it, so whatever length third parties added, the
+    // installed payload is exactly the artifact followed by zeros.
     invoke_signed(
         &set_buffer_authority_checked(buffer.key, buffer_authority.key, authority.key),
         &[
@@ -961,7 +961,7 @@ fn execute_upgrade(
     require(
         after.upgrade_authority == Some(authority_key)
             && after.deployed_slot == slot
-            && after.capacity == before.capacity,
+            && after.capacity as u64 == capacity,
         Error::InvalidArtifact,
     )?;
     p.state = EXECUTED;

@@ -37,7 +37,7 @@ const proposal: ProposalV3 = {
   cancellations: 0,
   cancellationCount: 0,
   state: 0,
-  verifiedChunks: Buffer.alloc(12),
+  verifiedChunks: Buffer.alloc(16),
   verifiedCount: 0,
   extensionSlot: 0n,
   extendedCapacity: 0n,

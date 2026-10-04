@@ -23,10 +23,6 @@ import {
 import bs58 from "bs58";
 import * as v3 from "../dist/upgradeGovernance/governanceV3.js";
 import {
-  artifactMerkleRoot,
-  artifactMerkleProof,
-} from "../dist/upgradeGovernance/artifactMerkleV1.js";
-import {
   loadDevnetRpcConfiguration,
   requireSecureDirectory,
   requireSecureRegularFile,
@@ -514,7 +510,7 @@ try {
         sourceCommit: arg,
         artifactSha256: hash(a),
         artifactBytes: a.length,
-        merkleRoot: artifactMerkleRoot(a, 16384).toString("hex"),
+        merkleRoot: v3.artifactMerkleRootV3(a).toString("hex"),
         proposalId: c.nextId.toString(),
         before,
         buffer: b.publicKey.toBase58(),
@@ -531,11 +527,13 @@ try {
       buffer: b.publicKey,
       artifactLength: BigInt(a.length),
       artifactSha256: Buffer.from(hash(a), "hex"),
-      merkleRoot: artifactMerkleRoot(a, 16384),
+      merkleRoot: v3.artifactMerkleRootV3(a),
       deployedSlot: BigInt(plan.before.slot),
       capacity: BigInt(plan.before.capacity),
       sourceCommitment: Buffer.from(hash(Buffer.from(arg)), "hex"),
       buildCommitment: Buffer.from(hash(Buffer.from(json(plan))), "hex"),
+      // Release of the controller that will validate this proposal.
+      controllerRelease: BigInt(process.env.AMOEBA_V3_CONTROLLER_RELEASE ?? "0"),
     };
     await send(
       "create-controller",
@@ -618,7 +616,7 @@ try {
       const instructions = [];
       for (let n = i; n < Math.min(i + 3, Math.ceil(a.length / 16384)); n++)
         instructions.push(
-          v3.verifyChunkV3(program, p, n, artifactMerkleProof(a, n, 16384)),
+          v3.verifyChunkV3(program, p, n, v3.artifactMerkleProofV3(a, n)),
         );
       await send(`verify-controller-${i}`, instructions);
     }
@@ -660,15 +658,13 @@ try {
       }
     }
     assert(now >= p.notBefore, `timelock: ${p.notBefore - now} slots remain`);
-    while (
-      p.action.artifactLength > (p.extendedCapacity || p.action.capacity)
-    ) {
-      await send(
-        `extend-controller-${p.extendedCapacity || p.action.capacity}`,
-        [v3.extendControllerV3(c, p, payer.publicKey)],
-      );
-      p = await proposal();
-    }
+    // Growth is top-level only (stage extend-top-level); the controller has no
+    // extension instruction and installs only into sufficient capacity.
+    const current = pd((await accounts([v3.deriveProgramdataV3(program)])).value[0]);
+    assert(
+      BigInt(current.capacity) >= p.action.artifactLength,
+      `extend ProgramData top-level first: ${current.capacity} < ${p.action.artifactLength}`,
+    );
     await send("execute-controller", [v3.executeControllerUpgradeV3(c, p)]);
     const s = await accounts([v3.deriveProgramdataV3(program)]),
       live = pd(s.value[0]),

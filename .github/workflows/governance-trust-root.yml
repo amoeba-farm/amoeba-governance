@@ -77,6 +77,9 @@ jobs:
     steps:
       - name: Check out exact source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # The deployed-controller rehearsal rebuilds an ancestor commit.
+          fetch-depth: 0
 
       - name: Install pinned Rust
         shell: bash
@@ -141,6 +144,21 @@ jobs:
             --arch v1 --tools-version v1.53 \
             --sbf-out-dir "$RUNNER_TEMP/ameba-gov-v3-sbf" -- --locked
 
+      - name: Rebuild deployed Mainnet V3 controller (e06bf76a) for the upgrade rehearsal
+        shell: bash
+        run: |
+          # Source of the deployed controller; reproduces its exact ELF.
+          src="$RUNNER_TEMP/ameba-gov-v3-deployed-src"
+          mkdir -p "$src"
+          git archive 7b5930dc290fe2955e16aac05c8baa90ff2f96ac \
+            Cargo.toml Cargo.lock rust-toolchain.toml programs | tar -x -C "$src"
+          CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-v3-deployed-target" \
+            cargo-build-sbf --manifest-path "$src/programs/governance_controller_v3/Cargo.toml" \
+            --arch v1 --tools-version v1.53 \
+            --sbf-out-dir "$RUNNER_TEMP/ameba-gov-v3-deployed" -- --locked
+          test "$(sha256sum "$RUNNER_TEMP/ameba-gov-v3-deployed/governance_controller_v3.so" | cut -d ' ' -f 1)" = \
+            e06bf76acfacbf7e58f9bcdd0637051ea1ca629951e41a7b47738e082e51a8eb
+
       - name: Build pinned public Spread integration fixture
         shell: bash
         run: |
@@ -162,6 +180,7 @@ jobs:
         shell: bash
         run: |
           export AMOEBA_GOV_V3_SBF="$RUNNER_TEMP/ameba-gov-v3-sbf/governance_controller_v3.so"
+          export AMOEBA_GOV_V3_DEPLOYED_SBF="$RUNNER_TEMP/ameba-gov-v3-deployed/governance_controller_v3.so"
           export AMOEBA_FRESH_SPREAD_SBF="$RUNNER_TEMP/ameba-spread-integration-sbf/light_token_minter.so"
           export AMOEBA_OTTER_VERIFY_SBF="$RUNNER_TEMP/otter-verify-pinned.so"
           node clients/ts/tools/fetch-otter-verification-fixture.mjs "$AMOEBA_OTTER_VERIFY_SBF"

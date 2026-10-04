@@ -9,6 +9,11 @@ import {
   SYSVAR_INSTRUCTIONS_PUBKEY,
   SYSVAR_RENT_PUBKEY,
 } from "@solana/web3.js";
+import {
+  ARTIFACT_CHUNK_LEAF_DOMAIN_V1,
+  artifactChunkEmptyHash,
+  artifactChunkNodeHash,
+} from "./artifactMerkleV1.js";
 export const GOVERNANCE_V3_GENESIS =
   "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
 export const GOVERNANCE_V3_DOMAIN = Buffer.from("ameba-governance-v3");
@@ -18,6 +23,14 @@ export const LOADER_V3 = new PublicKey(
 );
 export const CONFIG_V3_LEN = 384;
 export const PROPOSAL_V3_LEN = 400;
+/** V3 artifact ceiling: 128 chunks of 16 KiB, a 128-leaf depth-7 tree. */
+export const ARTIFACT_CHUNK_SIZE_V3 = 16_384;
+export const MAX_ARTIFACT_CHUNKS_V3 = 128;
+export const MAX_ARTIFACT_BYTES_V3 = ARTIFACT_CHUNK_SIZE_V3 * MAX_ARTIFACT_CHUNKS_V3;
+/** Release of this controller source (Rust `CONTROLLER_RELEASE`). A
+ *  self-upgrade proposal must carry the release of the controller running at
+ *  creation: 0 for the deployed pre-release binary, this value afterwards. */
+export const CONTROLLER_RELEASE_V3 = 1n;
 export const DEVNET_SPREAD_V3 = new PublicKey(
   "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
 );
@@ -89,6 +102,8 @@ export type ActionV3 =
       capacity: bigint;
       sourceCommitment: Uint8Array;
       buildCommitment: Uint8Array;
+      /** Formerly eight zero bytes; see CONTROLLER_RELEASE_V3. */
+      controllerRelease: bigint;
     }
   | { kind: "setTiming"; timing: TimingV3 }
   | { kind: "rotateCouncil"; seats: PublicKey[] }
@@ -144,6 +159,9 @@ export interface ProposalV3 {
   cancellations: number;
   cancellationCount: number;
   state: number;
+  /** Logical 128-bit chunk bitmap (16 bytes): bytes 0..12 hold chunks 0..96
+   *  at their original offset; bytes 12..16 hold chunks 96..128 in the four
+   *  former reserved bytes after `executedSlot`. */
   verifiedChunks: Buffer;
   verifiedCount: number;
   extensionSlot: bigint;
@@ -269,9 +287,8 @@ export function encodeActionV3(action: ActionV3): Buffer {
       check(
         !action.buffer.equals(PublicKey.default) &&
           action.artifactLength > 0n &&
-          action.artifactLength <= 1_572_864n &&
-          action.capacity > 0n &&
-          action.capacity <= 1_572_864n,
+          action.artifactLength <= BigInt(MAX_ARTIFACT_BYTES_V3) &&
+          action.capacity > 0n,
         "invalid upgrade artifact/capacity",
       );
       tag = 0;
@@ -284,6 +301,7 @@ export function encodeActionV3(action: ActionV3): Buffer {
         u64(action.capacity),
         hash32(action.sourceCommitment),
         hash32(action.buildCommitment),
+        u64(action.controllerRelease),
       ]);
       break;
     case "setTiming":
@@ -300,9 +318,8 @@ export function encodeActionV3(action: ActionV3): Buffer {
           !action.target.equals(PublicKey.default) &&
           action.gateEpoch > 0n &&
           action.artifactLength > 0n &&
-          action.artifactLength <= 1_572_864n &&
-          action.capacity > 0n &&
-          action.capacity <= 1_572_864n,
+          action.artifactLength <= BigInt(MAX_ARTIFACT_BYTES_V3) &&
+          action.capacity > 0n,
         "invalid target upgrade",
       );
       tag = 3;
@@ -402,6 +419,7 @@ function decodeActionV3(data: Buffer): ActionV3 {
       capacity: r.u64(),
       sourceCommitment: r.bytes(32),
       buildCommitment: r.bytes(32),
+      controllerRelease: r.u64(),
     };
   else if (kind === 1) result = { kind: "setTiming", timing: r.timing() };
   else if (kind === 2)
@@ -566,7 +584,8 @@ export function decodeProposalV3(
     extendedCapacity: r.u64(),
     executedSlot: r.u64(),
   };
-  r.reserved(7);
+  p.verifiedChunks = Buffer.concat([p.verifiedChunks, r.bytes(4)]);
+  r.reserved(3);
   const [expected, expectedBump] = deriveProposalV3(program, p.id);
   check(
     key.equals(expected) &&
@@ -605,11 +624,12 @@ export function decodeProposalV3(
     p.action.kind === "upgradeTarget"
   )
     check(
-      (p.extensionSlot === 0n && p.extendedCapacity === 0n) ||
+      p.verifiedCount <= artifactChunkCountV3(p.action.artifactLength) &&
+      ((p.extensionSlot === 0n && p.extendedCapacity === 0n) ||
         (p.extensionSlot >= p.notBefore &&
           p.extensionSlot < p.expires &&
           p.extendedCapacity > p.action.capacity &&
-          p.extendedCapacity <= p.action.artifactLength),
+          p.extendedCapacity <= p.action.artifactLength)),
       "extension state",
     );
   else
@@ -687,6 +707,12 @@ export function initializeV3(
     Buffer.concat([seatsBytes(seats), treasury.toBuffer()]),
   );
 }
+/**
+ * Upgrade proposals snapshot the live ProgramData capacity. Grow ProgramData
+ * with the permissionless top-level Loader-v3 `ExtendProgram` (for example
+ * `solana program extend`) before creating the proposal; the controller has
+ * no growth instruction.
+ */
 export function createV3(
   config: ConfigV3,
   payer: PublicKey,
@@ -786,7 +812,7 @@ export function verifyChunkV3(
   check(
     Number.isInteger(index) &&
       index >= 0 &&
-      index < Number((p.action.artifactLength + 16383n) / 16384n),
+      index < artifactChunkCountV3(p.action.artifactLength),
     "chunk index",
   );
   check(
@@ -882,6 +908,8 @@ export function closeBufferV3(
     hash32(p.digest),
   );
 }
+/** Retired: the controller rejects instruction 10. Kept so existing imports
+ *  fail with guidance instead of a missing export. */
 export function extendControllerV3(
   config: ConfigV3,
   p: ProposalV3,
@@ -891,7 +919,7 @@ export function extendControllerV3(
   void p;
   void payer;
   throw Error(
-    "Extend ProgramData with a top-level Loader transaction before creating the upgrade proposal; checked extension CPI is unsupported on Devnet",
+    "Extend ProgramData with a top-level Loader-v3 ExtendProgram before creating the upgrade proposal; checked extension is retired (enable_extend_program_checked was cancelled) and instructions 10/13 are rejected",
   );
 }
 
@@ -952,6 +980,7 @@ export function executeTargetUpgradeV3(
     hash32(p.digest),
   );
 }
+/** Retired: the controller rejects instruction 13 like instruction 10. */
 export function extendTargetV3(
   config: ConfigV3,
   p: ProposalV3,
@@ -961,7 +990,7 @@ export function extendTargetV3(
   void p;
   void payer;
   throw Error(
-    "Extend ProgramData with a top-level Loader transaction before creating the upgrade proposal; checked extension CPI is unsupported on Devnet",
+    "Extend ProgramData with a top-level Loader-v3 ExtendProgram before creating the upgrade proposal; checked extension is retired (enable_extend_program_checked was cancelled) and instructions 10/13 are rejected",
   );
 }
 
@@ -1060,4 +1089,61 @@ export function decodeTargetGateV3(
     reason,
     lastCompletedProposal,
   };
+}
+
+/** Chunk count under the V3 2 MiB ceiling. */
+export function artifactChunkCountV3(artifactLength: bigint | number): number {
+  const length = BigInt(artifactLength);
+  check(
+    length > 0n && length <= BigInt(MAX_ARTIFACT_BYTES_V3),
+    "artifact length outside the V3 2 MiB bound",
+  );
+  const size = BigInt(ARTIFACT_CHUNK_SIZE_V3);
+  return Number((length + size - 1n) / size);
+}
+function artifactLeafHashV3(index: number, chunk: Uint8Array): Buffer {
+  check(
+    Number.isInteger(index) && index >= 0 && index < MAX_ARTIFACT_CHUNKS_V3 &&
+      chunk.length > 0 && chunk.length <= ARTIFACT_CHUNK_SIZE_V3,
+    "invalid V3 artifact leaf",
+  );
+  return createHash("sha256")
+    .update(ARTIFACT_CHUNK_LEAF_DOMAIN_V1)
+    .update(uint(index, 4))
+    .update(uint(chunk.length, 4))
+    .update(chunk)
+    .digest();
+}
+function artifactLevelV3(artifact: Uint8Array): Buffer[] {
+  const count = artifactChunkCountV3(artifact.length);
+  const level: Buffer[] = [];
+  for (let i = 0; i < count; i += 1)
+    level.push(artifactLeafHashV3(i, artifact.subarray(i * ARTIFACT_CHUNK_SIZE_V3, (i + 1) * ARTIFACT_CHUNK_SIZE_V3)));
+  let padded = 1;
+  while (padded < count) padded *= 2;
+  for (let i = count; i < padded; i += 1) level.push(artifactChunkEmptyHash(i));
+  return level;
+}
+function nextLevelV3(level: Buffer[]): Buffer[] {
+  const next: Buffer[] = [];
+  for (let i = 0; i < level.length; i += 2) next.push(artifactChunkNodeHash(level[i]!, level[i + 1]!));
+  return next;
+}
+/** Length-bound Merkle root accepted by V3 upgrade actions (same scheme as
+ *  Release 1, admitting up to 128 chunks). */
+export function artifactMerkleRootV3(artifact: Uint8Array): Buffer {
+  let level = artifactLevelV3(artifact);
+  while (level.length > 1) level = nextLevelV3(level);
+  return level[0]!;
+}
+/** Sibling path for `verifyChunkV3`; at most seven hashes. */
+export function artifactMerkleProofV3(artifact: Uint8Array, index: number): Buffer[] {
+  let level = artifactLevelV3(artifact);
+  check(Number.isInteger(index) && index >= 0 && index < artifactChunkCountV3(artifact.length), "chunk index");
+  const proof: Buffer[] = [];
+  for (let node = index; level.length > 1; node >>= 1) {
+    proof.push(level[node ^ 1]!);
+    level = nextLevelV3(level);
+  }
+  return proof;
 }

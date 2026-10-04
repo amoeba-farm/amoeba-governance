@@ -1,3 +1,4 @@
+use crate::artifact::{BITMAP_BYTES, MAX_ARTIFACT_BYTES, MAX_CHUNKS};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{hash::hashv, program_error::ProgramError, pubkey::Pubkey};
 
@@ -9,6 +10,8 @@ pub const EXECUTION_MARGIN_SLOTS: u64 = 9_000;
 pub const CONFIG_LEN: usize = 384;
 pub const PROPOSAL_LEN: usize = 400;
 pub const ACTION_LEN: usize = 192;
+/// Bytes of `Proposal::verified_chunks` (chunks 0..96) kept at their original offset.
+pub const LOW_BITMAP_BYTES: usize = 12;
 pub const MAX_DATA: usize = 16_384;
 pub const THRESHOLD: u32 = 3;
 pub const PENDING: u8 = 0;
@@ -22,6 +25,12 @@ pub const UPGRADE_TARGET: u8 = 3;
 pub const SET_TARGET_GATE: u8 = 4;
 pub const INITIALIZE_SPREAD_LIGHT_CONFIG: u8 = 5;
 pub const PUBLISH_VERIFICATION: u8 = 6;
+/// Release number of this controller binary. Every controller release must
+/// change it: a self-upgrade proposal binds the release it was created under
+/// and can only install while that release is running, so installing
+/// any newer controller retires all older self-upgrade proposals. Binaries
+/// before this field had release 0 (the eight action bytes were zero).
+pub const CONTROLLER_RELEASE: u64 = 1;
 pub const DEVNET_SPREAD: Pubkey =
     solana_program::pubkey!("2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw");
 
@@ -185,6 +194,8 @@ pub struct Upgrade {
     pub capacity: u64,
     pub source_commitment: [u8; 32],
     pub build_commitment: [u8; 32],
+    /// `CONTROLLER_RELEASE` at creation (formerly eight zero bytes).
+    pub controller_release: u64,
 }
 /// Target upgrades commit the artifact through its length-bound Merkle root.
 /// The build commitment additionally binds the ordinary file SHA-256 receipt.
@@ -318,11 +329,8 @@ impl Action {
         }
     }
     pub fn upgrade(&self) -> Result<Upgrade> {
-        require(
-            self.kind == UPGRADE_CONTROLLER && self.data[184..] == [0; 8],
-            Error::InvalidArtifact,
-        )?;
-        Upgrade::try_from_slice(&self.data[..184]).map_err(|_| Error::InvalidArtifact.into())
+        require(self.kind == UPGRADE_CONTROLLER, Error::InvalidArtifact)?;
+        Upgrade::try_from_slice(&self.data).map_err(|_| Error::InvalidArtifact.into())
     }
     pub fn timing(&self) -> Result<Timing> {
         require(
@@ -345,10 +353,8 @@ impl Action {
                 require(
                     u.buffer != Pubkey::default()
                         && u.artifact_length > 0
-                        && u.artifact_length
-                            <= upgrade_controller::artifact_merkle::MAX_ARTIFACT_BYTES_V1
+                        && u.artifact_length <= MAX_ARTIFACT_BYTES
                         && u.capacity > 0
-                        && u.capacity <= upgrade_controller::artifact_merkle::MAX_ARTIFACT_BYTES_V1
                         && u.merkle_root != [0; 32]
                         && u.source_commitment != [0; 32]
                         && u.build_commitment != [0; 32],
@@ -393,14 +399,40 @@ pub struct Proposal {
     pub cancellations: u8,
     pub cancellation_count: u8,
     pub state: u8,
+    /// Chunk bits 0..96, unchanged from the 1.5 MiB layout.
     pub verified_chunks: [u8; 12],
     pub verified_count: u32,
     pub extension_slot: u64,
     pub extended_capacity: u64,
     pub executed_slot: u64,
-    pub reserved: [u8; 7],
+    /// Chunk bits 96..128. These were the first four of seven reserved
+    /// bytes, which every earlier proposal holds as zero, so the 400-byte
+    /// layout and every existing field offset are unchanged.
+    pub verified_chunks_high: [u8; 4],
+    pub reserved: [u8; 3],
 }
 impl Proposal {
+    /// The logical 128-bit chunk bitmap: low twelve bytes, then high four.
+    pub fn verified_bitmap(&self) -> [u8; BITMAP_BYTES] {
+        let mut bitmap = [0; BITMAP_BYTES];
+        bitmap[..LOW_BITMAP_BYTES].copy_from_slice(&self.verified_chunks);
+        bitmap[LOW_BITMAP_BYTES..].copy_from_slice(&self.verified_chunks_high);
+        bitmap
+    }
+    /// Marks chunk `index` once; a repeated chunk is rejected.
+    pub fn mark_chunk_verified(&mut self, index: u32) -> Result<()> {
+        let index = index as usize;
+        require(index < MAX_CHUNKS, Error::InvalidArtifact)?;
+        let byte = match self.verified_chunks.get_mut(index / 8) {
+            Some(byte) => byte,
+            None => &mut self.verified_chunks_high[index / 8 - LOW_BITMAP_BYTES],
+        };
+        let bit = 1 << (index % 8);
+        require(*byte & bit == 0, Error::DuplicateApproval)?;
+        *byte |= bit;
+        self.verified_count += 1;
+        Ok(())
+    }
     pub fn compute_digest(&self, program: &Pubkey) -> Result<[u8; 32]> {
         let timing = self.timing.try_to_vec().map_err(|_| Error::InvalidTiming)?;
         let action = self
@@ -433,7 +465,7 @@ impl Proposal {
                 && self.id > 0
                 && self.council_epoch > 0
                 && self.timing_version > 0
-                && self.reserved == [0; 7]
+                && self.reserved == [0; 3]
                 && proposal_pda(program, self.id) == (*key, self.bump)
                 && self.approvals < 32
                 && self.cancellations < 32
@@ -441,7 +473,7 @@ impl Proposal {
                 && self.cancellations.count_ones() == u32::from(self.cancellation_count)
                 && self.verified_count
                     == self
-                        .verified_chunks
+                        .verified_bitmap()
                         .iter()
                         .map(|x| x.count_ones())
                         .sum::<u32>()

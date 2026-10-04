@@ -1,4 +1,5 @@
 //! Fresh council-upgradeable controller. No V1/V2 dispatch or live-state migration.
+pub mod artifact;
 pub mod instruction;
 pub mod processor;
 pub mod state;

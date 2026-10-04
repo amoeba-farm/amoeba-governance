@@ -57,7 +57,8 @@ fn sample() -> (Pubkey, Config, Proposal) {
         extension_slot: 0,
         extended_capacity: 0,
         executed_slot: 0,
-        reserved: [0; 7],
+        verified_chunks_high: [0; 4],
+        reserved: [0; 3],
     };
     p.digest = p.compute_digest(&program).unwrap();
     (program, config, p)
@@ -157,7 +158,8 @@ fn fixed_accounts_and_digest_reject_timing_action_padding_and_trailing_drift() {
 #[test]
 fn closed_dispatch_rejects_every_unknown_tag_before_accounts() {
     let program = Pubkey::new_unique();
-    for tag in 17..=255u8 {
+    // Tags 10 and 13 (retired checked extension) fail exactly like unknown tags.
+    for tag in [10u8, 13].into_iter().chain(17..=255u8) {
         assert_eq!(
             governance_controller_v3::process_instruction(&program, &[], &[tag]),
             Err(solana_program::program_error::ProgramError::InvalidInstructionData)

@@ -38,6 +38,8 @@ pub enum Instruction {
     CloseBuffer {
         digest: [u8; 32],
     },
+    /// Retired tag 10, kept so later tags keep their Borsh positions.
+    /// `unpack` rejects it like an unknown tag.
     ExtendController {
         digest: [u8; 32],
     },
@@ -45,6 +47,7 @@ pub enum Instruction {
     ExecuteTargetUpgrade {
         digest: [u8; 32],
     },
+    /// Retired tag 13, rejected by `unpack` like tag 10.
     ExtendTarget {
         digest: [u8; 32],
     },
