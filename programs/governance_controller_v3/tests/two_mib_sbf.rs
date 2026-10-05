@@ -918,6 +918,149 @@ async fn actual_sbf_deployed_controller_installs_this_controller_and_its_proposa
     );
 }
 
+/// The production release-1 binary must authorize the release-2 upgrade, and
+/// the installed binary must reject a second self-upgrade approved by release 1.
+#[tokio::test]
+#[ignore = "requires current candidate and exact release-1 controller SBF"]
+async fn actual_sbf_release_one_installs_release_two_and_retires_old_proposals() {
+    const ALLOCATED: usize = 223_096;
+    let new = elf();
+    let deployed = std::fs::read(
+        std::env::var("AMOEBA_GOV_V3_RELEASE_ONE_SBF")
+            .expect("AMOEBA_GOV_V3_RELEASE_ONE_SBF must select the production release-1 ELF"),
+    )
+    .unwrap();
+    assert_eq!(
+        sha256_hex(&deployed),
+        "1442c507f6f40f666e4191d767f8a892d61ddf73c82ab80da593c611c7312780"
+    );
+    assert_eq!(CONTROLLER_RELEASE, 2);
+    let mut current = deployed.clone();
+    current.resize(ALLOCATED, 0);
+    let mut h = Harness::start_with(&current, &deployed, &[&new, &new]).await;
+    let first_buffer = h.buffers[0];
+    let rival_buffer = h.buffers[1];
+    if new.len() > ALLOCATED {
+        let program = h.program;
+        h.grief(program, (new.len() - ALLOCATED) as u32).await;
+    }
+    // The payload names the release making the authorization, not its successor.
+    let premature = h.controller_action(&new, 2).await;
+    assert!(h.create(1, premature).await.is_err());
+    let first = h.controller_action(&new, 1).await;
+    h.create(1, first).await.expect("release-1 proposal");
+    h.seal_and_verify(1, &new).await;
+    h.buffer = rival_buffer;
+    let rival = h.controller_action(&new, 1).await;
+    h.create(2, rival).await.expect("rival release-1 proposal");
+    h.seal_and_verify(2, &new).await;
+    h.approve(2).await;
+    h.buffer = first_buffer;
+    h.approve(1).await;
+    h.warp(1).await;
+    let config_before = h
+        .ctx
+        .banks_client
+        .get_account(config_pda(&h.program).0)
+        .await
+        .unwrap()
+        .unwrap();
+    let gate_before = h
+        .ctx
+        .banks_client
+        .get_account(gate_pda(&h.program, &h.target).0)
+        .await
+        .unwrap()
+        .unwrap();
+    let first = h.proposal(1).await;
+    let rival = h.proposal(2).await;
+    let units = h
+        .ok(
+            h.execute_controller(1, first.digest),
+            &[],
+            "release 1 installs release 2",
+        )
+        .await;
+    assert!(units < MAX_EXECUTE_CU);
+    let installed = h.header(h.programdata).await.2;
+    assert_eq!(&installed[..new.len()], new.as_slice());
+    assert!(installed[new.len()..].iter().all(|b| *b == 0));
+    assert_eq!(
+        h.ctx
+            .banks_client
+            .get_account(config_pda(&h.program).0)
+            .await
+            .unwrap()
+            .unwrap()
+            .data,
+        config_before.data
+    );
+    assert_eq!(
+        h.ctx
+            .banks_client
+            .get_account(gate_pda(&h.program, &h.target).0)
+            .await
+            .unwrap()
+            .unwrap()
+            .data,
+        gate_before.data
+    );
+    let mut h = h.restart().await;
+    h.buffer = rival_buffer;
+    let before = h
+        .ctx
+        .banks_client
+        .get_account(h.programdata)
+        .await
+        .unwrap()
+        .unwrap();
+    let rival_before = h
+        .ctx
+        .banks_client
+        .get_account(proposal_pda(&h.program, 2).0)
+        .await
+        .unwrap()
+        .unwrap();
+    h.fails(
+        h.execute_controller(2, rival.digest),
+        &[],
+        "retired release-1 authorization",
+    )
+    .await;
+    assert_eq!(
+        h.ctx
+            .banks_client
+            .get_account(h.programdata)
+            .await
+            .unwrap()
+            .unwrap()
+            .data,
+        before.data
+    );
+    assert_eq!(
+        h.ctx
+            .banks_client
+            .get_account(proposal_pda(&h.program, 2).0)
+            .await
+            .unwrap()
+            .unwrap()
+            .data,
+        rival_before.data
+    );
+    for release in [0, 1, 3] {
+        let action = h.controller_action(&new, release).await;
+        assert!(
+            h.create(3, action).await.is_err(),
+            "retired or future release {release}"
+        );
+    }
+    let action = h.controller_action(&new, 2).await;
+    h.create(3, action)
+        .await
+        .expect("release-2 proposal accepted");
+    println!("AMOEBA_GOV_V3_RELEASE_ONE_TO_TWO old_bytes={} new_bytes={} allocated={} execute_cu={units}", deployed.len(), new.len(), installed.len());
+}
+
 /// Anyone may grow ProgramData top-level at any time. Neither one-byte
 /// growth before or after creation nor growth past both the old (1.5 MiB) and
 /// new (2 MiB) ceilings may stale or brick a proposal, and installation still

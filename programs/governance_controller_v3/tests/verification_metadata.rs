@@ -11,6 +11,7 @@ use solana_program::{
 use solana_program_test::{ProgramTest, ProgramTestContext};
 use solana_sdk::{
     account::{Account, AccountSharedData},
+    compute_budget::ComputeBudgetInstruction,
     signature::Signer,
     transaction::Transaction,
 };
@@ -38,6 +39,24 @@ fn unchanged(actual: Account, expected: &Account) {
 }
 fn rw(key: Pubkey) -> AccountMeta {
     AccountMeta::new(key, false)
+}
+// Literal previous on-chain recipe, independent of the implementation's
+// compatibility constructor. Only a stored record may use these old arguments.
+fn previous_spread_params(commit: &str, slot: u64) -> Vec<u8> {
+    (
+        "0.5.1".to_string(),
+        "https://github.com/amoeba-farm/amoeba-program".to_string(),
+        commit.to_string(),
+        vec![
+            "--mount-path", "programs/light_token_minter",
+            "--workspace-path", "programs/light_token_minter",
+            "--library-name", "light_token_minter", "--base-image",
+            "solanafoundation/solana-verifiable-build@sha256:0b4e3716fad9ca4b4aac3e3f977f43aad93a18c22296c0c0f44fc22e644bdd68",
+            "--arch", "v1", "--", "--no-default-features", "--features",
+            "mainnet-v3,devnet-solo-backfill-2026",
+        ].into_iter().map(str::to_string).collect::<Vec<_>>(),
+        slot,
+    ).try_to_vec().unwrap()
 }
 fn install(test: &mut ProgramTest, program: Pubkey, authority: Pubkey, bytes: &[u8]) {
     let pd = Pubkey::find_program_address(&[program.as_ref()], &LOADER).0;
@@ -334,6 +353,173 @@ async fn run(own: bool) {
         &authority_before,
     );
     if !own {
+        // Transition an authentic old record using actual Otter SBF. Include
+        // donations to both accounts; Anchor refunds all excess on shrink.
+        let legacy_bytes = record(
+            &target,
+            &auth,
+            &previous_spread_params(&"cd".repeat(20), 19),
+            bump,
+        );
+        let mut legacy = account(VERIFY_PROGRAM, legacy_bytes, false);
+        legacy.lamports += 765_432;
+        let mut donated_authority = authority_before.clone();
+        donated_authority.lamports += 234_567;
+        // Fund donations through transfers so the bank's capitalization stays
+        // valid when the fixture record is replaced between root/warp steps.
+        let donor = ctx.payer.pubkey();
+        assert!(
+            send(
+                &mut ctx,
+                &[
+                    solana_system_interface::instruction::transfer(&donor, &auth, 234_567),
+                    solana_system_interface::instruction::transfer(
+                        &donor,
+                        &metadata,
+                        legacy.lamports - updated.lamports
+                    ),
+                ]
+            )
+            .await
+        );
+        let mut transition = proposal.clone();
+        transition.action.data[40..60].fill(0xef);
+        transition.digest = transition.compute_digest(&controller).unwrap();
+        let transition_ix = instruction(ctx.payer.pubkey(), &transition);
+        let transition_account = account(controller, transition.try_to_vec().unwrap(), false);
+        // Byte offsets are independently derived from the literal Borsh recipe.
+        let commit_start = 72 + 4 + 5 + 4 + 45 + 4;
+        assert_eq!(
+            &legacy.data[commit_start..commit_start + 40],
+            "cd".repeat(20).as_bytes()
+        );
+        for case in 0..9 {
+            let mut bad = legacy.clone();
+            match case {
+                0 => bad.owner = Pubkey::new_unique(),
+                1 => bad.data[8] ^= 1,                   // target
+                2 => bad.data[40] ^= 1,                  // authority
+                3 => *bad.data.last_mut().unwrap() ^= 1, // PDA bump
+                4 => bad.data[commit_start] = b'G',
+                5 => bad.data[commit_start..commit_start + 40].fill(b'0'),
+                6 => bad.data[commit_start + 44] ^= 1, // first argument length
+                7 => bad.data.push(0),
+                _ => {
+                    bad.data.pop();
+                }
+            }
+            ctx.set_account(&metadata, &AccountSharedData::from(bad.clone()));
+            reset(&mut ctx, &transition);
+            ctx.warp_to_slot(4800 + case * 100).unwrap();
+            assert!(
+                !send(&mut ctx, std::slice::from_ref(&transition_ix)).await,
+                "legacy mutation {case}"
+            );
+            unchanged(
+                ctx.banks_client
+                    .get_account(metadata)
+                    .await
+                    .unwrap()
+                    .unwrap(),
+                &bad,
+            );
+            unchanged(
+                ctx.banks_client.get_account(auth).await.unwrap().unwrap(),
+                &donated_authority,
+            );
+            unchanged(
+                ctx.banks_client.get_account(pkey).await.unwrap().unwrap(),
+                &transition_account,
+            );
+        }
+        ctx.set_account(&metadata, &AccountSharedData::from(legacy.clone()));
+        reset(&mut ctx, &transition);
+        ctx.warp_to_slot(5800).unwrap();
+        // Exhaust compute inside the actual verifier CPI and confirm that
+        // partial reallocation/refund work cannot survive a failed transaction.
+        let blockhash = ctx.banks_client.get_latest_blockhash().await.unwrap();
+        let interrupted = Transaction::new_signed_with_payer(
+            &[
+                ComputeBudgetInstruction::set_compute_unit_limit(95_000),
+                transition_ix.clone(),
+            ],
+            Some(&ctx.payer.pubkey()),
+            &[&ctx.payer],
+            blockhash,
+        );
+        let failure = ctx
+            .banks_client
+            .process_transaction_with_metadata(interrupted)
+            .await
+            .unwrap();
+        assert!(failure.result.is_err(), "limited verifier CPI must fail");
+        let logs = failure.metadata.unwrap().log_messages;
+        assert!(
+            logs.iter()
+                .any(|line| line == &format!("Program {VERIFY_PROGRAM} invoke [2]")),
+            "failure must reach the actual verifier: {logs:?}"
+        );
+        assert!(
+            logs.iter()
+                .any(|line| line.contains("Computational budget exceeded")),
+            "expected compute exhaustion: {logs:?}"
+        );
+        unchanged(
+            ctx.banks_client
+                .get_account(metadata)
+                .await
+                .unwrap()
+                .unwrap(),
+            &legacy,
+        );
+        unchanged(
+            ctx.banks_client.get_account(auth).await.unwrap().unwrap(),
+            &donated_authority,
+        );
+        unchanged(
+            ctx.banks_client.get_account(pkey).await.unwrap().unwrap(),
+            &transition_account,
+        );
+        ctx.warp_to_slot(5900).unwrap();
+        assert!(send(&mut ctx, std::slice::from_ref(&transition_ix)).await);
+        let migrated = ctx
+            .banks_client
+            .get_account(metadata)
+            .await
+            .unwrap()
+            .unwrap();
+        let expected = record(
+            &target,
+            &auth,
+            &transition
+                .action
+                .verification_policy()
+                .unwrap()
+                .params(&controller)
+                .unwrap(),
+            bump,
+        );
+        assert!(expected.len() < legacy.data.len());
+        assert_eq!(migrated.data, expected);
+        assert_eq!(migrated.lamports, legacy.lamports);
+        unchanged(
+            ctx.banks_client.get_account(auth).await.unwrap().unwrap(),
+            &donated_authority,
+        );
+        assert_eq!(
+            Proposal::try_from_slice(
+                &ctx.banks_client
+                    .get_account(pkey)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .data
+            )
+            .unwrap()
+            .state,
+            EXECUTED
+        );
+        println!("AMOEBA_VERIFICATION_RECIPE_TRANSITION old_bytes={} new_bytes={} metadata_lamports={} authority_lamports={}", legacy.data.len(), migrated.data.len(), migrated.lamports, donated_authority.lamports);
         assert_eq!(
             ctx.banks_client
                 .get_account(gate_key)

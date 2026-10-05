@@ -1,5 +1,7 @@
 use super::*;
-use crate::verification::{metadata_pda, record, INITIALIZE, UPDATE, VERIFY_PROGRAM};
+use crate::verification::{
+    matches_existing_record, metadata_pda, record, INITIALIZE, UPDATE, VERIFY_PROGRAM,
+};
 use solana_program::program::invoke;
 
 /// Timelocked, quorum-approved metadata only; never alters code, authorities or gates.
@@ -63,13 +65,26 @@ pub(super) fn publish(
     let params = policy.params(program)?;
     let expected = record(target.key, authority.key, &params, metadata_bump);
     let fresh = *metadata.owner == system_program::ID && metadata.data_is_empty();
+    let previous_size = metadata.data_len();
     if !fresh {
         let bytes = metadata.try_borrow_data()?;
+        let current_recipe = matches_existing_record(&bytes, &expected, own);
+        let previous_recipe = !own
+            && !current_recipe
+            && matches_existing_record(
+                &bytes,
+                &record(
+                    target.key,
+                    authority.key,
+                    &policy.previous_spread_params(program)?,
+                    metadata_bump,
+                ),
+                false,
+            );
         require(
             *metadata.owner == VERIFY_PROGRAM
-                && bytes.len() == expected.len()
-                && bytes[..72] == expected[..72]
-                && bytes[bytes.len() - 1] == metadata_bump,
+                && !metadata.executable
+                && (current_recipe || previous_recipe),
             Error::InvalidAccount,
         )?;
     }
@@ -114,6 +129,31 @@ pub(super) fn publish(
         ],
         &[&seeds],
     )?;
+    // Otter's Anchor reallocation returns the size reduction and all excess
+    // lamports to its payer. Return that exact amount to the same metadata PDA
+    // so rent and donations remain there and the authority balance is unchanged.
+    if previous_size > expected.len() {
+        let returned = original_metadata_lamports
+            .checked_sub(Rent::get()?.minimum_balance(expected.len()))
+            .ok_or(Error::InvalidAccount)?;
+        require(
+            metadata.lamports() == original_metadata_lamports - returned
+                && authority.lamports() == add(original_authority_lamports, returned)?
+                && funding == 0,
+            Error::InvalidAccount,
+        )?;
+        if returned > 0 {
+            invoke_signed(
+                &solana_system_interface::instruction::transfer(
+                    authority.key,
+                    metadata.key,
+                    returned,
+                ),
+                &[authority.clone(), metadata.clone(), system.clone()],
+                &[&seeds],
+            )?;
+        }
+    }
     require(
         *metadata.owner == VERIFY_PROGRAM
             && !metadata.executable

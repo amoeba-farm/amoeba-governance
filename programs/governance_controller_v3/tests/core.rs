@@ -205,6 +205,15 @@ fn verification_policy_fixed_wire_and_existing_governance_rules() {
         assert!(bad.validate().is_err());
     }
     let params = policy.params(&program).unwrap();
+    assert_eq!(params.len(), 311);
+    assert_eq!(
+        solana_program::hash::hash(&params).to_bytes(),
+        [
+            0xe6, 0x23, 0xee, 0x1b, 0x4b, 0x62, 0xa0, 0xc9, 0xb0, 0x3e, 0xc5, 0xb8, 0xc8, 0x15,
+            0xa2, 0x53, 0x97, 0x55, 0x87, 0xce, 0x60, 0xcd, 0xe6, 0xeb, 0xad, 0x43, 0xf3, 0xda,
+            0x34, 0x88, 0xd1, 0x67,
+        ]
+    );
     assert!(params
         .windows(b"https://github.com/amoeba-farm/amoeba-governance".len())
         .any(|w| w == b"https://github.com/amoeba-farm/amoeba-governance"));
@@ -223,7 +232,16 @@ fn verification_policy_fixed_wire_and_existing_governance_rules() {
         target: DEVNET_SPREAD,
         ..policy.clone()
     };
-    assert!(target.params(&program).unwrap().len() <= 640);
+    let target_params = target.params(&program).unwrap();
+    assert_eq!(target_params.len(), 434);
+    assert_eq!(
+        solana_program::hash::hash(&target_params).to_bytes(),
+        [
+            0xc7, 0xa8, 0xfb, 0xcd, 0x45, 0xc2, 0x37, 0xe9, 0x11, 0xd6, 0xf4, 0xb7, 0x29, 0x7b,
+            0x3b, 0x13, 0x17, 0xb8, 0xcb, 0x34, 0x82, 0x3f, 0x5d, 0x91, 0x0b, 0xb8, 0xcc, 0x35,
+            0xa0, 0xd2, 0xd9, 0xcc,
+        ]
+    );
     let encoded = Instruction::PublishVerification { digest: [42; 32] }
         .try_to_vec()
         .unwrap();

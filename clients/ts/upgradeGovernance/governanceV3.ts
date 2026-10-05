@@ -30,7 +30,7 @@ export const MAX_ARTIFACT_BYTES_V3 = ARTIFACT_CHUNK_SIZE_V3 * MAX_ARTIFACT_CHUNK
 /** Release of this controller source (Rust `CONTROLLER_RELEASE`). A
  *  self-upgrade proposal must carry the release of the controller running at
  *  creation: 0 for the deployed pre-release binary, this value afterwards. */
-export const CONTROLLER_RELEASE_V3 = 1n;
+export const CONTROLLER_RELEASE_V3 = 2n;
 export const DEVNET_SPREAD_V3 = new PublicKey(
   "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
 );
@@ -63,7 +63,7 @@ export function verificationParamsV3(controller: PublicKey, action: Extract<Acti
   check(own || action.target.equals(DEVNET_SPREAD_V3), "unsupported verification target");
   const args = own ? [] : ["--mount-path", "programs/light_token_minter", "--workspace-path", "programs/light_token_minter"];
   args.push("--library-name", own ? "governance_controller_v3" : "light_token_minter", "--base-image", VERIFICATION_BUILD_IMAGE_V3, "--arch", "v1");
-  if (!own) args.push("--", "--no-default-features", "--features", "mainnet-v3,devnet-solo-backfill-2026");
+  if (!own) args.push("--", "--features", "mainnet-v3");
   const string = (s: string) => Buffer.concat([uint(Buffer.byteLength(s), 4), Buffer.from(s)]);
   return Buffer.concat([string("0.5.1"), string(`https://github.com/amoeba-farm/${own ? "amoeba-governance" : "amoeba-program"}`), string(action.commit), uint(args.length, 4), ...args.map(string), u64(action.deployedSlot)]);
 }

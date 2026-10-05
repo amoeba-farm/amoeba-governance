@@ -30,7 +30,7 @@ pub const PUBLISH_VERIFICATION: u8 = 6;
 /// and can only install while that release is running, so installing
 /// any newer controller retires all older self-upgrade proposals. Binaries
 /// before this field had release 0 (the eight action bytes were zero).
-pub const CONTROLLER_RELEASE: u64 = 1;
+pub const CONTROLLER_RELEASE: u64 = 2;
 pub const DEVNET_SPREAD: Pubkey =
     solana_program::pubkey!("2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw");
 

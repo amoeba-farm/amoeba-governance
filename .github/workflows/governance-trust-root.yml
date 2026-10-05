@@ -159,6 +159,20 @@ jobs:
           test "$(sha256sum "$RUNNER_TEMP/ameba-gov-v3-deployed/governance_controller_v3.so" | cut -d ' ' -f 1)" = \
             e06bf76acfacbf7e58f9bcdd0637051ea1ca629951e41a7b47738e082e51a8eb
 
+      - name: Rebuild release-1 controller for the recipe-correction rehearsal
+        shell: bash
+        run: |
+          src="$RUNNER_TEMP/ameba-gov-v3-release-one-src"
+          mkdir -p "$src"
+          git archive 1f9befd30d46367bac8ee0ac7527613dadec10ad \
+            Cargo.toml Cargo.lock rust-toolchain.toml programs | tar -x -C "$src"
+          CARGO_TARGET_DIR="$RUNNER_TEMP/ameba-gov-v3-release-one-target" \
+            cargo-build-sbf --manifest-path "$src/programs/governance_controller_v3/Cargo.toml" \
+            --arch v1 --tools-version v1.53 \
+            --sbf-out-dir "$RUNNER_TEMP/ameba-gov-v3-release-one" -- --locked
+          test "$(sha256sum "$RUNNER_TEMP/ameba-gov-v3-release-one/governance_controller_v3.so" | cut -d ' ' -f 1)" = \
+            1442c507f6f40f666e4191d767f8a892d61ddf73c82ab80da593c611c7312780
+
       - name: Build pinned public Spread integration fixture
         shell: bash
         run: |
@@ -181,6 +195,7 @@ jobs:
         run: |
           export AMOEBA_GOV_V3_SBF="$RUNNER_TEMP/ameba-gov-v3-sbf/governance_controller_v3.so"
           export AMOEBA_GOV_V3_DEPLOYED_SBF="$RUNNER_TEMP/ameba-gov-v3-deployed/governance_controller_v3.so"
+          export AMOEBA_GOV_V3_RELEASE_ONE_SBF="$RUNNER_TEMP/ameba-gov-v3-release-one/governance_controller_v3.so"
           export AMOEBA_FRESH_SPREAD_SBF="$RUNNER_TEMP/ameba-spread-integration-sbf/light_token_minter.so"
           export AMOEBA_OTTER_VERIFY_SBF="$RUNNER_TEMP/otter-verify-pinned.so"
           node clients/ts/tools/fetch-otter-verification-fixture.mjs "$AMOEBA_OTTER_VERIFY_SBF"

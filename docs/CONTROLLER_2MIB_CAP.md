@@ -112,7 +112,7 @@ one transaction. V3 never does that.
    - **Execution ignores ProgramData slot and length.** It does not compare
      them with the snapshot. Ordering comes from:
      - the target gate epoch, which every target install increments;
-     - for self-upgrades, `CONTROLLER_RELEASE` (`state.rs`, currently 1). The
+     - for self-upgrades, `CONTROLLER_RELEASE` (`state.rs`, currently 2). The
        proposal stores it in the eight formerly zero action bytes, and Create
        and execution require it to match the running binary. Installing any
        other release therefore retires every older self-upgrade proposal.

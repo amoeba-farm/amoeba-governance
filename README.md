@@ -39,6 +39,16 @@ npm test
 
 The V3 client entry point is `@amoeba/upgrade-governance/governance-v3`.
 
+## Mainnet verification recipe candidate (2026-10-05)
+
+This revision advances the controller release to 2 and pins the public Spread
+build to `--features mainnet-v3`. It updates the existing authority metadata PDA
+while preserving its rent and donations. Matching native and public Docker
+builds produced the 222,856-byte candidate recorded in the
+[local qualification receipt](docs/governance/evidence/mainnet-controller-recipe-20261005-candidate.json).
+Publication, the council upgrade, and hosted verification are pending in that
+receipt. The completed October 4 release remains documented below.
+
 ## Mainnet upgrade and verification (2026-10-04)
 
 The Mainnet controller [8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx](https://solscan.io/account/8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx)

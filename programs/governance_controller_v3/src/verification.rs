@@ -7,6 +7,15 @@ pub const VERIFY_PROGRAM: Pubkey = pubkey!("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th
 pub const BUILD_IMAGE: &str = "solanafoundation/solana-verifiable-build@sha256:0b4e3716fad9ca4b4aac3e3f977f43aad93a18c22296c0c0f44fc22e644bdd68";
 pub const INITIALIZE: [u8; 8] = [175, 175, 109, 31, 13, 152, 155, 237];
 pub const UPDATE: [u8; 8] = [219, 200, 88, 176, 158, 63, 253, 127];
+const VERSION: &str = "0.5.1";
+
+fn repository(own: bool) -> &'static str {
+    if own {
+        "https://github.com/amoeba-farm/amoeba-governance"
+    } else {
+        "https://github.com/amoeba-farm/amoeba-program"
+    }
+}
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct VerificationPolicy {
@@ -24,14 +33,19 @@ impl VerificationPolicy {
     }
     /// Construct the exact external ABI, allocating only fixed, trusted strings.
     pub fn params(&self, controller: &Pubkey) -> Result<Vec<u8>> {
+        self.params_for(controller, false)
+    }
+    /// Only authenticates existing records from the previous closed Spread recipe.
+    /// New publications always use `params` and cannot select this recipe.
+    pub(crate) fn previous_spread_params(&self, controller: &Pubkey) -> Result<Vec<u8>> {
+        require(self.target != *controller, Error::InvalidAccount)?;
+        self.params_for(controller, true)
+    }
+    fn params_for(&self, controller: &Pubkey, previous: bool) -> Result<Vec<u8>> {
         self.validate()?;
         let own = self.target == *controller;
         require(own || self.target == DEVNET_SPREAD, Error::InvalidAccount)?;
-        let repo = if own {
-            "https://github.com/amoeba-farm/amoeba-governance"
-        } else {
-            "https://github.com/amoeba-farm/amoeba-program"
-        };
+        let repo = repository(own);
         let mut args = Vec::new();
         if !own {
             args.extend([
@@ -54,12 +68,16 @@ impl VerificationPolicy {
             "v1",
         ]);
         if !own {
-            args.extend([
-                "--",
-                "--no-default-features",
-                "--features",
-                "mainnet-v3,devnet-solo-backfill-2026",
-            ]);
+            if previous {
+                args.extend([
+                    "--",
+                    "--no-default-features",
+                    "--features",
+                    "mainnet-v3,devnet-solo-backfill-2026",
+                ]);
+            } else {
+                args.extend(["--", "--features", "mainnet-v3"]);
+            }
         }
         let mut commit = String::with_capacity(40);
         for byte in self.commit {
@@ -67,7 +85,7 @@ impl VerificationPolicy {
             write!(&mut commit, "{byte:02x}").map_err(|_| Error::InvalidAccount)?;
         }
         let mut bytes = Vec::with_capacity(640);
-        for value in ["0.5.1", repo, &commit] {
+        for value in [VERSION, repo, &commit] {
             string(&mut bytes, value);
         }
         bytes.extend_from_slice(&(args.len() as u32).to_le_bytes());
@@ -78,6 +96,25 @@ impl VerificationPolicy {
         require(bytes.len() <= 640, Error::InvalidAccount)?;
         Ok(bytes)
     }
+}
+
+/// Every stored byte must match a closed recipe except the prior commit and slot.
+/// The commit remains an exactly forty-character, nonzero lowercase hex value.
+pub(crate) fn matches_existing_record(bytes: &[u8], expected: &[u8], own: bool) -> bool {
+    let commit_start = 72 + 4 + VERSION.len() + 4 + repository(own).len() + 4;
+    let commit_end = commit_start + 40;
+    if bytes.len() != expected.len() || bytes.len() < commit_end + 9 {
+        return false;
+    }
+    let commit = &bytes[commit_start..commit_end];
+    let slot_start = bytes.len() - 9;
+    bytes[..commit_start] == expected[..commit_start]
+        && commit
+            .iter()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(b))
+        && commit.iter().any(|b| *b != b'0')
+        && bytes[commit_end..slot_start] == expected[commit_end..slot_start]
+        && bytes[bytes.len() - 1] == expected[expected.len() - 1]
 }
 fn string(out: &mut Vec<u8>, value: &str) {
     out.extend_from_slice(&(value.len() as u32).to_le_bytes());
