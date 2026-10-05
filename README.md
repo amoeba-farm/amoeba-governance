@@ -39,15 +39,27 @@ npm test
 
 The V3 client entry point is `@amoeba/upgrade-governance/governance-v3`.
 
-## Mainnet verification recipe candidate (2026-10-05)
+## Mainnet verification recipe release (2026-10-05)
 
-This revision advances the controller release to 2 and pins the public Spread
-build to `--features mainnet-v3`. It updates the existing authority metadata PDA
-while preserving its rent and donations. Matching native and public Docker
-builds produced the 222,856-byte candidate recorded in the
-[local qualification receipt](docs/governance/evidence/mainnet-controller-recipe-20261005-candidate.json).
-Publication, the council upgrade, and hosted verification are pending in that
-receipt. The completed October 4 release remains documented below.
+Controller release 2 was installed at slot **453498655** through
+proposal 30 with three council approvals. The 222,856-byte ELF matches the
+[native and public Docker builds](docs/governance/evidence/mainnet-controller-recipe-20261005-candidate.json)
+and fits the existing 223,096-byte ProgramData capacity. Council policy and
+unrelated controller accounts were preserved; Spread remained Active at epoch 24.
+
+The authority metadata records now bind
+[controller source b667b45](https://github.com/amoeba-farm/amoeba-governance/commit/b667b4507f6b76b1c6ed51782875b9a6cd92472e) and
+[Spread source 1810b31](https://github.com/amoeba-farm/amoeba-program/commit/1810b31cd63e04f6dd89edeefdc9e3887adc2328).
+Spread uses the closed build recipe `--features mainnet-v3`.
+Both metadata updates preserved their authority balances.
+
+Controller hosted verification: **verified**. Spread hosted verification: **verified**.
+[Controller verifier status](https://verify.osec.io/status/8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx) ·
+[Spread verifier status](https://verify.osec.io/status/2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw) ·
+[Finalized installation and verification evidence](docs/governance/evidence/mainnet-controller-recipe-20261005-installed.json) ·
+[Upgrade transaction](https://solscan.io/tx/3YyHznVqfLcaTW6aPqusm9HYDhZP7WBLQXFmTWDSutTU9hj2pSuaydRWqRTn8YEDfHnqu3VaE9n2gfHYgKZuX6e8).
+
+The original qualification receipt and October 4 release remain as historical evidence.
 
 ## Mainnet upgrade and verification (2026-10-04)
 

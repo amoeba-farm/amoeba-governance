@@ -84,3 +84,9 @@ reloading the installed code, an approved rival release-1 self-upgrade failed
 without mutation, and a release-2 self-upgrade proposal was accepted. This is
 local qualification; the council execution and hosted verification are recorded
 separately after they complete.
+
+## October 5 finalized installation
+
+The [installed receipt](../evidence/mainnet-controller-recipe-20261005-installed.json)
+records the actual controller upgrade, authority metadata transactions and observed
+hosted verification status. The qualification receipt above remains unchanged.

@@ -1,0 +1,193 @@
+{
+  "schema": "amoeba-controller-verification-recipe-installed-v1",
+  "completedAt": "2026-10-05T06:30:38.327Z",
+  "status": "installed",
+  "program": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+  "genesis": "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+  "controllerRelease": 2,
+  "source": {
+    "privateImplementationCommit": "f152e6be36d41e1ed5254b750d9b1c1ef66aca1b",
+    "publicBuildCommit": "b667b4507f6b76b1c6ed51782875b9a6cd92472e",
+    "publicRepository": "https://github.com/amoeba-farm/amoeba-governance"
+  },
+  "immutableQualification": {
+    "path": "docs/governance/evidence/mainnet-controller-recipe-20261005-candidate.json",
+    "sha256": "b127148359cf638d523d572b038d09ecbad004a4b0f3215579f34d1ae935b2f1",
+    "buildInputCount": 134,
+    "buildInputsSha256": "ffbc8afa03b649596a2593296c3dfc6ecd454a36379ec8735ef0711c24d91fd9",
+    "qualificationReused": true
+  },
+  "artifact": {
+    "bytes": 222856,
+    "sha256": "ca1783a72b88e0f3e4dd52e8a468f0abd0d858edb1032e93e6c428f8f93e6861",
+    "normalizedExecutableHash": "ca03db9bff242e94d0a7f0d209fcbdfb48d13d299eea0883824c4639df7af31f",
+    "programDataCapacity": 223096,
+    "zeroPaddingBytes": 240
+  },
+  "installation": {
+    "deployedSlot": "453498655",
+    "finalizedSlot": 453498828,
+    "programDataAddress": "7eW9UXcCDrpEAQ93fP7o2zgGMKhAKi3zJLihELjR8xYd",
+    "programDataBytes": 223141,
+    "programDataSha256": "26dbca2ea3cccba059bedd165f363f599870f89ea6f7480d6194216254215e01",
+    "programDataPayloadSha256": "51927fc3fc54290426075b12f294a7b086f40b5bfd45c6dae82c9ae5101f1897",
+    "upgradeAuthority": "Frc28QFQxqUxF9HPgzcmm5VkqorqUb2LeLPE5uKU6Ycp",
+    "proposalId": "30",
+    "proposalAddress": "3J2qjrvPjzBCBkcnXJEeaLKQaAz3yGaCUGHeY5qUfa33",
+    "approvals": 3,
+    "verifiedChunks": 14,
+    "executionSignature": "3YyHznVqfLcaTW6aPqusm9HYDhZP7WBLQXFmTWDSutTU9hj2pSuaydRWqRTn8YEDfHnqu3VaE9n2gfHYgKZuX6e8",
+    "executionAccounting": {
+      "signature": "3YyHznVqfLcaTW6aPqusm9HYDhZP7WBLQXFmTWDSutTU9hj2pSuaydRWqRTn8YEDfHnqu3VaE9n2gfHYgKZuX6e8",
+      "slot": 453498655,
+      "feePayer": "G2f6Fv477ZyFbmRFtVr21jf9VufXpiRCxf1e91J6SxxT",
+      "feeLamports": 26000,
+      "messageSha256": "767668a0500a3c34d3ba27dedb7c376bbc9ef97f3b8dd1a90025899c763070ba",
+      "treasuryRefundLamports": "1132946681",
+      "bufferDeltaLamports": "-1132946681",
+      "programDataDeltaLamports": "0"
+    }
+  },
+  "preservation": {
+    "configPolicyUnchanged": true,
+    "configDataSha256AtExecution": "ff763b36666eb41dcd49c420664199afdeab6deb119dc52c4a09ac402d460c21",
+    "configPolicySha256": "18b4ded205a2f2db0795ac7bfe56d5305446979f36bb0c7195a88a4426e1d33f",
+    "unrelatedControllerAccountsPreserved": true,
+    "priorControllerAccounts": 31,
+    "observedControllerAccounts": 33,
+    "spread": {
+      "target": "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
+      "deployedSlot": "453486523",
+      "programDataSha256": "28432872e242a6a347083d4909d0d376c3ea273640b2679d3812d579d4d9577d",
+      "gateEpoch": "24",
+      "gateStatus": 0,
+      "gateDataSha256": "a4fabe984158fed49b8470148ab1f915d8cbd5cc6cc5fd22aeee607abf5a90a1",
+      "activationProposalId": "29",
+      "activationReceiptSha256": "d0d97cd0bd0badeedfb7b1398e46af133f3c50b0302967a46a00abf9bd41a3a7"
+    }
+  },
+  "authorityMetadata": {
+    "controller": {
+      "program": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "authority": "Frc28QFQxqUxF9HPgzcmm5VkqorqUb2LeLPE5uKU6Ycp",
+      "publicCommit": "b667b4507f6b76b1c6ed51782875b9a6cd92472e",
+      "repository": "https://github.com/amoeba-farm/amoeba-governance",
+      "normalizedExecutableHash": "ca03db9bff242e94d0a7f0d209fcbdfb48d13d299eea0883824c4639df7af31f",
+      "deployedSlot": "453498655",
+      "metadataAddress": "H6TGQ8KDAf7MWixKwTKRzLZetCiEhzZXAbpF3bahWDwQ",
+      "metadataAccountSha256": "82ef96a167519c1ac1f6f32e49eff8ca9e9c254926249fdfc6216ad09a4bf7c6",
+      "recipeSha256": "e0fab0317fb311b7db8aaf26b21a9fb2126c57d2c3b7d79a05f164f85524457a",
+      "metadataExecutionSignature": "vtcpLWc5QcgkDw3L2gCQbnGxBHFPXU48SQbLLLnP66TZtnH11e4WqnMYXmsApWG3Mst2mCYnDWo1Xex36diiWKd",
+      "metadataFinalizedSlot": 453511296,
+      "proposalId": "32",
+      "proposal": {
+        "id": "32",
+        "approvals": 3,
+        "notBefore": "453503481",
+        "expires": "456090981",
+        "executedSlot": "453511190"
+      },
+      "recipeHex": "05000000302e352e313000000068747470733a2f2f6769746875622e636f6d2f616d6f6562612d6661726d2f616d6f6562612d676f7665726e616e63652800000062363637623435303766366237366231633665643531373832383735623961366364393234373265060000000e0000002d2d6c6962726172792d6e616d6518000000676f7665726e616e63655f636f6e74726f6c6c65725f76330c0000002d2d626173652d696d61676570000000736f6c616e61666f756e646174696f6e2f736f6c616e612d76657269666961626c652d6275696c64407368613235363a30623465333731366661643963613462346161633365336639373766343361616439336131386332323239366330633066343466633232653634346264643638060000002d2d617263680200000076311fd7071b00000000",
+      "accountDataBase64": "zmXCiIdxcwxx64fT+9Ug2NT8C6qMMeAnwkU/S26KPHY00wKQ/NcW7dy4rFhKtAVB0N6KuYw5NkG28tPML72IP2oy0EyNZ2QxBQAAADAuNS4xMAAAAGh0dHBzOi8vZ2l0aHViLmNvbS9hbW9lYmEtZmFybS9hbW9lYmEtZ292ZXJuYW5jZSgAAABiNjY3YjQ1MDdmNmI3NmIxYzZlZDUxNzgyODc1YjlhNmNkOTI0NzJlBgAAAA4AAAAtLWxpYnJhcnktbmFtZRgAAABnb3Zlcm5hbmNlX2NvbnRyb2xsZXJfdjMMAAAALS1iYXNlLWltYWdlcAAAAHNvbGFuYWZvdW5kYXRpb24vc29sYW5hLXZlcmlmaWFibGUtYnVpbGRAc2hhMjU2OjBiNGUzNzE2ZmFkOWNhNGI0YWFjM2UzZjk3N2Y0M2FhZDkzYTE4YzIyMjk2YzBjMGY0NGZjMjJlNjQ0YmRkNjgGAAAALS1hcmNoAgAAAHYxH9cHGwAAAAD8",
+      "accountOwner": "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC",
+      "metadataRentIncreaseLamports": "0",
+      "authorityDeltaLamports": "0"
+    },
+    "spread": {
+      "program": "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
+      "authority": "4hsEKyThDv85YA4HjUaGWn2nWnVbM5V23XcLrEX3UKzn",
+      "publicCommit": "1810b31cd63e04f6dd89edeefdc9e3887adc2328",
+      "repository": "https://github.com/amoeba-farm/amoeba-program",
+      "normalizedExecutableHash": "90924ac215b3c3ba26c44cfd9f747313e3da456464543c5c126804416367f5ad",
+      "deployedSlot": "453486523",
+      "metadataAddress": "599mCDfv3X5U8eTBSdim9u4yZRP1eXHcxRPjY31L9H5q",
+      "metadataAccountSha256": "cc2cee9de267af46302cbc18fe071876c540d2d901f5b94234c64ef6ce19a767",
+      "recipeSha256": "e8aadd7e64c43da1c1c6f51dd7dd0b03b7460f8754f21c79893c4378623e02be",
+      "metadataExecutionSignature": "3urVW6Mg4dNLnUtNdgBoYkUGmaVndWQjMuAX8tq7ZbZ2iydqtbJy1xmsi9tATNGJkA1Fz67GFvAhrF42YWBAd1J5",
+      "metadataFinalizedSlot": 453499544,
+      "proposalId": "31",
+      "proposal": {
+        "id": "31",
+        "approvals": 3,
+        "notBefore": "453494091",
+        "expires": "456081591",
+        "executedSlot": "453499447"
+      },
+      "recipeHex": "05000000302e352e312d00000068747470733a2f2f6769746875622e636f6d2f616d6f6562612d6661726d2f616d6f6562612d70726f6772616d28000000313831306233316364363365303466366464383965646565666463396533383837616463323332380d0000000c0000002d2d6d6f756e742d706174681b00000070726f6772616d732f6c696768745f746f6b656e5f6d696e746572100000002d2d776f726b73706163652d706174681b00000070726f6772616d732f6c696768745f746f6b656e5f6d696e7465720e0000002d2d6c6962726172792d6e616d65120000006c696768745f746f6b656e5f6d696e7465720c0000002d2d626173652d696d61676570000000736f6c616e61666f756e646174696f6e2f736f6c616e612d76657269666961626c652d6275696c64407368613235363a30623465333731366661643963613462346161633365336639373766343361616439336131386332323239366330633066343466633232653634346264643638060000002d2d61726368020000007631020000002d2d0a0000002d2d66656174757265730a0000006d61696e6e65742d7633bba7071b00000000",
+      "accountDataBase64": "zmXCiIdxcwwZvjKRD6S6/5VJ/U6x4gEcORL8JtlXd/e5pxFGqPpXJjcLFo/lq5Rap3D5t5tjgcmcrZzDUG0llVcY/e1Ym0t3BQAAADAuNS4xLQAAAGh0dHBzOi8vZ2l0aHViLmNvbS9hbW9lYmEtZmFybS9hbW9lYmEtcHJvZ3JhbSgAAAAxODEwYjMxY2Q2M2UwNGY2ZGQ4OWVkZWVmZGM5ZTM4ODdhZGMyMzI4DQAAAAwAAAAtLW1vdW50LXBhdGgbAAAAcHJvZ3JhbXMvbGlnaHRfdG9rZW5fbWludGVyEAAAAC0td29ya3NwYWNlLXBhdGgbAAAAcHJvZ3JhbXMvbGlnaHRfdG9rZW5fbWludGVyDgAAAC0tbGlicmFyeS1uYW1lEgAAAGxpZ2h0X3Rva2VuX21pbnRlcgwAAAAtLWJhc2UtaW1hZ2VwAAAAc29sYW5hZm91bmRhdGlvbi9zb2xhbmEtdmVyaWZpYWJsZS1idWlsZEBzaGEyNTY6MGI0ZTM3MTZmYWQ5Y2E0YjRhYWMzZTNmOTc3ZjQzYWFkOTNhMThjMjIyOTZjMGMwZjQ0ZmMyMmU2NDRiZGQ2OAYAAAAtLWFyY2gCAAAAdjECAAAALS0KAAAALS1mZWF0dXJlcwoAAABtYWlubmV0LXYzu6cHGwAAAAD/",
+      "accountOwner": "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC",
+      "metadataRentIncreaseLamports": "0",
+      "authorityDeltaLamports": "0"
+    }
+  },
+  "hostedVerification": {
+    "controller": {
+      "status": "verified",
+      "verified": true,
+      "globalMatches": true,
+      "authorityMatches": true,
+      "observation": {
+        "observedAt": "2026-10-05T07:28:08.965Z",
+        "requestId": "8216b993-a4d9-43b8-b482-42606b9dae1a",
+        "jobStatus": "completed",
+        "global": {
+          "is_verified": true,
+          "commit": "b667b4507f6b76b1c6ed51782875b9a6cd92472e",
+          "on_chain_hash": "ca03db9bff242e94d0a7f0d209fcbdfb48d13d299eea0883824c4639df7af31f",
+          "executable_hash": "ca03db9bff242e94d0a7f0d209fcbdfb48d13d299eea0883824c4639df7af31f",
+          "repo_url": "https://github.com/amoeba-farm/amoeba-governance/tree/b667b4507f6b76b1c6ed51782875b9a6cd92472e",
+          "is_closed": false,
+          "is_frozen": false
+        },
+        "authority": {
+          "signer": "Frc28QFQxqUxF9HPgzcmm5VkqorqUb2LeLPE5uKU6Ycp",
+          "is_verified": true,
+          "commit": "b667b4507f6b76b1c6ed51782875b9a6cd92472e",
+          "on_chain_hash": "ca03db9bff242e94d0a7f0d209fcbdfb48d13d299eea0883824c4639df7af31f",
+          "executable_hash": "ca03db9bff242e94d0a7f0d209fcbdfb48d13d299eea0883824c4639df7af31f",
+          "repo_url": "https://github.com/amoeba-farm/amoeba-governance/tree/b667b4507f6b76b1c6ed51782875b9a6cd92472e",
+          "is_closed": false,
+          "is_frozen": false
+        }
+      }
+    },
+    "spread": {
+      "status": "verified",
+      "verified": true,
+      "globalMatches": true,
+      "authorityMatches": true,
+      "observation": {
+        "observedAt": "2026-10-05T06:36:54.817Z",
+        "requestId": "c9ed8803-86da-4d38-96a7-b9ae7df556a6",
+        "jobStatus": "completed",
+        "global": {
+          "is_verified": true,
+          "commit": "1810b31cd63e04f6dd89edeefdc9e3887adc2328",
+          "on_chain_hash": "90924ac215b3c3ba26c44cfd9f747313e3da456464543c5c126804416367f5ad",
+          "executable_hash": "90924ac215b3c3ba26c44cfd9f747313e3da456464543c5c126804416367f5ad",
+          "repo_url": "https://github.com/amoeba-farm/amoeba-program/tree/1810b31cd63e04f6dd89edeefdc9e3887adc2328",
+          "is_closed": false,
+          "is_frozen": false
+        },
+        "authority": {
+          "signer": "4hsEKyThDv85YA4HjUaGWn2nWnVbM5V23XcLrEX3UKzn",
+          "is_verified": true,
+          "commit": "1810b31cd63e04f6dd89edeefdc9e3887adc2328",
+          "on_chain_hash": "90924ac215b3c3ba26c44cfd9f747313e3da456464543c5c126804416367f5ad",
+          "executable_hash": "90924ac215b3c3ba26c44cfd9f747313e3da456464543c5c126804416367f5ad",
+          "repo_url": "https://github.com/amoeba-farm/amoeba-program/tree/1810b31cd63e04f6dd89edeefdc9e3887adc2328",
+          "is_closed": false,
+          "is_frozen": false
+        }
+      }
+    }
+  },
+  "inputReceipts": {
+    "controller-completed.json": "df04dcc0537a2f9f8ee7a92c20a2e5618512dbf044048d91bd0f0225ccbc2f72",
+    "completion.json": "c052ce4c906e6efcaaecf6cf03b84b79fefeade9083eb97895258acee797ebaa",
+    "controller-metadata-completed.json": "d66894345c70ec91ba8b09fa555bc741f129221bceb99d94a3bf5471d3cbe193",
+    "controller-spread-metadata-completed.json": "1863ca3099e1b4ed9a0e90e244102972d0d2d350207174648f51af323dd9bcd5",
+    "otter-controller-status.json": "48efb8ea095b9e389ce5ef1f19c18e57894c3f90d523f08f56fa1cca99544f5c",
+    "otter-spread-status.json": "6792aadfbf6d892e475a3c9b10aaf779913d4627175d26fd609bf497c1d127a7"
+  }
+}
