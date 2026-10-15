@@ -41,15 +41,26 @@ The V3 client entry point is `@amoeba/upgrade-governance/governance-v3`.
 
 ## 150-slot execution delay (2026-10-15)
 
-Controller release 4 accepts an execution delay of 150 slots, replacing the
-4,500-slot floor. Three of five council approvals, approval and expiry windows,
-artifact verification and account layouts are unchanged. Existing proposals
-retain their timing snapshots.
+Controller release 4 is installed on Mainnet at slot **457220000**.
+Proposal 60 installed the byte-for-byte qualified artifact; proposal
+61 set the saved execution delay to **150 slots**, down from 4,500.
+Both finalized with three council approvals. Future proposals, including controller
+self-upgrades, use 150 slots (nominally one minute at 400 ms per slot).
 
-This source preserves the release-3 retirement functionality installed on
-Mainnet earlier on October 15. A controller upgrade and separate timing-policy
-proposal activate the shorter delay on Mainnet. The former Spread target has
-been retired; older Spread deployment records below are historical.
+The five seats, three-approval quorum, review and expiry windows, authority,
+artifact verification and account layouts are unchanged. Existing proposals retain
+their original timing snapshots. The temporary buffer was closed and its rent
+returned to the governance treasury. Unrelated controller accounts were preserved.
+
+[Finalized installation receipt](docs/governance/evidence/mainnet-timing-20261015-installed.json) ·
+[Qualified build and tests](docs/governance/evidence/mainnet-timing-20261015-candidate.json) ·
+[Public source](https://github.com/amoeba-farm/amoeba-governance/commit/67bc86f892bbd1e99c7594a1c340835ae22c0220) ·
+[Controller upgrade](https://solscan.io/tx/26j7BxQwdCGvGTdD5UDrsFu7GxR4rx45J5mtbR4j1KjayWLQ3XYq734X3SfT7ZvQoWytsVSaLSaCdDpRJuav7F47) ·
+[Timing activation](https://solscan.io/tx/RijNyeAqivUW9j1LnNuctt7zhsBMkAY5PDVaVcq7XTRgsWQugy4eGomjV9KRVWWE7Q1v4VbvgCTbMHqfP1gnvWD)
+
+This release preserves the release-3 retirement functionality installed earlier
+on October 15. Older Spread deployment and hosted-verification records below are
+historical; they do not attest the current release-4 artifact.
 
 ## Mainnet verification recipe release (2026-10-05)
 

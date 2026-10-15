@@ -1,0 +1,131 @@
+{
+  "status": "finalized",
+  "finalizedSlot": 457225112,
+  "controller": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+  "programData": "7eW9UXcCDrpEAQ93fP7o2zgGMKhAKi3zJLihELjR8xYd",
+  "authority": "Frc28QFQxqUxF9HPgzcmm5VkqorqUb2LeLPE5uKU6Ycp",
+  "sourceCommit": "e73c2fc0c08bfccba9695162e63c51ad51def1df",
+  "artifactBytes": 237160,
+  "artifactSha256": "b9b3371b6807378938178e336a7f0d304aa6c74a081864d21b30fead1548a453",
+  "capacity": 237160,
+  "deployedSlot": "457220000",
+  "upgrade": {
+    "name": "upgrade-execute",
+    "signature": "26j7BxQwdCGvGTdD5UDrsFu7GxR4rx45J5mtbR4j1KjayWLQ3XYq734X3SfT7ZvQoWytsVSaLSaCdDpRJuav7F47",
+    "slot": 457220000,
+    "err": null,
+    "messageSha256": "7e1a1fbaedbf6e7a68f48a88fa3bbbabca90fd2b7f98194a2436f8bbedb4f226"
+  },
+  "timingUpdate": {
+    "name": "policy-execute",
+    "signature": "RijNyeAqivUW9j1LnNuctt7zhsBMkAY5PDVaVcq7XTRgsWQugy4eGomjV9KRVWWE7Q1v4VbvgCTbMHqfP1gnvWD",
+    "slot": 457224959,
+    "err": null,
+    "messageSha256": "850f1f552b30267641197cdecf0362936c506ce21a884ad872cd7c5717db6fac"
+  },
+  "upgradeProposal": "60",
+  "timingProposal": "61",
+  "approvals": [
+    3,
+    3
+  ],
+  "timing": {
+    "reviewSlots": "1512000",
+    "delaySlots": "150",
+    "expirySlots": "2592000"
+  },
+  "timingVersion": "2",
+  "unrelatedControllerAccountsPreserved": true,
+  "accounts": [
+    {
+      "pubkey": "3J2qjrvPjzBCBkcnXJEeaLKQaAz3yGaCUGHeY5qUfa33",
+      "owner": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "executable": false,
+      "lamports": 2682240,
+      "dataSha256": "6a3e76d625574012a6ad641f2ef4336d41b10d55e6f8d7c5d19db4516c6e95d0"
+    },
+    {
+      "pubkey": "6C1isXVRyaFJX7ZPHXyhGuTBs1KXGzknhpSAxisRC5y3",
+      "owner": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "executable": false,
+      "lamports": 2682240,
+      "dataSha256": "dd05cc110e8e037ea45b959f5b9d27dbc3382a128b4d95b56401d555ab0a57e4"
+    },
+    {
+      "pubkey": "8gbV8ZfEgRFL7kbPXropkjvrnktcTrCMA8zyCGq27bXQ",
+      "owner": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "executable": false,
+      "lamports": 2682240,
+      "dataSha256": "301d61929d0d3cc1f5bc0182c6e33c801b14c335c3b1c0fb4e1b5d1c9cbaa15f"
+    },
+    {
+      "pubkey": "8ZEJhzn5NnpZbQc2qZh6r844VWkaGtiWu9x4TekAeFYk",
+      "owner": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "executable": false,
+      "lamports": 2682240,
+      "dataSha256": "075c231acb6fef9d25d2003071096e8f1f24e9f1145b7161d035fefe051a50a6"
+    },
+    {
+      "pubkey": "9taK9Ly8bKp9KHsseeB8Y9kKPrqVSyjQmqM5LzBtpzn",
+      "owner": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "executable": false,
+      "lamports": 2682240,
+      "dataSha256": "a0b95ca7096d0f24ed80e0be29ca97d22fed9cd949297d52c578cabfd03c27a8"
+    },
+    {
+      "pubkey": "AFHLuC38Dm9wyCKuwzbjs4FKgb6Ti8LFWeTmCBoEkVX1",
+      "owner": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "executable": false,
+      "lamports": 2682240,
+      "dataSha256": "02202cd8c625f276d096fc2a095b6615f642cdd66a367f933c057bd086bb1148"
+    },
+    {
+      "pubkey": "Cnij9fqw9QWdKvxiCB36xhZG1Wy4Qm7QHtVdeVnQLMEE",
+      "owner": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "executable": false,
+      "lamports": 2682240,
+      "dataSha256": "057aa106b095d5c309b0c73dcaecfcad029d77f13069ecca3dc0165558933536"
+    },
+    {
+      "pubkey": "DBziVjZnkZMBjCVbqXrBxoraVAXKCKpwn1nUk9czSS7y",
+      "owner": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "executable": false,
+      "lamports": 2682240,
+      "dataSha256": "f83037189d2a304b68534ec38f53f455238a698120739d081b176ee3964c87f1"
+    },
+    {
+      "pubkey": "Ec5H8jsGvaLU3T3gp6qTayPjY2qF3geBbVKWz4rsaEHB",
+      "owner": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "executable": false,
+      "lamports": 2600960,
+      "dataSha256": "e689283872059c961b4b19a3020811d19008cf8abf336be3c8a98bacba034c7a"
+    },
+    {
+      "pubkey": "XhQ98FZQ6kRyPsvriJBTKMEeXULLZKwicjH8W3zedyj",
+      "owner": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+      "executable": false,
+      "lamports": 2682240,
+      "dataSha256": "9c8e32c22c63621604db062e72f4fd4a449beffd06779d794c5122c2944ec698"
+    }
+  ],
+  "bufferClosed": true,
+  "treasuryLamports": 12711633367,
+  "executionAccounting": [
+    {
+      "name": "upgrade-execute",
+      "signature": "26j7BxQwdCGvGTdD5UDrsFu7GxR4rx45J5mtbR4j1KjayWLQ3XYq734X3SfT7ZvQoWytsVSaLSaCdDpRJuav7F47",
+      "slot": 457220000,
+      "feeLamports": 6400,
+      "bufferRefundLamports": 1205611000
+    },
+    {
+      "name": "policy-execute",
+      "signature": "RijNyeAqivUW9j1LnNuctt7zhsBMkAY5PDVaVcq7XTRgsWQugy4eGomjV9KRVWWE7Q1v4VbvgCTbMHqfP1gnvWD",
+      "slot": 457224959,
+      "feeLamports": 5300
+    }
+  ],
+  "publicSourceCommit": "67bc86f892bbd1e99c7594a1c340835ae22c0220",
+  "publicSourceUrl": "https://github.com/amoeba-farm/amoeba-governance/commit/67bc86f892bbd1e99c7594a1c340835ae22c0220",
+  "publicRustInputsIdenticalToBuild": true
+}
