@@ -21,12 +21,16 @@ fn sample() -> (Pubkey, Config, Proposal) {
         seats: std::array::from_fn(|i| Pubkey::new_from_array([40 + i as u8; 32])),
         council_epoch: 1,
         timing_version: 1,
-        timing: Timing::default(),
+        // Historical proposal digest remains a compatibility fixture.
+        timing: Timing {
+            delay_slots: 4_500,
+            ..Timing::default()
+        },
         next_id: 2,
         reserved: [0; 37],
     };
     let mut data = [0; 192];
-    data[..24].copy_from_slice(&Timing::default().try_to_vec().unwrap());
+    data[..24].copy_from_slice(&config.timing.try_to_vec().unwrap());
     let (review_end, not_before, expires) = config.timing.boundaries(100).unwrap();
     let mut p = Proposal {
         discriminator: *b"AG3PRP01",
@@ -62,6 +66,45 @@ fn sample() -> (Pubkey, Config, Proposal) {
     };
     p.digest = p.compute_digest(&program).unwrap();
     (program, config, p)
+}
+
+#[test]
+fn shorter_delay_preserves_quorum_and_existing_proposal_timing() {
+    let (program, mut config, mut p) = sample();
+    let mut legacy = p.clone();
+    let timing = Timing::default();
+    assert_eq!(timing.delay_slots, 150);
+    assert_eq!(timing.review_slots, 1_512_000);
+    assert_eq!(timing.expiry_slots, 2_592_000);
+    assert!(Timing {
+        delay_slots: 149,
+        ..timing
+    }
+    .validate()
+    .is_err());
+    config.timing = timing;
+    p.timing = timing;
+    (p.review_end, p.not_before, p.expires) = timing.boundaries(p.created).unwrap();
+    p.action.data[..24].copy_from_slice(&timing.try_to_vec().unwrap());
+    p.digest = p.compute_digest(&program).unwrap();
+    p.validate(&program, &proposal_pda(&program, p.id).0)
+        .unwrap();
+    for seat in 0..2 {
+        p.approve(seat, p.created, false).unwrap();
+    }
+    assert!(p.executable(&config, p.not_before).is_err());
+    p.approve(2, p.created, false).unwrap();
+    assert!(p.executable(&config, p.created + 149).is_err());
+    p.executable(&config, p.created + 150).unwrap();
+    legacy
+        .validate(&program, &proposal_pda(&program, legacy.id).0)
+        .unwrap();
+    for seat in 0..3 {
+        legacy.approve(seat, legacy.created, false).unwrap();
+    }
+    assert_eq!(legacy.not_before, legacy.created + 4_500);
+    assert!(legacy.executable(&config, p.not_before).is_err());
+    legacy.executable(&config, legacy.not_before).unwrap();
 }
 
 #[test]
@@ -159,7 +202,7 @@ fn fixed_accounts_and_digest_reject_timing_action_padding_and_trailing_drift() {
 fn closed_dispatch_rejects_every_unknown_tag_before_accounts() {
     let program = Pubkey::new_unique();
     // Tags 10 and 13 (retired checked extension) fail exactly like unknown tags.
-    for tag in [10u8, 13].into_iter().chain(17..=255u8) {
+    for tag in [10u8, 13].into_iter().chain(20..=255u8) {
         assert_eq!(
             governance_controller_v3::process_instruction(&program, &[], &[tag]),
             Err(solana_program::program_error::ProgramError::InvalidInstructionData)
@@ -168,6 +211,73 @@ fn closed_dispatch_rejects_every_unknown_tag_before_accounts() {
     assert!(Instruction::unpack(&vec![0; MAX_DATA + 1]).is_err());
     assert!(Instruction::unpack(&[6, 0]).is_err());
     assert!(Instruction::unpack(&[]).is_err());
+}
+
+#[test]
+fn retirement_policy_is_fixed_and_preserves_quorum_and_timing() {
+    let (program, config, mut p) = sample();
+    let policy = RetireTargetPolicy {
+        target: Pubkey::new_from_array([42; 32]),
+        expected_epoch: 44,
+        deployed_slot: 400,
+        payload_sha256: [43; 32],
+        recovery_commitment: [44; 32],
+    };
+    let bytes = policy.try_to_vec().unwrap();
+    assert_eq!(bytes.len(), 112);
+    assert_eq!(
+        bytes,
+        [
+            vec![42; 32],
+            44u64.to_le_bytes().to_vec(),
+            400u64.to_le_bytes().to_vec(),
+            vec![43; 32],
+            vec![44; 32]
+        ]
+        .concat()
+    );
+    p.action = Action {
+        kind: RETIRE_TARGET,
+        data: [0; 192],
+    };
+    p.action.data[..112].copy_from_slice(&bytes);
+    p.digest = p.compute_digest(&program).unwrap();
+    p.validate(&program, &proposal_pda(&program, p.id).0)
+        .unwrap();
+    for mask in 0..32u8 {
+        let mut candidate = p.clone();
+        candidate.approvals = mask;
+        candidate.approval_count = mask.count_ones() as u8;
+        assert_eq!(
+            candidate.executable(&config, candidate.not_before).is_ok(),
+            mask.count_ones() >= 3
+        );
+        assert!(candidate
+            .executable(&config, candidate.not_before - 1)
+            .is_err());
+        assert!(candidate.executable(&config, candidate.expires).is_err());
+    }
+    for offset in [0, 32, 40, 48, 80] {
+        let mut changed = p.clone();
+        changed.action.data[offset] ^= 1;
+        assert_ne!(changed.compute_digest(&program).unwrap(), p.digest);
+    }
+    let mut bad = p.action.clone();
+    bad.data[112] = 1;
+    assert!(bad.validate().is_err());
+    for ix in [
+        Instruction::RetireTarget { digest: [42; 32] },
+        Instruction::ReclaimRetiredTargetRecords {
+            target: policy.target,
+        },
+    ] {
+        let encoded = ix.try_to_vec().unwrap();
+        assert_eq!(encoded.len(), 33);
+        assert!(matches!(encoded[0], 17 | 18 | 19));
+        assert!(Instruction::unpack(&encoded).is_ok());
+        assert!(Instruction::unpack(&encoded[..32]).is_err());
+        assert!(Instruction::unpack(&[encoded, vec![0]].concat()).is_err());
+    }
 }
 
 #[test]

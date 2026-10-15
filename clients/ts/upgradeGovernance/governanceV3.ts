@@ -30,7 +30,7 @@ export const MAX_ARTIFACT_BYTES_V3 = ARTIFACT_CHUNK_SIZE_V3 * MAX_ARTIFACT_CHUNK
 /** Release of this controller source (Rust `CONTROLLER_RELEASE`). A
  *  self-upgrade proposal must carry the release of the controller running at
  *  creation: 0 for the deployed pre-release binary, this value afterwards. */
-export const CONTROLLER_RELEASE_V3 = 2n;
+export const CONTROLLER_RELEASE_V3 = 4n;
 export const DEVNET_SPREAD_V3 = new PublicKey(
   "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
 );
@@ -48,7 +48,7 @@ export interface TimingV3 {
 }
 export const DEFAULT_TIMING_V3: Readonly<TimingV3> = Object.freeze({
   reviewSlots: WEEK_SLOTS_V3,
-  delaySlots: 4_500n,
+  delaySlots: 150n,
   expirySlots: 2_592_000n,
 });
 export const OTTER_VERIFY_PROGRAM_V3 = new PublicKey("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
@@ -140,6 +140,14 @@ export type ActionV3 =
       target: PublicKey;
       deployedSlot: bigint;
       commit: string;
+    }
+  | {
+      kind: "retireTarget";
+      target: PublicKey;
+      expectedEpoch: bigint;
+      deployedSlot: bigint;
+      payloadSha256: Uint8Array;
+      recoveryCommitment: Uint8Array;
     };
 export interface ProposalV3 {
   bump: number;
@@ -199,8 +207,8 @@ export function validateTimingV3(timing: TimingV3): void {
   ])
     u64(value);
   check(
-    timing.reviewSlots >= WEEK_SLOTS_V3 && timing.delaySlots >= 4_500n,
-    "approval needs at least one week and delay at least 4500 slots",
+    timing.reviewSlots >= WEEK_SLOTS_V3 && timing.delaySlots >= 150n,
+    "approval needs at least one week and delay at least 150 slots",
   );
   const maximum =
     timing.reviewSlots > timing.delaySlots
@@ -278,6 +286,11 @@ export const deriveSpreadRentSponsorV3 = () =>
 export function encodeActionV3(action: ActionV3): Buffer {
   let tag: number, body: Buffer;
   switch (action.kind) {
+    case "retireTarget":
+      check(!action.target.equals(PublicKey.default) && action.expectedEpoch > 0n && action.deployedSlot > 0n, "invalid retirement policy");
+      tag = 7;
+      body = Buffer.concat([action.target.toBuffer(), u64(action.expectedEpoch), u64(action.deployedSlot), hash32(action.payloadSha256), hash32(action.recoveryCommitment)]);
+      break;
     case "publishVerification":
       check(!action.target.equals(PublicKey.default) && /^[0-9a-f]{40}$/.test(action.commit) && !/^0{40}$/.test(action.commit), "invalid verification policy");
       tag = 6;
@@ -463,6 +476,8 @@ function decodeActionV3(data: Buffer): ActionV3 {
     };
   } else if (kind === 6) {
     result = { kind: "publishVerification", target: r.key(), deployedSlot: r.u64(), commit: r.bytes(20).toString("hex") };
+  } else if (kind === 7) {
+    result = { kind: "retireTarget", target: r.key(), expectedEpoch: r.u64(), deployedSlot: r.u64(), payloadSha256: r.bytes(32), recoveryCommitment: r.bytes(32) };
   } else throw Error("unknown action");
   r.reserved(data.length - r.offset);
   check(encodeActionV3(result).equals(data), "noncanonical action");
@@ -1010,6 +1025,34 @@ export function executeTargetGateV3(
     ],
     hash32(p.digest),
   );
+}
+/** Permanently close the exact frozen target's ProgramData to the treasury. */
+export function retireTargetV3(config: ConfigV3, p: ProposalV3): TransactionInstruction {
+  if (p.action.kind !== "retireTarget") throw Error("retirement proposal required");
+  const program = config.controller, target = p.action.target;
+  return build(program, 17, [
+    ro(p.config), rw(deriveProposalV3(program, p.id)[0]), rw(target),
+    rw(deriveProgramdataV3(target)), rw(deriveTargetGateV3(program, target)[0]),
+    rw(config.treasury), ro(deriveTargetAuthorityV3(program, target)[0]),
+    ro(LOADER_V3), ro(SYSVAR_INSTRUCTIONS_PUBKEY),
+  ], hash32(p.digest));
+}
+/** Reclaim only target-specific governance records after Loader closure. */
+export function reclaimRetiredTargetRecordsV3(config: ConfigV3, target: PublicKey, records: PublicKey[]): TransactionInstruction {
+  check(records.length > 0, "records required");
+  return build(config.controller, 18, [
+    ro(deriveConfigV3(config.controller)[0]), ro(target), ro(deriveProgramdataV3(target)),
+    rw(config.treasury), ...records.map(rw),
+  ], target.toBuffer());
+}
+/** Close the retired target's canonical verification record and refund its PDA. */
+export function reclaimRetiredTargetVerificationV3(config: ConfigV3, target: PublicKey): TransactionInstruction {
+  const authority = deriveTargetAuthorityV3(config.controller, target)[0];
+  return build(config.controller, 19, [
+    ro(deriveConfigV3(config.controller)[0]), ro(target), ro(deriveProgramdataV3(target)),
+    rw(config.treasury), rw(authority), rw(deriveVerificationMetadataV3(authority, target)[0]),
+    ro(OTTER_VERIFY_PROGRAM_V3), ro(SystemProgram.programId),
+  ], target.toBuffer());
 }
 /** Fixed create-once CPI; the proposal binds every configurable Light field. */
 export function executeSpreadLightConfigV3(

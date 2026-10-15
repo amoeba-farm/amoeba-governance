@@ -39,6 +39,18 @@ npm test
 
 The V3 client entry point is `@amoeba/upgrade-governance/governance-v3`.
 
+## 150-slot execution delay (2026-10-15)
+
+Controller release 4 accepts an execution delay of 150 slots, replacing the
+4,500-slot floor. Three of five council approvals, approval and expiry windows,
+artifact verification and account layouts are unchanged. Existing proposals
+retain their timing snapshots.
+
+This source preserves the release-3 retirement functionality installed on
+Mainnet earlier on October 15. A controller upgrade and separate timing-policy
+proposal activate the shorter delay on Mainnet. The former Spread target has
+been retired; older Spread deployment records below are historical.
+
 ## Mainnet verification recipe release (2026-10-05)
 
 Controller release 2 was installed at slot **453498655** through

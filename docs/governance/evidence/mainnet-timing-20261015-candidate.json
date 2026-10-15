@@ -1,0 +1,816 @@
+{
+  "schema": "amoeba-governance-timing-release/v1",
+  "sourceCommit": "e73c2fc0c08bfccba9695162e63c51ad51def1df",
+  "sourceFiles": [
+    {
+      "path": "Cargo.lock",
+      "bytes": 199080,
+      "sha256": "da18a976a00b1730d3167d28722f5d859668b3d6092a5ad9b5318bf169261a79"
+    },
+    {
+      "path": "Cargo.toml",
+      "bytes": 784,
+      "sha256": "d837d0071fd146a6657f0357e0b4f326fd728f5e91b87155b571edbb8cbc9b2a"
+    },
+    {
+      "path": "programs/governance_controller_v3/Cargo.toml",
+      "bytes": 757,
+      "sha256": "c63b51a96dfa73c5dd3d7e87985bc23f7ca0d1b88f1a172711e22eaca1b4a570"
+    },
+    {
+      "path": "programs/governance_controller_v3/src/artifact.rs",
+      "bytes": 5896,
+      "sha256": "74816c2051a73efa2cae0cca69200d2177c01e1e44f2c1692db7e9c05eccd90d"
+    },
+    {
+      "path": "programs/governance_controller_v3/src/instruction.rs",
+      "bytes": 1989,
+      "sha256": "25a8d7906cbab1fc02eeb0caeffa0fbc638c0e10c208e23af7fd6c1d1125a948"
+    },
+    {
+      "path": "programs/governance_controller_v3/src/lib.rs",
+      "bytes": 531,
+      "sha256": "9aab8b2e0f414cfdfc5371be0f7c20ae39fafec530c92c45c0903186a0e5dadd"
+    },
+    {
+      "path": "programs/governance_controller_v3/src/processor.rs",
+      "bytes": 37137,
+      "sha256": "c2a0856d45c3b5bcc8f761c3fe95f2bc324efde5afda02a1131503cf9551966a"
+    },
+    {
+      "path": "programs/governance_controller_v3/src/processor/retirement.rs",
+      "bytes": 7962,
+      "sha256": "019d806bf4a0f5b2da8850deb730cacf096af7f8cdf9b98c8a715866faec17dc"
+    },
+    {
+      "path": "programs/governance_controller_v3/src/processor/verification.rs",
+      "bytes": 6480,
+      "sha256": "a70f18c99ed1afd9f0dd6f7f5ff0f0719d497cafce417eff22b4a08061ddced1"
+    },
+    {
+      "path": "programs/governance_controller_v3/src/state.rs",
+      "bytes": 22343,
+      "sha256": "6569396301a8ce6ffc429702b97071a470da3a2f429c1a7e2184477909aedb4e"
+    },
+    {
+      "path": "programs/governance_controller_v3/src/verification.rs",
+      "bytes": 5445,
+      "sha256": "b819d940a9723ad2e56795e0c85d153f066c4dd1266f856bfaeb875a145ba2ed"
+    },
+    {
+      "path": "programs/governance_controller_v3/tests/artifact_cap.rs",
+      "bytes": 13270,
+      "sha256": "e0d215615e67bd93b25e1ad083bb93528eae165e2aa7feae6fc1a0be2d15ed12"
+    },
+    {
+      "path": "programs/governance_controller_v3/tests/core.rs",
+      "bytes": 15162,
+      "sha256": "ecb3260a8622b383e179c516236e76e292a2ee5a089cecf77f932dd5085e8c9f"
+    },
+    {
+      "path": "programs/governance_controller_v3/tests/self_upgrade.rs",
+      "bytes": 11263,
+      "sha256": "73bf1782bbead8650601ce9743bf76d100114ffd5206397dd172592f4928497d"
+    },
+    {
+      "path": "programs/governance_controller_v3/tests/spread_gate.rs",
+      "bytes": 3493,
+      "sha256": "bf70d33ba228cfe59cc77970f7e9d9d6863d7e63208be64e119734ef61e45253"
+    },
+    {
+      "path": "programs/governance_controller_v3/tests/spread_light_config.rs",
+      "bytes": 14301,
+      "sha256": "dcda2cabda870f1427abd32ec19450b06e090286ce21ab70c7f5bca913198255"
+    },
+    {
+      "path": "programs/governance_controller_v3/tests/target_upgrade.rs",
+      "bytes": 14300,
+      "sha256": "99a354a42a3b9893177b6a70debaccccdc8548115ac0dd77358261e3b253e2bf"
+    },
+    {
+      "path": "programs/governance_controller_v3/tests/two_mib_sbf.rs",
+      "bytes": 42325,
+      "sha256": "91f62af7313122c3058a641ab305a5f17d17e4740aed732d3f05d4259b792491"
+    },
+    {
+      "path": "programs/governance_controller_v3/tests/verification_metadata.rs",
+      "bytes": 19400,
+      "sha256": "4cff8aa76b07165dddbaf0748444603af77bb238ec7a96c7b3ad42982de71117"
+    },
+    {
+      "path": "programs/upgrade_controller/Cargo.toml",
+      "bytes": 1280,
+      "sha256": "9007e10b915bd3593644dbf7cd3a2df869e55dc905ce82bd5ed947c6339b2c61"
+    },
+    {
+      "path": "programs/upgrade_controller/src/artifact_merkle.rs",
+      "bytes": 11560,
+      "sha256": "92f684fe771bb0b2ebd3f0d8caf5328b6bdce7349817729ac2ed078646a10aad"
+    },
+    {
+      "path": "programs/upgrade_controller/src/authorization.rs",
+      "bytes": 686,
+      "sha256": "9e00e6c2ebfae3ff1442fb6910094c330dcd7c4570a3cbcf94c2712de61cebcd"
+    },
+    {
+      "path": "programs/upgrade_controller/src/council.rs",
+      "bytes": 10738,
+      "sha256": "876ecdf9aea3922cd45aaf9d0c95c39eb3ab9eb3ebc7ed32986687acd49534dd"
+    },
+    {
+      "path": "programs/upgrade_controller/src/digest.rs",
+      "bytes": 5517,
+      "sha256": "c5b3535999f85a0f9bd2fa72d599be26209394114fffac6fe3be0de312db266e"
+    },
+    {
+      "path": "programs/upgrade_controller/src/entrypoint.rs",
+      "bytes": 364,
+      "sha256": "deef87a24c3828eae4742be7a642597d72c76def41fec0c922998ee5ab332c01"
+    },
+    {
+      "path": "programs/upgrade_controller/src/error.rs",
+      "bytes": 8850,
+      "sha256": "9b83c2827834dba227243b031d8e4606bee9bde975d92aa27ae0480572dd6fc6"
+    },
+    {
+      "path": "programs/upgrade_controller/src/gate_abi.rs",
+      "bytes": 11076,
+      "sha256": "7f64707237153588871e41ea6696c4d9b81beb9cf3de045e4dda8d561cae3f0c"
+    },
+    {
+      "path": "programs/upgrade_controller/src/instruction.rs",
+      "bytes": 179584,
+      "sha256": "dfe02a32edd8f93951d6392410a66850eca96c37486ce9fbdeb1e99f61ea3051"
+    },
+    {
+      "path": "programs/upgrade_controller/src/lib.rs",
+      "bytes": 2134,
+      "sha256": "0a4b32f54919e11b766353e8984ae64187330bee009365ff37f605d2127765cf"
+    },
+    {
+      "path": "programs/upgrade_controller/src/pda.rs",
+      "bytes": 21257,
+      "sha256": "bdcc8e44ac7b3da74c7d4c5d28bb30538652e5d91fe4f308725fd76b268d461f"
+    },
+    {
+      "path": "programs/upgrade_controller/src/policy.rs",
+      "bytes": 5340,
+      "sha256": "62c56b064d5808f755c094ec7949077c77da69cc2670694faea38dd3d18a44eb"
+    },
+    {
+      "path": "programs/upgrade_controller/src/processor.rs",
+      "bytes": 40525,
+      "sha256": "117fcfe25e64461b1d5dd78d9f19bf984e5ae9bef4c428b3a2121077d9ee892f"
+    },
+    {
+      "path": "programs/upgrade_controller/src/programdata_observation_merkle.rs",
+      "bytes": 29049,
+      "sha256": "3e0ed5b23fd3da0bfe0acf729c3f26665f4814a035735dacb604823a9d459681"
+    },
+    {
+      "path": "programs/upgrade_controller/src/proposal.rs",
+      "bytes": 8440,
+      "sha256": "5c94154c295a6088c3cae7a814fac32d2e6ff29f1d351c2294924d7ea3c19284"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_account_io.rs",
+      "bytes": 9086,
+      "sha256": "ad64920b45a57e73b0db245f994334003224ff6062ed7110cab098d5940930de"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_authority_instruction.rs",
+      "bytes": 12086,
+      "sha256": "627d3f8f436cc8f593afeca439ddfae4af853b9eea88265d7ace5400f3a9103d"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_ceremony_digest.rs",
+      "bytes": 16862,
+      "sha256": "4a57ef8994e8aa42ce2fe6d824fdfdbe6c1267244e0cdbb35007fcb563e60843"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_ceremony_instruction.rs",
+      "bytes": 30016,
+      "sha256": "52844a43fd2b6eac31b60bc44ea261e8f0fdf04182079ca1e394a3239d56cead"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_ceremony_state.rs",
+      "bytes": 111061,
+      "sha256": "56b3cdbc70d4ba6f0dbd83ba6d92ff9e22159004e9e765cdb4f795df0aa7502e"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_digest.rs",
+      "bytes": 23432,
+      "sha256": "bb223ed087e930bcd5ea89abff61fed293b0012a8e910c18440eec2ed0b9ca77"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_governance_v2.rs",
+      "bytes": 88277,
+      "sha256": "2988b6b1984025ce5f841710c14f6af8daea709e370334252eb77a770955953d"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_governance_v2_authority_processor.rs",
+      "bytes": 117933,
+      "sha256": "103408fa1fb2752ca846a7836cd1caf7b7db0c6072a624385a8944e1f833e1cd"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_governance_v2_processor.rs",
+      "bytes": 73058,
+      "sha256": "5e713f4427cf6231c64994cbfe70ff3945575b02b3208afca0100d20fcc770d2"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_loader_accounts.rs",
+      "bytes": 13321,
+      "sha256": "d5d8fcd6d925b70425c9cb0c59b050765a9a98f9ed5dadf702873b8557fa8d3d"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_model.rs",
+      "bytes": 115866,
+      "sha256": "0aabd41519d0b67386c9a7f471a4d04ad1a136b79bc1449cd1ff66f7fecc1b82"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_authority.rs",
+      "bytes": 8267,
+      "sha256": "4e713c5c9cf879c1ec646c828b8089051d52daf9324e888da4fde4f54254656a"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_authority/account_context.rs",
+      "bytes": 19652,
+      "sha256": "85e14924a4956983d5242eeb5e0a511f5da55758f17e9fbc365b548e3edd56c4"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_authority/activation.rs",
+      "bytes": 27188,
+      "sha256": "ddcb1a15289d945cf24b71c847995551029116cb6119ed4c1dadbed58971263a"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_authority/approval.rs",
+      "bytes": 3176,
+      "sha256": "e794cc23e1103437bb957de1cc3c7291b8c015f7ad444faeaa09357ab6c4dcec"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_authority/evidence.rs",
+      "bytes": 18221,
+      "sha256": "063b9f8fabe956e34dfc50b9461534746ac9318064ced43d0b2e09b379b4e8d0"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_authority/handoff.rs",
+      "bytes": 24401,
+      "sha256": "e882ff08756ca3f3bb04b96e1d876d65c68f24cce2c53cf24cb2228b2d775821"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_authority/immutability.rs",
+      "bytes": 6524,
+      "sha256": "3972f9402964a0a83a6a966323aa5c994be408829b774332f20d9a075ffba25a"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_authority/loader_contract.rs",
+      "bytes": 7356,
+      "sha256": "6b361a463e766fca1c71505ef380609254d648ee8f79d5f07ea51f8c88b37ce5"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_authority/tests.rs",
+      "bytes": 12029,
+      "sha256": "27ce30464f3696162ea121bc20bfec532fc0fdd5abd8251419bc2ec02a6ff1c7"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_buffer.rs",
+      "bytes": 38712,
+      "sha256": "40ae363e2c1f7f4c1d0143a4d8eb6bdf379cca3333b7ce059f9835d9978bd1c7"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_checkpoint.rs",
+      "bytes": 8570,
+      "sha256": "df85a7877b4f1eedb788e53829d0cdd460b881506eb4f59cd06ecd19863e561a"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_checkpoint/account_context.rs",
+      "bytes": 7088,
+      "sha256": "d3c31f8780f8cd67ee1b08ae4712879650a1af0ba1bbfff287db60f5c9f17bea"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_checkpoint/approval.rs",
+      "bytes": 2055,
+      "sha256": "83ebacbbed29b3509f145efe4ef235b0272aece77852eebaf1e64c846f336512"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_checkpoint/attestations.rs",
+      "bytes": 14294,
+      "sha256": "e020120041b2cac540218b74a3f6855bcc7d7f93cb7b0a29396f1ab7667fd959"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_checkpoint/council.rs",
+      "bytes": 7279,
+      "sha256": "d52b5433eaf3d357443d9a35b65011b57c035c5830100fc3a243728bdddb5d12"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_checkpoint/emergency.rs",
+      "bytes": 4112,
+      "sha256": "aa041fdf73f22e4c0fbc063c94e843e440690bbbab8fe553cb2ebde2a913340c"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_checkpoint/evidence.rs",
+      "bytes": 25643,
+      "sha256": "af3e69c27d40927c384a1e84ac326f150b0cd6d9a5049ced2e394de6183e10ec"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_checkpoint/finalization.rs",
+      "bytes": 11187,
+      "sha256": "274964e9b8be5e0801302e198d26e4d78f756a7ffdc3ce815fb6e0bd4102ee6e"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_checkpoint/rotation.rs",
+      "bytes": 11682,
+      "sha256": "162c043f87de2af66c2ad12ec02a80a141882fe3803e1acad9eab75d81636d77"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_checkpoint/rotation_context.rs",
+      "bytes": 10889,
+      "sha256": "4d7b84eb44526e3b389aaa04974f869e6160dcb916f52ba089389ba4752a6eb6"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_checkpoint/subject.rs",
+      "bytes": 6802,
+      "sha256": "0deb03070a98f76c816b9fab914a00a57c876f1c8ffd54ad6113368c99754122"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_checkpoint/tests.rs",
+      "bytes": 56199,
+      "sha256": "572400ac9d81d5ac2c4fbb2c32e58c1e9c2195a5c6522a7fef0fa7775d2f5e30"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_initialize.rs",
+      "bytes": 41373,
+      "sha256": "5070e50ecc2e883226c99770d728368cf0cb903e984b68c46c3a1a474bda3fb6"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_initialize_v2.rs",
+      "bytes": 56049,
+      "sha256": "4b73905ef7ca3816faa6918809e18b64add28bad18cc88c282f42bc50a883af3"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_loader.rs",
+      "bytes": 4014,
+      "sha256": "b25daf6045ec9f65460287cadd1db7bd178f6dafa33f3eae84b209b7147399b9"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_loader/account_context.rs",
+      "bytes": 11054,
+      "sha256": "69372a330e51466c139b6820a42876328329e4ddd77f12a40d8976a04b0b7200"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_loader/buffer.rs",
+      "bytes": 2552,
+      "sha256": "b14d81bf53bc99482845f7a191af9e127e2e53dc65b9d80910db625448a9663f"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_loader/execution.rs",
+      "bytes": 20236,
+      "sha256": "24e4990801a3536a774a82cbc3fab8452b406084a68d207a9d2351cb69a5cfb6"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_loader/loader_contract.rs",
+      "bytes": 6412,
+      "sha256": "64d56b29525fb7641491c1913518cfe714c4842d0cb4b78f5a7d47228afe9029"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_loader/programdata.rs",
+      "bytes": 3173,
+      "sha256": "83ceda022a1d7311d49b0d6bb1f5d6eb017355fd34df8919dee46a21cfe2a6ed"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_loader/rollback.rs",
+      "bytes": 5086,
+      "sha256": "d360e955e4440b2f131bb7bbe39b3850f0a85037e7b3bf15b683d55c6a84d937"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_loader/tests.rs",
+      "bytes": 23919,
+      "sha256": "453177e929df9a73c283087a7b422ac3ad46cc14d8d6846689a1442634fffd4f"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_loader/timing.rs",
+      "bytes": 3416,
+      "sha256": "a4e7de7e32aa945ef09706c21e3066f6e8402b09ac5f94e53d9fbece84fc59e9"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_loader/verification.rs",
+      "bytes": 15350,
+      "sha256": "9dae25eef786fd81c8a06f0443f6293e80131314e30518569499ebab6dcaeb5e"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_observation.rs",
+      "bytes": 55443,
+      "sha256": "07cbb3e80df2263a8f582603ef846427761de120a04eaa866e83446e4bd7aca3"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_proposal.rs",
+      "bytes": 7345,
+      "sha256": "9a4252f5ba6e9371b180af9a3e9acff44fac8ff86d6fe66487bcf20a840fe87a"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_proposal/account_context.rs",
+      "bytes": 8852,
+      "sha256": "d4c7ab58d75a1079bf2ea144e539b8bdb030b45fc23c373257ec3157b674537c"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_proposal/emergency.rs",
+      "bytes": 27537,
+      "sha256": "48bc0ecae95ee16658c395325c77ae9551f0e4be8db28469d0367c79159ab5e0"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_proposal/emergency_guards.rs",
+      "bytes": 5369,
+      "sha256": "6cdc0597694e78cb32b4cc5ee1b97d1dae28e91d0bf264f6aa6ae61a11b951bc"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_proposal/lifecycle.rs",
+      "bytes": 19081,
+      "sha256": "2c369b7b353ea65df9175b1d7752411392ad180a2bf48343c1e8e902d2bedd5c"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_proposal/observations.rs",
+      "bytes": 11654,
+      "sha256": "f4bb571b81263ea2c00ee721a8db50417a4f02bbd767f8ed799263ff32dad3bf"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_proposal/proposal_guards.rs",
+      "bytes": 9004,
+      "sha256": "1df0dd6d71aa429105a08732f35f9f59e78df90f98c6c17bc32e2ced9d682780"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_proposal/proposals.rs",
+      "bytes": 18819,
+      "sha256": "fc02395d4ed0822ea37cc0aed92287ffe85f4e9dd44a8863d14ce569e8ffc61c"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_proposal/tests.rs",
+      "bytes": 33956,
+      "sha256": "5c822bf5ea52ed67aab6c95951187a45dd5e9ed5a36f836a41ee55a65ae2d66d"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_terminal.rs",
+      "bytes": 6878,
+      "sha256": "6cbc76c886b9c0b6815a7eccea853f8938c4b02388f2b045d6634d5ab0eb68b2"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_terminal/account_context.rs",
+      "bytes": 11062,
+      "sha256": "e8defeab1b139a6a11d8d8e8b6a1009656537bbd818be9bac751f15452a7328c"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_terminal/buffer.rs",
+      "bytes": 9375,
+      "sha256": "af5f0165715558fda0592de4894db3d53b5d78d4ae02df7833238325eba1d350"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_terminal/failure.rs",
+      "bytes": 20155,
+      "sha256": "e68f18a1085a411cf62287bd474ab33caad45e4627d1f3f19e46258ecee839d2"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_terminal/loader_contract.rs",
+      "bytes": 3902,
+      "sha256": "14a0db29ce6d5cf3593d49a796b612de336039727c1eedbada4a1d055f7ce4ca"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_terminal/proofs.rs",
+      "bytes": 7244,
+      "sha256": "77f7b0c278e20f3b8100b602041f9d63f8e21dd3f11eb51523bcafd6d05610aa"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_terminal/rollback.rs",
+      "bytes": 17789,
+      "sha256": "f097375fecb0e22d16f73f9e5dd4b4119a247f653be110a9c7da9eaf36fc3b0b"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_terminal/tests.rs",
+      "bytes": 35374,
+      "sha256": "0390d0b96470a31053ec403a5995af4d085431151eed82404bdb7f94970bc4f2"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_terminal/timing.rs",
+      "bytes": 1808,
+      "sha256": "38cb7cc6c9b6de0615d7f68eb1fef7fdfead7ef5fac6613e63c59ff748733ced"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_terminal/unfreeze.rs",
+      "bytes": 20710,
+      "sha256": "0faf7f5898869280d89051a0059ac5c09507a6a81ac4b02afcab8daf6983d00e"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_custody.rs",
+      "bytes": 7757,
+      "sha256": "aaa793a599245cd1bdf53dfe6d3b4fbebf69c82537ecc2235eca474689af86d4"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_custody/account_context.rs",
+      "bytes": 17554,
+      "sha256": "cf500d085abf2ad76b9c13dd3355da1dcb9f9bb4facd935422f0e975d12d1936"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_custody/buffer.rs",
+      "bytes": 25519,
+      "sha256": "3cb3d49b93ace5c8f589d65e295f0ab384d8766adb3cdd04893f77fcab612b7f"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_custody/execution.rs",
+      "bytes": 23254,
+      "sha256": "3a9bcc5611832aa334ca51e96470bd1cb61aff832cbbd5c862a781e9ea9f211d"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_custody/failure.rs",
+      "bytes": 22766,
+      "sha256": "81ee1b4c842595dfb2e13e04f4d7c051cbd848490ce078a5f3e64e8468e68b18"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_custody/loader_contract.rs",
+      "bytes": 7286,
+      "sha256": "0cf30dfdac24aef81637dec24425dc344a1a62bdd1119d752cbd4a085c3e72ff"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_custody/observations.rs",
+      "bytes": 11770,
+      "sha256": "666fe8eadba0ba924979d93608a3c801f5093075abae0a0a67be6a01f9b32d4a"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_custody/proofs.rs",
+      "bytes": 6473,
+      "sha256": "f851565110dc2054b6094c130b1cda95d7e10373b0cb69ea195628c68bfc3bfa"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_custody/rollback.rs",
+      "bytes": 23535,
+      "sha256": "85ee522197ba29d9033615ce290d8fcc7f5a2d9610a0edb0943fbde778e6e140"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_custody/tests.rs",
+      "bytes": 7390,
+      "sha256": "60e0af07579a7b332318132eb5eb00285bf988974780f0f303832d0550ff56ef"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_custody/verification.rs",
+      "bytes": 19249,
+      "sha256": "50fb0ed74c7cbbd48909186a141cb13de3f576303a3de91b8178260a80c845b0"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle.rs",
+      "bytes": 11552,
+      "sha256": "63da0a71ee913e106c51d22e5ec465e544d13527024ee67374a77ae025008a11"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/account_context.rs",
+      "bytes": 14402,
+      "sha256": "c908230ec6cde1443e6d92bca5366781b3e6611cfe42acfeb16b32677788f1bf"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/activation.rs",
+      "bytes": 9418,
+      "sha256": "c6441f0afa977863c76a405b9748c3857a703a463165d4c47153840cf14bfc54"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/checkpoint_evidence.rs",
+      "bytes": 23556,
+      "sha256": "524ccfbfe32d43e5cbfb4b8bd4d423e8d669fdebe78bd799208a9f77c279db32"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/checkpoints.rs",
+      "bytes": 14566,
+      "sha256": "91590b818eaeef6623beb06f9eef29fb8f3973af4c802f064017cc49f545c99b"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/emergency.rs",
+      "bytes": 22953,
+      "sha256": "cc38e46074d89e59245fd206b2713d5845a92452125ce3fd50f2f3060c7b8f6c"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/emergency_evidence.rs",
+      "bytes": 9837,
+      "sha256": "783efc5ff31e33bc48a17614a0ca7ee36fa3080d1ad21c9553e18b503c6f0f81"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/envelope.rs",
+      "bytes": 3377,
+      "sha256": "e4e7749a9312c799b3e1456d818b9446fd8b94b1d1222fd19c5bcd21c61f4ed7"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/guardian.rs",
+      "bytes": 6628,
+      "sha256": "8a2a3e81294131407010f6e30f983cefb47c824786cdde1aa3a139835244e926"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/lifecycle.rs",
+      "bytes": 16638,
+      "sha256": "3fe00b2819342a7aa4f2dbe6e94ac5d2f0fc8ddee308e379b62a4c01fe2bcad0"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/observations.rs",
+      "bytes": 11847,
+      "sha256": "6f6d2c3bd99ef45a5c60a1153b93a2ff8c2b10a789c27f3dcbc643fa97a8092d"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/proposal_guards.rs",
+      "bytes": 4688,
+      "sha256": "fae0625d5ffa39e72bb72e1148019fcb3724bf35c224495541a2aeeb2deea431"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/proposals.rs",
+      "bytes": 20332,
+      "sha256": "98b051e59a3e8c5a1b92746f8594b7d60fbe7bed889acc901cf74c898cc36fba"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/tests.rs",
+      "bytes": 11850,
+      "sha256": "a7df90bce71b0d9b7dd50b5d8f9249d399a514b9c1592047f197b349efc92980"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/unfreeze.rs",
+      "bytes": 9066,
+      "sha256": "4c524b6318d4e240867536837a35e00bf71d054a9fcbd779f14ee2fa59182917"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_processor_v3_lifecycle/unfreeze_evidence.rs",
+      "bytes": 12957,
+      "sha256": "2174a81fde6e6ac38de6b89f312e0634c2897e6e2091cbd118936b4e53cce953"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_state.rs",
+      "bytes": 82469,
+      "sha256": "5d97e7358350bedd5b74ea805d4d30fa981429e716edf185240fce66dec25e4b"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_v3_custody_instruction.rs",
+      "bytes": 30385,
+      "sha256": "5a299e314f6aad3cf2aef693d2754544d06a5c01ae2689c7f5340d866087a7bf"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_v3_digest.rs",
+      "bytes": 17409,
+      "sha256": "33293f3faa28a6d11d8f3b55afb64cf5fc605db9915a843f6ef01e19af812f5a"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_v3_instruction.rs",
+      "bytes": 89851,
+      "sha256": "54dbdf824eb91579e9b409f941a3abc93781d06055f4cb4f096b7192ab872d3b"
+    },
+    {
+      "path": "programs/upgrade_controller/src/release1_v3_state.rs",
+      "bytes": 113531,
+      "sha256": "c19c35bb7be0d5727b631d8bc2b53a215344d078718f3daf740374e82be16e45"
+    },
+    {
+      "path": "programs/upgrade_controller/src/state.rs",
+      "bytes": 20768,
+      "sha256": "72b6f824d9616ab8fe5a51c9744aedca5bf6c90c85e97e397778660e5846a279"
+    },
+    {
+      "path": "programs/upgrade_controller/src/tests/council_policy.rs",
+      "bytes": 17471,
+      "sha256": "c8f61f078efd529c60753696530570e64fb9d24cecebdfa1ac8fb88afacb2cc2"
+    },
+    {
+      "path": "programs/upgrade_controller/src/tests/digest_vectors.rs",
+      "bytes": 4641,
+      "sha256": "4518427fe4a872e645590bc93a3d0ac9e4271f3645943941373578e126d88e4d"
+    },
+    {
+      "path": "programs/upgrade_controller/src/tests/gate_abi.rs",
+      "bytes": 10202,
+      "sha256": "ed02a87eabf07218eff7e2a4c42bbbf554846418877e554fea9bfc4f7874cf43"
+    },
+    {
+      "path": "programs/upgrade_controller/src/tests/golden_vectors.rs",
+      "bytes": 7781,
+      "sha256": "f2310e67df20ecd8149b6f9a5065a84d6e03d4dd8b04eac5edf18890c1bf921a"
+    },
+    {
+      "path": "programs/upgrade_controller/src/tests/layouts.rs",
+      "bytes": 5389,
+      "sha256": "6a6c8be21d10970cdf8559ea49308a9d0621ac4abc6ae1b83f74e46750eceb3d"
+    },
+    {
+      "path": "programs/upgrade_controller/src/tests/mod.rs",
+      "bytes": 158,
+      "sha256": "83d55b20b7af261481f1b597c4cf80e0e82be605d4b2db49cd2c53141884b228"
+    },
+    {
+      "path": "programs/upgrade_controller/src/tests/release1_model.rs",
+      "bytes": 148963,
+      "sha256": "48e911cd054840e2a38be618c703ffdcc548228b1a9da2fc1d4b921e3c7afe50"
+    },
+    {
+      "path": "programs/upgrade_controller/src/tests/release1_schema.rs",
+      "bytes": 124659,
+      "sha256": "eaacb3b0ff8068977d476dcc5769983fb64606bd925f9911bac83d5112dc015c"
+    },
+    {
+      "path": "programs/upgrade_controller/src/tests/support.rs",
+      "bytes": 7115,
+      "sha256": "c552699917087b0d683deb48e5eb356ea54d92b2f5dcf300c754e6572b0cb3c4"
+    },
+    {
+      "path": "programs/upgrade_controller/src/tests/transitions.rs",
+      "bytes": 7095,
+      "sha256": "6c8dcfe6a12880a28fe2f287e2dae960ca0812c458d21d7e1554b695f5e08a34"
+    },
+    {
+      "path": "programs/upgrade_controller/tests/capacity_liveness_regression.rs",
+      "bytes": 2687,
+      "sha256": "da3188281c718cac59b7fc0236f2762fc75fb34b420bf028fc7d21800d16e802"
+    },
+    {
+      "path": "programs/upgrade_controller/tests/ceremony_closure_program_test.rs",
+      "bytes": 207486,
+      "sha256": "a1ada1f0d5080d10772d91da32a2eaba42cc134d4d80ec4f29e649a87c000d5c"
+    },
+    {
+      "path": "programs/upgrade_controller/tests/loader_deploy_bincode_vector.rs",
+      "bytes": 3115,
+      "sha256": "33735636d2c59b9cbe35e349817f6dd31ae586fd44431ca15d962a7729be1c2e"
+    },
+    {
+      "path": "programs/upgrade_controller/tests/loader_program_test.rs",
+      "bytes": 218069,
+      "sha256": "d957ef76b3e492706b966a6b9f3e99ab86eefe974a76c2d32f01210940a39f2b"
+    },
+    {
+      "path": "programs/upgrade_controller/tests/max_artifact_chunk_sbf.rs",
+      "bytes": 25608,
+      "sha256": "89b2ba76dc0b831f07768b62417c6208a26dc1aaff41c619248791d5b1ba7f1f"
+    },
+    {
+      "path": "programs/upgrade_controller/tests/program_test.rs",
+      "bytes": 184572,
+      "sha256": "a557525f84da3862b5eaaa0f1af338ef76b3f4c26ca936509ec4c5b4f796dff5"
+    },
+    {
+      "path": "programs/upgrade_controller/tests/programdata_observation_chunk_sbf.rs",
+      "bytes": 25238,
+      "sha256": "bb493f0d2bc1a876c0266e74b71a636a9350fa5db1cb63f888b9a7e94164b434"
+    },
+    {
+      "path": "programs/upgrade_controller/tests/release1_ceremony_golden.rs",
+      "bytes": 15288,
+      "sha256": "183048a3eab5dbfb0004ad676fb8db54cc86bd974351b47f13f27be2209093e7"
+    },
+    {
+      "path": "rust-toolchain.toml",
+      "bytes": 86,
+      "sha256": "92d22712000a7d8c1a6c236f19967550b431b6c3ec8d89d798b214da15dd3c7f"
+    }
+  ],
+  "sourceCommitment": "c18a09d89ed2aceea6866f50098fe066f05ddbc08766d7e985aa8e7fa0c06f99",
+  "publicRustSourceIdentical": true,
+  "artifactBytes": 237160,
+  "artifactSha256": "b9b3371b6807378938178e336a7f0d304aa6c74a081864d21b30fead1548a453",
+  "artifactMerkleRoot": "742be3ca43f747ef24edae53cc7e25a21754e3e236b66895c25f577b12e425a3",
+  "controllerRelease": 4,
+  "priorControllerRelease": 3,
+  "priorArtifactSha256": "ae89cbf030a30677c837a61634c969364882489837b4b91cdb9bc0cc21346eeb",
+  "pairedArtifactsIdentical": true,
+  "build": {
+    "cargoBuildSbf": "4.0.0",
+    "platformTools": "1.53",
+    "rustc": "1.89.0",
+    "arch": "v1",
+    "command": "cargo-build-sbf --manifest-path programs/governance_controller_v3/Cargo.toml --arch v1 --tools-version v1.53 --sbf-out-dir <output> -- --locked -j 2",
+    "firstBuild": "fresh target directory",
+    "secondBuild": "separate target directory with previously built dependency cache; both changed local crates rebuilt",
+    "sourceArchiveSha256": "2d3e4af7a746d251509f16a383ae4591cf0b8bb58c248843fda8e651f13e1199",
+    "logSha256": "568112c05885e00c6a70993fed832fd2f43d4dfe06a0cf08b89a391b6e6997c3"
+  },
+  "validation": {
+    "rustFmt": true,
+    "rustCoreTests": 8,
+    "rustAffectedReleaseBindingTests": 1,
+    "typescriptFocusedTests": 11,
+    "typescriptTypecheck": true,
+    "typescriptBuild": true,
+    "frozenVectors": true,
+    "bridgeFixtures": true,
+    "release1Vectors": true,
+    "artifactSha256": "b9b3371b6807378938178e336a7f0d304aa6c74a081864d21b30fead1548a453",
+    "artifactBytes": 237160,
+    "passed": 6,
+    "checks": [
+      "deployed release 3 rejects the new 150-slot policy before upgrade",
+      "all artifact proofs are required and two seats cannot install",
+      "actual old SBF and Loader install exact candidate while preserving authority and council bytes",
+      "policy update retains its 4500-slot snapshot and changes only delay and timing version",
+      "new 150-slot proposal still requires three distinct council seats",
+      "candidate rejects execution at 149 slots and executes at exactly 150 slots"
+    ],
+    "actualSbfLifecyclePassed": true,
+    "simulatorSigverify": false,
+    "liveTransactions": 0,
+    "fullWorkspaceSuiteRun": false
+  },
+  "policy": {
+    "beforeDelaySlots": 4500,
+    "afterDelaySlots": 150,
+    "reviewSlots": 1512000,
+    "expirySlots": 2592000,
+    "requiredApprovals": 3,
+    "councilSeats": 5
+  },
+  "installation": "pending"
+}

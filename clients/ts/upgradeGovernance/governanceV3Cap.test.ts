@@ -81,7 +81,7 @@ function proposal(action: ActionV3): ProposalV3 {
     timing: DEFAULT_TIMING_V3,
     created: 100n,
     reviewEnd: 1_512_100n,
-    notBefore: 4_600n,
+    notBefore: 100n + DEFAULT_TIMING_V3.delaySlots,
     expires: 2_592_100n,
     action,
     digest: Buffer.alloc(32),
