@@ -1,0 +1,85 @@
+{
+  "schema": "amoeba.governance-verification-candidate-qualification.v1",
+  "status": "local qualification passed; not deployed",
+  "sourceRepository": "https://github.com/amoeba-farm/amoeba-governance",
+  "sourceCommit": "1a8f9e3fa3c80e3d0d1a20651742a0b5e17640fe",
+  "candidateRelease": 5,
+  "controller": "8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx",
+  "canonicalArtifact": {
+    "bytes": 238936,
+    "sha256BeforeAndAfterActualSbfTests": "ea8dd309053dd52c768d8d04e5e0dc73b48bae4a3f289b67638ed328bd767bee",
+    "normalizedHashFromCoordinator": "b01c4c564a4fce983b060cfb38cfcd5b0f1b96a65e0b480670699ff3b1d780e1",
+    "buildQualification": "Complete source built under the preserved controller recipe: pinned 0b4e image and /build. Exact tested ELF hash checked before and after actual SBF integration."
+  },
+  "actualVerifier": {
+    "program": "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC",
+    "bytes": 269648,
+    "sha256": "b501789b71bb383556f7c1cc7a01e51ae9bb4111bf14e4dec9f09b18e506307a",
+    "currentMainnetMatch": "Finalized Helius read at slot 457701649 confirmed exact bytes."
+  },
+  "checks": {
+    "typescriptFocusedTests": "3 passed: fixed wire/rejection, both new target recipes and authority accounts, unchanged legacy recipe hashes",
+    "typescriptTypecheck": "passed final recipe source",
+    "rustFocusedUnitTests": "3 passed final recipe source: new recipes, unknown/zero rejection, old controller/Spread exact digests",
+    "controllerReleaseBindingTest": "1 passed; candidate release5 expectation",
+    "rustfmtAndDiffCheck": "passed",
+    "existingFrozenFixtures": "vectors, bridge and release1 vectors passed; recipe changes do not alter fixture input families",
+    "packageConsumer": "TypeScript build and installed package CLI/export checks passed before the final image/workspace-only recipe revision; final source typecheck passed",
+    "actualSbfIntegration": {
+      "test": "actual_sbf_controller_and_frozen_target_metadata",
+      "result": "1 passed; 0 failed; executes four target cases sequentially",
+      "durationSeconds": 10.42,
+      "targets": [
+        "controller self",
+        "Spread 2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
+        "Oracle 45YCerssGjg2M29RFc9D4fAJh7dfFpMJ3ZcZtaTnRXRS",
+        "Futures Bvp9kiRtJ7dT8unxP4Da39gv2eXDLEHLpcDfzcEuRKMu"
+      ],
+      "coverage": "Actual controller and actual verifier SBF in isolated ProgramTest banks: Initialize/Update metadata, authority balance preservation, frozen target gate, early/insufficient/stale/cancelled proposals, substituted/duplicate accounts, wrong metadata ownership, sibling instruction rejection and historical Spread recipe transition preservation.",
+      "logSha256": "16a1fa397c45b0db56b93ce3da46e5ce41a1be67471eff27f0b9888ac899019b"
+    }
+  },
+  "otherLogHashes": {
+    "host-final-tests.log": "99a94c63d3f5a0bf215fc986f0927407024bb9ba5a735a7240afffb2661230e0",
+    "release-binding-tests.log": "5fa4e4236f4073be43f8a4c582fb770592b5f94c8afdc03d8f88a96c3e8095db"
+  },
+  "newTargetMetadata": {
+    "verifierVersion": "0.5.2",
+    "image": "us-central1-docker.pkg.dev/amoeba-hm0q2k/solana-verifiable-builds/gate-final@sha256:7ad1e567f19831e658f5b892a7269d23d7f1826438e025b5d9d2e385240a4d67",
+    "workspacePaths": [
+      "oracle",
+      "futures"
+    ],
+    "libraryNames": [
+      "ameba_oracle",
+      "ameba_futures"
+    ],
+    "explicitSbfArgs": "--tools-version v1.53",
+    "paramsBytes": {
+      "oracle": 413,
+      "futures": 415
+    },
+    "boundBytes": 640,
+    "legacyRecipes": "Controller/Spread retain previous 0.5.1 recipe bytes and standard 0b4e image."
+  },
+  "capacity": {
+    "installedCapacityBytes": 237160,
+    "candidateBytes": 238936,
+    "runtimeMinimumExtensionBytes": 10240,
+    "requiredTargetCapacityBytes": 247400,
+    "rentTopUpLamports": 52019200,
+    "unsignedSimulation": {
+      "slot": 457708977,
+      "error": null,
+      "computeUnits": 2520,
+      "installedCodeAndAuthorityPreserved": true,
+      "deploymentSlotRefreshed": true
+    },
+    "deployed": false
+  },
+  "limits": [
+    "No controller upgrade, extension, council proposal, metadata publication or production signature has been executed for this candidate.",
+    "ProgramTest uses generated test-bank keys; it is not a live chain operation.",
+    "Hosted verification and deployment of release 5 remain pending."
+  ]
+}

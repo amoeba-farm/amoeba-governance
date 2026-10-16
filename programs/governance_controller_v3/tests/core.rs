@@ -273,7 +273,7 @@ fn retirement_policy_is_fixed_and_preserves_quorum_and_timing() {
     ] {
         let encoded = ix.try_to_vec().unwrap();
         assert_eq!(encoded.len(), 33);
-        assert!(matches!(encoded[0], 17 | 18 | 19));
+        assert!(matches!(encoded[0], 17..=19));
         assert!(Instruction::unpack(&encoded).is_ok());
         assert!(Instruction::unpack(&encoded[..32]).is_err());
         assert!(Instruction::unpack(&[encoded, vec![0]].concat()).is_err());

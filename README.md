@@ -6,6 +6,20 @@ gates and much more for registered programs!
 
 [Website](https://amoeba.farm) · [Amoeba Program](https://github.com/amoeba-farm/amoeba-program) · [Security](SECURITY.md)
 
+## Current Mainnet verification
+
+Controller: `8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx`.
+
+[Solana Verified Builds status](https://verify.osec.io/status/8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx)
+reports the result for the deployed controller. Verification of the current
+release is pending; the successful October 4/5 records below are historical.
+The release-5 candidate adds oracle and futures verification recipes. Its
+[canonical build](docs/governance/evidence/controller-verification-build-20261016.json)
+and [focused qualification](docs/governance/evidence/controller-verification-candidate-20261016.json)
+passed; installation and hosted verification are pending.
+See [all current Amoeba programs](https://github.com/amoeba-farm/amoeba-program#mainnet-programs)
+for the oracle and futures verification links.
+
 ## Architecture
 
 This governance program utilizes a council of five equal seat authorities. Typical
@@ -76,7 +90,8 @@ The authority metadata records now bind
 Spread uses the closed build recipe `--features mainnet-v3`.
 Both metadata updates preserved their authority balances.
 
-Controller hosted verification: **verified**. Spread hosted verification: **verified**.
+At this October 5 deployment, both controller and Spread hosted verification
+succeeded. These results do not attest their later deployments or retirement.
 [Controller verifier status](https://verify.osec.io/status/8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx) ·
 [Spread verifier status](https://verify.osec.io/status/2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw) ·
 [Finalized installation and verification evidence](docs/governance/evidence/mainnet-controller-recipe-20261005-installed.json) ·
