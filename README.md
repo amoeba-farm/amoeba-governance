@@ -11,12 +11,14 @@ gates and much more for registered programs!
 Controller: `8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx`.
 
 [Solana Verified Builds status](https://verify.osec.io/status/8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx)
-reports the result for the deployed controller. Verification of the current
-release is pending; the successful October 4/5 records below are historical.
-The release-5 candidate adds oracle and futures verification recipes. Its
+confirms the deployed release-5 controller matches its
+[published source](https://github.com/amoeba-farm/amoeba-governance/tree/1a8f9e3fa3c80e3d0d1a20651742a0b5e17640fe).
+The release adds authority-signed oracle and futures verification recipes.
+[Finalized installation and hosted-verification evidence](docs/governance/evidence/mainnet-verification-20261016-completed.json)
+records the upgrade, exact metadata and verifier results. Its
 [canonical build](docs/governance/evidence/controller-verification-build-20261016.json)
 and [focused qualification](docs/governance/evidence/controller-verification-candidate-20261016.json)
-passed; installation and hosted verification are pending.
+provide the preceding build and test evidence.
 See [all current Amoeba programs](https://github.com/amoeba-farm/amoeba-program#mainnet-programs)
 for the oracle and futures verification links.
 
@@ -55,7 +57,7 @@ The V3 client entry point is `@amoeba/upgrade-governance/governance-v3`.
 
 ## 150-slot execution delay (2026-10-15)
 
-Controller release 4 is installed on Mainnet at slot **457220000**.
+Controller release 4 was installed on Mainnet at slot **457220000**.
 Proposal 60 installed the byte-for-byte qualified artifact; proposal
 61 set the saved execution delay to **150 slots**, down from 4,500.
 Both finalized with three council approvals. Future proposals, including controller
