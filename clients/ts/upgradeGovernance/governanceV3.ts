@@ -71,9 +71,10 @@ export function verificationParamsV3(controller: PublicKey, action: Extract<Acti
     : ["--workspace-path", `contracts/2026-10-16/${oracle ? "oracle" : "futures"}`];
   const library = own ? "governance_controller_v3" : spread ? "light_token_minter" : oracle ? "ameba_oracle" : "ameba_futures";
   args.push("--library-name", library, "--base-image", VERIFICATION_BUILD_IMAGE_V3, "--arch", "v1");
+  if (oracle || futures) args.push("--cargo-build-sbf-args", "--tools-version v1.53");
   if (spread) args.push("--", "--features", "mainnet-v3");
   const string = (s: string) => Buffer.concat([uint(Buffer.byteLength(s), 4), Buffer.from(s)]);
-  return Buffer.concat([string("0.5.1"), string(`https://github.com/amoeba-farm/${own ? "amoeba-governance" : "amoeba-program"}`), string(action.commit), uint(args.length, 4), ...args.map(string), u64(action.deployedSlot)]);
+  return Buffer.concat([string(oracle || futures ? "0.5.2" : "0.5.1"), string(`https://github.com/amoeba-farm/${own ? "amoeba-governance" : "amoeba-program"}`), string(action.commit), uint(args.length, 4), ...args.map(string), u64(action.deployedSlot)]);
 }
 export function publishVerificationV3(config: ConfigV3, proposal: ProposalV3, payer: PublicKey): TransactionInstruction {
   check(proposal.action.kind === "publishVerification", "verification proposal required");

@@ -20,7 +20,9 @@ The hosted verifier mounts the entire repository at `/build`; the recipe does
 not add the ignored legacy `--mount-path` argument for either new target.
 The root mount preserves sibling Cargo path dependencies. Both use default
 features, architecture `v1`, no environment overrides, and the existing pinned
-Docker image. The verifier supplies `--locked` itself. Existing controller and
+Docker image. New oracle/futures metadata names verifier `0.5.2` and explicitly
+passes `--cargo-build-sbf-args '--tools-version v1.53'`. The verifier supplies
+`--locked` itself. Existing controller and
 Spread recipe bytes remain unchanged. The old Spread recipe remains accepted
 only for authenticating a previous Spread metadata record.
 

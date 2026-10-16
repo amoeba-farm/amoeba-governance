@@ -87,6 +87,9 @@ impl VerificationPolicy {
             "--arch",
             "v1",
         ]);
+        if oracle || futures {
+            args.extend(["--cargo-build-sbf-args", "--tools-version v1.53"]);
+        }
         if spread {
             if previous {
                 args.extend([
@@ -105,7 +108,8 @@ impl VerificationPolicy {
             write!(&mut commit, "{byte:02x}").map_err(|_| Error::InvalidAccount)?;
         }
         let mut bytes = Vec::with_capacity(640);
-        for value in [VERSION, repo, &commit] {
+        let version = if oracle || futures { "0.5.2" } else { VERSION };
+        for value in [version, repo, &commit] {
             string(&mut bytes, value);
         }
         bytes.extend_from_slice(&(args.len() as u32).to_le_bytes());
@@ -215,7 +219,7 @@ mod tests {
             let params = policy.params(&controller).unwrap();
             let decoded =
                 <(String, String, String, Vec<String>, u64)>::try_from_slice(&params).unwrap();
-            assert_eq!(decoded.0, "0.5.1");
+            assert_eq!(decoded.0, "0.5.2");
             assert_eq!(decoded.1, "https://github.com/amoeba-farm/amoeba-program");
             assert_eq!(decoded.2, "ab".repeat(20));
             assert_eq!(
@@ -228,7 +232,9 @@ mod tests {
                     "--base-image",
                     BUILD_IMAGE,
                     "--arch",
-                    "v1"
+                    "v1",
+                    "--cargo-build-sbf-args",
+                    "--tools-version v1.53"
                 ]
             );
             assert_eq!(decoded.4, 123);

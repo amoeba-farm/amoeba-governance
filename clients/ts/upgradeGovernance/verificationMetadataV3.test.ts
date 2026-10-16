@@ -18,9 +18,9 @@ test("official oracle and futures recipes retain sibling sources and target PDA 
   const p=proposal(target);assert(p.action.kind==="publishVerification");
   const bytes=verificationParamsV3(controller,p.action);let offset=0;
   const string=()=>{const n=bytes.readUInt32LE(offset);offset+=4;const value=bytes.subarray(offset,offset+n).toString();offset+=n;return value;};
-  assert.equal(string(),"0.5.1");assert.equal(string(),"https://github.com/amoeba-farm/amoeba-program");assert.equal(string(),"ab".repeat(20));
+  assert.equal(string(),"0.5.2");assert.equal(string(),"https://github.com/amoeba-farm/amoeba-program");assert.equal(string(),"ab".repeat(20));
   const n=bytes.readUInt32LE(offset);offset+=4;const args=Array.from({length:n},string);
-  assert.deepEqual(args,["--workspace-path",`contracts/2026-10-16/${workspace}`,"--library-name",library,"--base-image",VERIFICATION_BUILD_IMAGE_V3,"--arch","v1"]);
+  assert.deepEqual(args,["--workspace-path",`contracts/2026-10-16/${workspace}`,"--library-name",library,"--base-image",VERIFICATION_BUILD_IMAGE_V3,"--arch","v1","--cargo-build-sbf-args","--tools-version v1.53"]);
   assert.equal(bytes.readBigUInt64LE(offset),123n);assert.equal(offset+8,bytes.length);assert(bytes.length<=640);
   const ix=publishVerificationV3(config,p,key(50));const authority=deriveTargetAuthorityV3(controller,target)[0];
   assert.equal(ix.keys.length,11);assert(ix.keys[5]!.pubkey.equals(authority));assert.equal(ix.keys[5]!.isSigner,false);
