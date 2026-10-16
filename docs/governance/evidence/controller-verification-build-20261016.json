@@ -1,0 +1,28 @@
+{
+  "schema": "amoeba.controller-verification-build.v1",
+  "sourceRepository": "https://github.com/amoeba-farm/amoeba-governance",
+  "sourceCommit": "1a8f9e3fa3c80e3d0d1a20651742a0b5e17640fe",
+  "sourceArchiveSha256": "ec0c08032c5e6219ffe2778e89f00ee754137dc798b96feacd42110e1a5b5ee8",
+  "date": "2026-10-16",
+  "candidateControllerRelease": 5,
+  "runningControllerReleaseForUpgradeAction": 4,
+  "build": {
+    "verifierVersion": "0.5.2",
+    "verifierLinuxBinarySha256": "b9d5ccce9634dc14269cab3e7a58649bc141b3306e7735a94478c936341f211f",
+    "baseImage": "solanafoundation/solana-verifiable-build@sha256:0b4e3716fad9ca4b4aac3e3f977f43aad93a18c22296c0c0f44fc22e644bdd68",
+    "imageWorkdir": "/build",
+    "mount": "full repository",
+    "libraryName": "governance_controller_v3",
+    "arch": "v1",
+    "features": "default",
+    "cargoBuildSbfArgs": [],
+    "cargoArgs": ["--locked", "-j", "2"],
+    "commandSucceeded": true
+  },
+  "artifact": {
+    "bytes": 238936,
+    "sha256": "ea8dd309053dd52c768d8d04e5e0dc73b48bae4a3f289b67638ed328bd767bee",
+    "verifierExecutableHash": "b01c4c564a4fce983b060cfb38cfcd5b0f1b96a65e0b480670699ff3b1d780e1"
+  },
+  "qualificationBoundary": "Canonical container build; deployment and hosted verification have not occurred"
+}

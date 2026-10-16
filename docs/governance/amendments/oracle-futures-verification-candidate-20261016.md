@@ -1,6 +1,6 @@
 # Candidate: verification metadata for the production oracle and futures
 
-This is a source preparation, not a deployed release or a verified build recipe.
+This candidate passed local build and integration qualification; it is not a deployed release or completed hosted verification.
 The current release-4 controller supports authority-signed Otter metadata for
 itself and the historical Spread target only. The candidate release-5 code adds
 the production oracle `45YCerssGjg2M29RFc9D4fAJh7dfFpMJ3ZcZtaTnRXRS`
@@ -29,11 +29,10 @@ passes `--cargo-build-sbf-args '--tools-version v1.53'`. The verifier supplies
 Spread recipe bytes remain unchanged. The old Spread recipe remains accepted
 only for authenticating a previous Spread metadata record.
 
-Before accepting these arguments for an actual controller upgrade, reproduce
-the public source builds and compare the verifier's normalized executable hash
-with each deployed program. Native build equality, published source and hosted
-verification are separate evidence. If build qualification changes any argument,
-update both Rust/TypeScript mappings and their tests before building a candidate.
+The coordinator reproduced both public Oracle and Futures builds using the pinned
+original-path image and matched each installed executable exactly. Local build
+equality and hosted verification remain separate evidence; hosted verification is
+still pending.
 
 The existing three-seat proposal and timing checks still authorize metadata;
 the controller signs only its exact target-authority PDA through the fixed Otter
@@ -42,5 +41,9 @@ Verify CPI. No arbitrary URL, command, build flag or signer is introduced.
 Focused tests cover both new recipe encodings, authority-derived accounts,
 bounded transaction size, rejection of unrelated targets and preservation of
 legacy recipe hashes. The existing ignored actual-controller/actual-verifier SBF
-test now includes both new targets; it must run against the exact candidate ELF
-before live qualification. No on-chain action is authorized by this document.
+test passed all four target cases against the final canonical controller ELF from
+source `1a8f9e3fa3c80e3d0d1a20651742a0b5e17640fe` and the actual mainnet verifier
+ELF. The controller artifact is 238936 bytes, SHA-256
+`ea8dd309053dd52c768d8d04e5e0dc73b48bae4a3f289b67638ed328bd767bee`.
+See the [qualification receipt](../evidence/controller-verification-candidate-20261016.json)
+for exact inputs, results and limits. No on-chain action is authorized by this document.
