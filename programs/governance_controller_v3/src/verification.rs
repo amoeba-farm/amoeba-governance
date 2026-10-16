@@ -166,6 +166,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn existing_controller_and_spread_recipe_digests_are_unchanged() {
+        let controller = Pubkey::new_from_array([31; 32]);
+        for (target, expected) in [
+            (
+                controller,
+                "e623ee1b4b62a0c9b03ec5b8c815a253975587ce60cde6ebad43f3da3488d167",
+            ),
+            (
+                DEVNET_SPREAD,
+                "c7a8fbcd45c237e911d6f4b7297b3b1317b8cb34823f5d910bb8cc35a0d2d9cc",
+            ),
+        ] {
+            let policy = VerificationPolicy {
+                target,
+                deployed_slot: 123,
+                commit: [0xab; 20],
+            };
+            let digest: String = hash(&policy.params(&controller).unwrap())
+                .to_bytes()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect();
+            assert_eq!(digest, expected);
+        }
+    }
+
+    #[test]
     fn official_program_recipes_keep_the_complete_source_mount() {
         let controller = Pubkey::new_unique();
         for (target, workspace, library) in [
