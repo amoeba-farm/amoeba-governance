@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {createHash} from "node:crypto";
 import {PublicKey, Transaction} from "@solana/web3.js";
-import {DEFAULT_TIMING_V3, DEVNET_SPREAD_V3, MAINNET_ORACLE_V3, MAINNET_FUTURES_V3, VERIFICATION_BUILD_IMAGE_V3, deriveAuthorityV3, deriveConfigV3, deriveProgramdataV3, deriveTargetAuthorityV3, deriveVerificationMetadataV3, encodeActionV3, publishVerificationV3, verificationParamsV3, type ConfigV3, type ProposalV3} from "./governanceV3.js";
+import {DEFAULT_TIMING_V3, DEVNET_SPREAD_V3, MAINNET_ORACLE_V3, MAINNET_FUTURES_V3, MAINNET_TARGET_BUILD_IMAGE_V3, deriveAuthorityV3, deriveConfigV3, deriveProgramdataV3, deriveTargetAuthorityV3, deriveVerificationMetadataV3, encodeActionV3, publishVerificationV3, verificationParamsV3, type ConfigV3, type ProposalV3} from "./governanceV3.js";
 const controller = new PublicKey(Buffer.alloc(32,31));
 const key=(n:number)=>new PublicKey(Buffer.alloc(32,n));
 const config:ConfigV3={bump:deriveConfigV3(controller)[1],controller,programdata:deriveProgramdataV3(controller),authority:deriveAuthorityV3(controller)[0],treasury:key(32),seats:[40,41,42,43,44].map(key),councilEpoch:1n,timingVersion:1n,timing:DEFAULT_TIMING_V3,nextId:2n};
@@ -20,7 +20,7 @@ test("official oracle and futures recipes retain sibling sources and target PDA 
   const string=()=>{const n=bytes.readUInt32LE(offset);offset+=4;const value=bytes.subarray(offset,offset+n).toString();offset+=n;return value;};
   assert.equal(string(),"0.5.2");assert.equal(string(),"https://github.com/amoeba-farm/amoeba-program");assert.equal(string(),"ab".repeat(20));
   const n=bytes.readUInt32LE(offset);offset+=4;const args=Array.from({length:n},string);
-  assert.deepEqual(args,["--workspace-path",`contracts/2026-10-16/${workspace}`,"--library-name",library,"--base-image",VERIFICATION_BUILD_IMAGE_V3,"--arch","v1","--cargo-build-sbf-args","--tools-version v1.53"]);
+  assert.deepEqual(args,["--workspace-path",workspace,"--library-name",library,"--base-image",MAINNET_TARGET_BUILD_IMAGE_V3,"--arch","v1","--cargo-build-sbf-args","--tools-version v1.53"]);
   assert.equal(bytes.readBigUInt64LE(offset),123n);assert.equal(offset+8,bytes.length);assert(bytes.length<=640);
   const ix=publishVerificationV3(config,p,key(50));const authority=deriveTargetAuthorityV3(controller,target)[0];
   assert.equal(ix.keys.length,11);assert(ix.keys[5]!.pubkey.equals(authority));assert.equal(ix.keys[5]!.isSigner,false);

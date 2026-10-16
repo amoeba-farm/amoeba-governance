@@ -13,14 +13,17 @@ repository, pinned verifier/image/architecture, and these candidate arguments:
 
 | Target | Workspace path | Library |
 | --- | --- | --- |
-| Oracle | `contracts/2026-10-16/oracle` | `ameba_oracle` |
-| Futures | `contracts/2026-10-16/futures` | `ameba_futures` |
+| Oracle | `oracle` | `ameba_oracle` |
+| Futures | `futures` | `ameba_futures` |
 
-The hosted verifier mounts the entire repository at `/build`; the recipe does
+The hosted verifier mounts the entire repository at the image work directory; the recipe does
 not add the ignored legacy `--mount-path` argument for either new target.
 The root mount preserves sibling Cargo path dependencies. Both use default
 features, architecture `v1`, no environment overrides, and the existing pinned
-Docker image. New oracle/futures metadata names verifier `0.5.2` and explicitly
+Docker image with original source work directory `/opt/ameba-dev/worktrees/gate-final`:
+`us-central1-docker.pkg.dev/amoeba-hm0q2k/solana-verifiable-builds/gate-final@sha256:7ad1e567f19831e658f5b892a7269d23d7f1826438e025b5d9d2e385240a4d67`.
+The coordinator independently checked anonymous manifest/config access and the
+image work directory. New oracle/futures metadata names verifier `0.5.2` and explicitly
 passes `--cargo-build-sbf-args '--tools-version v1.53'`. The verifier supplies
 `--locked` itself. Existing controller and
 Spread recipe bytes remain unchanged. The old Spread recipe remains accepted

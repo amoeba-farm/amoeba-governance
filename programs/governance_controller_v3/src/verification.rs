@@ -5,6 +5,7 @@ use solana_program::{hash::hash, pubkey, pubkey::Pubkey};
 
 pub const VERIFY_PROGRAM: Pubkey = pubkey!("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
 pub const BUILD_IMAGE: &str = "solanafoundation/solana-verifiable-build@sha256:0b4e3716fad9ca4b4aac3e3f977f43aad93a18c22296c0c0f44fc22e644bdd68";
+pub const MAINNET_TARGET_BUILD_IMAGE: &str = "us-central1-docker.pkg.dev/amoeba-hm0q2k/solana-verifiable-builds/gate-final@sha256:7ad1e567f19831e658f5b892a7269d23d7f1826438e025b5d9d2e385240a4d67";
 pub const INITIALIZE: [u8; 8] = [175, 175, 109, 31, 13, 152, 155, 237];
 pub const UPDATE: [u8; 8] = [219, 200, 88, 176, 158, 63, 253, 127];
 pub const MAINNET_ORACLE: Pubkey = pubkey!("45YCerssGjg2M29RFc9D4fAJh7dfFpMJ3ZcZtaTnRXRS");
@@ -64,11 +65,7 @@ impl VerificationPolicy {
             // The hosted verifier mounts the repository root, preserving sibling sources.
             args.extend([
                 "--workspace-path",
-                if oracle {
-                    "contracts/2026-10-16/oracle"
-                } else {
-                    "contracts/2026-10-16/futures"
-                },
+                if oracle { "oracle" } else { "futures" },
             ]);
         }
         args.extend([
@@ -83,7 +80,11 @@ impl VerificationPolicy {
                 "ameba_futures"
             },
             "--base-image",
-            BUILD_IMAGE,
+            if oracle || futures {
+                MAINNET_TARGET_BUILD_IMAGE
+            } else {
+                BUILD_IMAGE
+            },
             "--arch",
             "v1",
         ]);
@@ -200,16 +201,8 @@ mod tests {
     fn official_program_recipes_keep_the_complete_source_mount() {
         let controller = Pubkey::new_unique();
         for (target, workspace, library) in [
-            (
-                MAINNET_ORACLE,
-                "contracts/2026-10-16/oracle",
-                "ameba_oracle",
-            ),
-            (
-                MAINNET_FUTURES,
-                "contracts/2026-10-16/futures",
-                "ameba_futures",
-            ),
+            (MAINNET_ORACLE, "oracle", "ameba_oracle"),
+            (MAINNET_FUTURES, "futures", "ameba_futures"),
         ] {
             let policy = VerificationPolicy {
                 target,
@@ -230,7 +223,7 @@ mod tests {
                     "--library-name",
                     library,
                     "--base-image",
-                    BUILD_IMAGE,
+                    MAINNET_TARGET_BUILD_IMAGE,
                     "--arch",
                     "v1",
                     "--cargo-build-sbf-args",
