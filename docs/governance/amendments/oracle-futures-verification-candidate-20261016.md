@@ -1,0 +1,41 @@
+# Candidate: verification metadata for the production oracle and futures
+
+This is a source preparation, not a deployed release or a verified build recipe.
+The current release-4 controller supports authority-signed Otter metadata for
+itself and the historical Spread target only. The candidate release-5 code adds
+the production oracle `45YCerssGjg2M29RFc9D4fAJh7dfFpMJ3ZcZtaTnRXRS`
+and futures `Bvp9kiRtJ7dT8unxP4Da39gv2eXDLEHLpcDfzcEuRKMu` to the same
+closed recipe mapping. It changes no account layouts, instruction encoding,
+quorum, timing, upgrade authority, business instructions or gate policy.
+
+Both new targets use the existing official `amoeba-farm/amoeba-program`
+repository, pinned verifier/image/architecture, and these candidate arguments:
+
+| Target | Workspace path | Library |
+| --- | --- | --- |
+| Oracle | `contracts/2026-10-16/oracle` | `ameba_oracle` |
+| Futures | `contracts/2026-10-16/futures` | `ameba_futures` |
+
+The hosted verifier mounts the entire repository at `/build`; the recipe does
+not add the ignored legacy `--mount-path` argument for either new target.
+The root mount preserves sibling Cargo path dependencies. Both use default
+features, architecture `v1`, no environment overrides, and the existing pinned
+Docker image. The verifier supplies `--locked` itself. Existing controller and
+Spread recipe bytes remain unchanged. The old Spread recipe remains accepted
+only for authenticating a previous Spread metadata record.
+
+Before accepting these arguments for an actual controller upgrade, reproduce
+the public source builds and compare the verifier's normalized executable hash
+with each deployed program. Native build equality, published source and hosted
+verification are separate evidence. If build qualification changes any argument,
+update both Rust/TypeScript mappings and their tests before building a candidate.
+
+The existing three-seat proposal and timing checks still authorize metadata;
+the controller signs only its exact target-authority PDA through the fixed Otter
+Verify CPI. No arbitrary URL, command, build flag or signer is introduced.
+
+Focused tests cover both new recipe encodings, authority-derived accounts,
+bounded transaction size, rejection of unrelated targets and preservation of
+legacy recipe hashes. The existing ignored actual-controller/actual-verifier SBF
+test now includes both new targets; it must run against the exact candidate ELF
+before live qualification. No on-chain action is authorized by this document.

@@ -7,6 +7,8 @@ pub const VERIFY_PROGRAM: Pubkey = pubkey!("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th
 pub const BUILD_IMAGE: &str = "solanafoundation/solana-verifiable-build@sha256:0b4e3716fad9ca4b4aac3e3f977f43aad93a18c22296c0c0f44fc22e644bdd68";
 pub const INITIALIZE: [u8; 8] = [175, 175, 109, 31, 13, 152, 155, 237];
 pub const UPDATE: [u8; 8] = [219, 200, 88, 176, 158, 63, 253, 127];
+pub const MAINNET_ORACLE: Pubkey = pubkey!("45YCerssGjg2M29RFc9D4fAJh7dfFpMJ3ZcZtaTnRXRS");
+pub const MAINNET_FUTURES: Pubkey = pubkey!("Bvp9kiRtJ7dT8unxP4Da39gv2eXDLEHLpcDfzcEuRKMu");
 const VERSION: &str = "0.5.1";
 
 fn repository(own: bool) -> &'static str {
@@ -38,36 +40,54 @@ impl VerificationPolicy {
     /// Only authenticates existing records from the previous closed Spread recipe.
     /// New publications always use `params` and cannot select this recipe.
     pub(crate) fn previous_spread_params(&self, controller: &Pubkey) -> Result<Vec<u8>> {
-        require(self.target != *controller, Error::InvalidAccount)?;
+        require(self.target == DEVNET_SPREAD, Error::InvalidAccount)?;
         self.params_for(controller, true)
     }
     fn params_for(&self, controller: &Pubkey, previous: bool) -> Result<Vec<u8>> {
         self.validate()?;
         let own = self.target == *controller;
-        require(own || self.target == DEVNET_SPREAD, Error::InvalidAccount)?;
+        let spread = self.target == DEVNET_SPREAD;
+        let oracle = self.target == MAINNET_ORACLE;
+        let futures = self.target == MAINNET_FUTURES;
+        require(own || spread || oracle || futures, Error::InvalidAccount)?;
+        require(!previous || spread, Error::InvalidAccount)?;
         let repo = repository(own);
         let mut args = Vec::new();
-        if !own {
+        if spread {
             args.extend([
                 "--mount-path",
                 "programs/light_token_minter",
                 "--workspace-path",
                 "programs/light_token_minter",
             ]);
+        } else if oracle || futures {
+            // The hosted verifier mounts the repository root, preserving sibling sources.
+            args.extend([
+                "--workspace-path",
+                if oracle {
+                    "contracts/2026-10-16/oracle"
+                } else {
+                    "contracts/2026-10-16/futures"
+                },
+            ]);
         }
         args.extend([
             "--library-name",
             if own {
                 "governance_controller_v3"
-            } else {
+            } else if spread {
                 "light_token_minter"
+            } else if oracle {
+                "ameba_oracle"
+            } else {
+                "ameba_futures"
             },
             "--base-image",
             BUILD_IMAGE,
             "--arch",
             "v1",
         ]);
-        if !own {
+        if spread {
             if previous {
                 args.extend([
                     "--",
@@ -139,4 +159,82 @@ pub fn record(target: &Pubkey, authority: &Pubkey, params: &[u8], bump: u8) -> V
     bytes.extend_from_slice(params);
     bytes.push(bump);
     bytes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn official_program_recipes_keep_the_complete_source_mount() {
+        let controller = Pubkey::new_unique();
+        for (target, workspace, library) in [
+            (
+                MAINNET_ORACLE,
+                "contracts/2026-10-16/oracle",
+                "ameba_oracle",
+            ),
+            (
+                MAINNET_FUTURES,
+                "contracts/2026-10-16/futures",
+                "ameba_futures",
+            ),
+        ] {
+            let policy = VerificationPolicy {
+                target,
+                deployed_slot: 123,
+                commit: [0xab; 20],
+            };
+            let params = policy.params(&controller).unwrap();
+            let decoded =
+                <(String, String, String, Vec<String>, u64)>::try_from_slice(&params).unwrap();
+            assert_eq!(decoded.0, "0.5.1");
+            assert_eq!(decoded.1, "https://github.com/amoeba-farm/amoeba-program");
+            assert_eq!(decoded.2, "ab".repeat(20));
+            assert_eq!(
+                decoded.3,
+                [
+                    "--workspace-path",
+                    workspace,
+                    "--library-name",
+                    library,
+                    "--base-image",
+                    BUILD_IMAGE,
+                    "--arch",
+                    "v1"
+                ]
+            );
+            assert_eq!(decoded.4, 123);
+            assert!(params.len() <= 640);
+            assert!(policy.previous_spread_params(&controller).is_err());
+            let metadata = record(
+                &target,
+                &target_authority_for_test(&controller, &target),
+                &params,
+                1,
+            );
+            assert!(matches_existing_record(&metadata, &metadata, false));
+            let mut substituted = metadata.clone();
+            substituted[80] ^= 1;
+            assert!(!matches_existing_record(&substituted, &metadata, false));
+        }
+    }
+
+    fn target_authority_for_test(controller: &Pubkey, target: &Pubkey) -> Pubkey {
+        crate::state::target_authority_pda(controller, target).0
+    }
+
+    #[test]
+    fn unknown_targets_and_zero_commits_still_fail() {
+        let controller = Pubkey::new_unique();
+        let mut policy = VerificationPolicy {
+            target: Pubkey::new_unique(),
+            deployed_slot: 123,
+            commit: [0xab; 20],
+        };
+        assert!(policy.params(&controller).is_err());
+        policy.target = MAINNET_ORACLE;
+        policy.commit = [0; 20];
+        assert!(policy.params(&controller).is_err());
+    }
 }
