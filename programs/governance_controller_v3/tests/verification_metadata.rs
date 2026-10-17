@@ -421,7 +421,7 @@ async fn run(target_override: Option<Pubkey>) {
         );
         let fee = ctx
             .banks_client
-            .get_fee_for_message(tx.message.clone().into())
+            .get_fee_for_message(tx.message.clone())
             .await
             .unwrap()
             .unwrap();
