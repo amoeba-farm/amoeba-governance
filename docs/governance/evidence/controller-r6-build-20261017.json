@@ -1,0 +1,22 @@
+{
+  "schema": "amoeba.controller-r6-canonical-build.v1",
+  "status": "BUILT_FOCUSED_QUALIFICATION_PASSED_NOT_DEPLOYED",
+  "sourceBaseCommit": "3387417dcb0c06691f62cf0a9fa356f39d0de851",
+  "sourceCandidateCommit": "329d12ed91398e5bcbd379b382060a9411e75c2d",
+  "sourceWorktree": "governance-futures-verification-r6",
+  "controllerRelease": 6,
+  "image": "solanafoundation/solana-verifiable-build@sha256:0b4e3716fad9ca4b4aac3e3f977f43aad93a18c22296c0c0f44fc22e644bdd68",
+  "imageWorkdir": "/build",
+  "imageRustToolchain": "1.93.1-x86_64-unknown-linux-gnu",
+  "command": "cargo build-sbf --manifest-path programs/governance_controller_v3/Cargo.toml --arch v1 -- --locked -j 2",
+  "features": "default",
+  "artifactBytes": 239472,
+  "artifactSha256": "f714b680fc68cefef95eb3f8cd76622151478537a8887fe527e9b9bdd871b3d4",
+  "normalizedSha256": "534d7456bd65c0849345a130050882b45bd82b072d7dca0d71059b89ed8ce1f7",
+  "buildLogSha256": "b1d204af0245ec6161aad07df1a75aa29515ae36401fad5c239785dd36d9c644",
+  "clientSha256": "e7a32820162b90764cc576e834a5558ef63d26c9f2a9f1ec9e110851fbcefc46",
+  "installedCapacityBeforeUpgrade": 247400,
+  "extensionRequired": false,
+  "newFuturesImage": "us-central1-docker.pkg.dev/amoeba-hm0q2k/solana-verifiable-builds/amba-release@sha256:36bdcd0005a5a41f9eba76add58f16fccdc7a2b7b2fbace1be3aaba8cda7b40e",
+  "scope": "Candidate build only; no signing, chain write, deployment, commit or push performed by this agent. Source commit and final qualification must be bound in the later qualification receipt."
+}

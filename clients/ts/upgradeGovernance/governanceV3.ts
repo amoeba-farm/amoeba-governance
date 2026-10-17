@@ -30,7 +30,7 @@ export const MAX_ARTIFACT_BYTES_V3 = ARTIFACT_CHUNK_SIZE_V3 * MAX_ARTIFACT_CHUNK
 /** Release of this controller source (Rust `CONTROLLER_RELEASE`). A
  *  self-upgrade proposal must carry the release of the controller running at
  *  creation: 0 for the deployed pre-release binary, this value afterwards. */
-export const CONTROLLER_RELEASE_V3 = 5n;
+export const CONTROLLER_RELEASE_V3 = 6n;
 export const DEVNET_SPREAD_V3 = new PublicKey(
   "2jVQSPny9eFoaG1ZWoJVAezQ5VgqJtF8rQCQXMktuBVw",
 );
@@ -54,6 +54,7 @@ export const DEFAULT_TIMING_V3: Readonly<TimingV3> = Object.freeze({
 export const OTTER_VERIFY_PROGRAM_V3 = new PublicKey("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
 export const VERIFICATION_BUILD_IMAGE_V3 = "solanafoundation/solana-verifiable-build@sha256:0b4e3716fad9ca4b4aac3e3f977f43aad93a18c22296c0c0f44fc22e644bdd68";
 export const MAINNET_TARGET_BUILD_IMAGE_V3 = "us-central1-docker.pkg.dev/amoeba-hm0q2k/solana-verifiable-builds/gate-final@sha256:7ad1e567f19831e658f5b892a7269d23d7f1826438e025b5d9d2e385240a4d67";
+export const MAINNET_FUTURES_BUILD_IMAGE_V3 = "us-central1-docker.pkg.dev/amoeba-hm0q2k/solana-verifiable-builds/amba-release@sha256:36bdcd0005a5a41f9eba76add58f16fccdc7a2b7b2fbace1be3aaba8cda7b40e";
 export const MAINNET_ORACLE_V3 = new PublicKey("45YCerssGjg2M29RFc9D4fAJh7dfFpMJ3ZcZtaTnRXRS");
 export const MAINNET_FUTURES_V3 = new PublicKey("Bvp9kiRtJ7dT8unxP4Da39gv2eXDLEHLpcDfzcEuRKMu");
 export function deriveVerificationMetadataV3(authority: PublicKey, target: PublicKey): [PublicKey, number] {
@@ -71,7 +72,7 @@ export function verificationParamsV3(controller: PublicKey, action: Extract<Acti
     ? ["--mount-path", "programs/light_token_minter", "--workspace-path", "programs/light_token_minter"]
     : ["--workspace-path", oracle ? "oracle" : "futures"];
   const library = own ? "governance_controller_v3" : spread ? "light_token_minter" : oracle ? "ameba_oracle" : "ameba_futures";
-  args.push("--library-name", library, "--base-image", oracle || futures ? MAINNET_TARGET_BUILD_IMAGE_V3 : VERIFICATION_BUILD_IMAGE_V3, "--arch", "v1");
+  args.push("--library-name", library, "--base-image", futures ? MAINNET_FUTURES_BUILD_IMAGE_V3 : oracle ? MAINNET_TARGET_BUILD_IMAGE_V3 : VERIFICATION_BUILD_IMAGE_V3, "--arch", "v1");
   if (oracle || futures) args.push("--cargo-build-sbf-args", "--tools-version v1.53");
   if (spread) args.push("--", "--features", "mainnet-v3");
   const string = (s: string) => Buffer.concat([uint(Buffer.byteLength(s), 4), Buffer.from(s)]);

@@ -22,6 +22,18 @@ provide the preceding build and test evidence.
 See [all current Amoeba programs](https://github.com/amoeba-farm/amoeba-program#mainnet-programs)
 for the oracle and futures verification links.
 
+### Prepared release 6: current Futures build recipe
+
+The later AMBA Earn Futures deployment was built at a different compiler working
+directory. Release 6 changes the fixed Futures recipe to the published,
+digest-pinned image that reproduces those installed bytes. It also accepts the
+exact previous Futures metadata format for its two-byte record migration.
+Oracle and controller build recipes, council policy, timing, gates and account
+layouts are unchanged. The candidate fits existing ProgramData capacity.
+
+This is a qualified candidate, **not an installed or hosted-verified release**.
+See the [release plan and qualification](docs/governance/mainnet-futures-verification-r6.md).
+
 ## Architecture
 
 This governance program utilizes a council of five equal seat authorities. Typical

@@ -1,0 +1,54 @@
+{
+  "schema": "amoeba.controller-r6-futures-verification-qualification.v1",
+  "status": "QUALIFIED_CANDIDATE_NOT_DEPLOYED",
+  "sourceCandidateCommit": "329d12ed91398e5bcbd379b382060a9411e75c2d",
+  "sourceBaseCommit": "3387417dcb0c06691f62cf0a9fa356f39d0de851",
+  "controllerRelease": 6,
+  "artifact": {
+    "bytes": 239472,
+    "sha256BeforeAndAfterActualSbf": "f714b680fc68cefef95eb3f8cd76622151478537a8887fe527e9b9bdd871b3d4",
+    "normalizedSha256": "534d7456bd65c0849345a130050882b45bd82b072d7dca0d71059b89ed8ce1f7",
+    "existingProgramDataCapacity": 247400,
+    "extensionRequired": false,
+    "buildLogSha256": "b1d204af0245ec6161aad07df1a75aa29515ae36401fad5c239785dd36d9c644"
+  },
+  "clientSha256": "e7a32820162b90764cc576e834a5558ef63d26c9f2a9f1ec9e110851fbcefc46",
+  "scope": {
+    "changed": ["Fixed Futures compiler image", "Exact previous release-5 Futures metadata compatibility", "Controller release binding 6", "Matching TypeScript and focused tests"],
+    "preserved": ["Oracle recipe bytes", "Controller self recipe bytes", "Current and previous Spread recipes", "Quorum and timing", "State/account layouts", "Authorities and gates", "No generic caller-selected URL/image/args capability"]
+  },
+  "checks": {
+    "typescriptTypecheck": "passed",
+    "typescriptMetadataAndCapTests": "7 passed",
+    "typescriptBuild": "passed",
+    "frozenVectorsBridgeRelease1AndInstalledPackageConsumer": "Coordinator independently passed; runtime inputs unchanged",
+    "rustVerificationUnits": "3 passed",
+    "rustGovernancePolicy": "1 passed",
+    "rustReleaseBinding": "1 passed",
+    "rustFocusedLogSha256": "14180286d8d79561b21bf48bcdd33ae5d4208231e79498ef7664e2eb159ade0c",
+    "rustfmtAndDiffCheck": "passed",
+    "actualSbf": {
+      "test": "actual_sbf_controller_and_frozen_target_metadata",
+      "passed": 1,
+      "failed": 0,
+      "seconds": 8.68,
+      "targets": ["controller self", "Spread", "Oracle", "Futures"],
+      "verifierBytes": 269648,
+      "verifierSha256": "b501789b71bb383556f7c1cc7a01e51ae9bb4111bf14e4dec9f09b18e506307a",
+      "minimumRentFuturesMigration": {
+        "oldRecordBytes": 488,
+        "newRecordBytes": 490,
+        "rentTopupLamports": 13920,
+        "feeLamports": 5000,
+        "authorityLamportsBeforeAndAfter": 0,
+        "exactRecordAndExecutedProposal": true,
+        "exactPayerDebitRentPlusFee": true
+      },
+      "donationPreservationMalformedRecordRejectionAndCpiRollback": "passed for previous Spread and previous Futures records",
+      "testSourceSha256": "7719c0aca411f8b7ffde7aeda7088356c9a0ab62d0e33a412397b51d1f3a3dd6",
+      "logSha256": "b3911665e4da2926ddffe66d9e7775c1cb56a1c10d7dec816f72db980b51f284",
+      "diagnosticCorrection": "Initial rollback assertion accepted only older compute-exhaustion text. Actual verifier exhausted its meter using the newer 'exceeded CUs meter at BPF instruction' wording. Test-only predicate now accepts both documented observed exhaustion messages; affected SBF test reran successfully; ELF unchanged."
+    }
+  },
+  "limits": ["No R6 controller deployment or signing is performed by this qualification.", "Candidate source commit includes the qualified test-only diagnostic correction; runtime artifact bytes remained unchanged.", "Hosted verification of R6 and renewed Futures metadata remains pending live authorization and completion.", "ProgramTest keys/state are isolated test-bank fixtures."]
+}

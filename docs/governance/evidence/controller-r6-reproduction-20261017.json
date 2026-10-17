@@ -1,0 +1,49 @@
+{
+  "schema": "amoeba.controller-r6-reproduction.v1",
+  "status": "TWO_MATCHING_FINAL_ARTIFACTS",
+  "sourceCommit": "329d12ed91398e5bcbd379b382060a9411e75c2d",
+  "sourceArchiveSha256": "6df588e40a60651e491c27146ca4804c69870a25d0011dbecc5d2b4af2cda19b",
+  "inputInventory": {
+    "file": "controller-reproduction-inputs.json",
+    "sha256": "6f46c02346bc4ddcf2566aa0d5e64becf675017bea53280b28c5e849d88c52ac",
+    "trackedFiles": 320
+  },
+  "sourceCommitment": "2324612e18aff00202d31f297286d0ea2b138f991f4790e0c62a65f54e36a953",
+  "selectedBuildReceiptSha256": "924f9bb685cb9ebbd6ad2263c018160bd55f728e1eee47de933de7b61cbb2d90",
+  "artifactMerkleRootV3": "d563fa3b58eceaf6e654332f5e0c9035ea3be1d9c07eaf0b23c96837480859cf",
+  "artifactChunkBytes": 16384,
+  "artifactChunkCount": 15,
+  "image": "solanafoundation/solana-verifiable-build@sha256:0b4e3716fad9ca4b4aac3e3f977f43aad93a18c22296c0c0f44fc22e644bdd68",
+  "imageWorkdir": "/build",
+  "rustToolchain": "1.93.1-x86_64-unknown-linux-gnu",
+  "platformTools": "v1.53",
+  "arch": "v1",
+  "features": "default",
+  "command": "cargo build-sbf --manifest-path programs/governance_controller_v3/Cargo.toml --arch v1 -- --locked -j 2",
+  "first": {
+    "file": "governance_controller_v3.so",
+    "bytes": 239472,
+    "sha256": "f714b680fc68cefef95eb3f8cd76622151478537a8887fe527e9b9bdd871b3d4",
+    "cache": "copied prior owned canonical dependency cache; one successful first R6 build"
+  },
+  "second": {
+    "file": "governance_controller_v3.reproduced.so",
+    "bytes": 239472,
+    "sha256": "f714b680fc68cefef95eb3f8cd76622151478537a8887fe527e9b9bdd871b3d4",
+    "normalizedSha256": "534d7456bd65c0849345a130050882b45bd82b072d7dca0d71059b89ed8ce1f7",
+    "source": "/home/space/ameba-builds/governance-futures-verification-r6-reproduction/source",
+    "output": "/home/space/ameba-builds/governance-futures-verification-r6-reproduction/target-sbf/deploy/governance_controller_v3.so",
+    "dependencyCacheReused": true,
+    "allDependenciesClean": false,
+    "controllerPackageOutputsAndFingerprintsRemoved": 8,
+    "controllerCompileObserved": true,
+    "finalDeployOutputCopied": false,
+    "buildDuration": "1m08s"
+  },
+  "byteForByteComparison": true,
+  "log": {
+    "file": "controller-reproduction.log",
+    "sha256": "f8855ba4f6463457f7325394cea0ddf703a551ae9df89cde7b7740bd183dec06"
+  },
+  "scope": "Second independently produced controller output with reused dependency cache, not a clean all-dependency reproduction. Existing build/qualification receipts unchanged. No chain writes, signing, deployment or broad test rerun."
+}
