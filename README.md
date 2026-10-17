@@ -11,28 +11,24 @@ gates and much more for registered programs!
 Controller: `8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx`.
 
 [Solana Verified Builds status](https://verify.osec.io/status/8fhNi6QHU5TYNhoPDM4vs89ZBztnpxp3LnBXRgkBVKtx)
-confirms the deployed release-5 controller matches its
-[published source](https://github.com/amoeba-farm/amoeba-governance/tree/1a8f9e3fa3c80e3d0d1a20651742a0b5e17640fe).
-The release adds authority-signed oracle and futures verification recipes.
-[Finalized installation and hosted-verification evidence](docs/governance/evidence/mainnet-verification-20261016-completed.json)
-records the upgrade, exact metadata and verifier results. Its
-[canonical build](docs/governance/evidence/controller-verification-build-20261016.json)
-and [focused qualification](docs/governance/evidence/controller-verification-candidate-20261016.json)
-provide the preceding build and test evidence.
-See [all current Amoeba programs](https://github.com/amoeba-farm/amoeba-program#mainnet-programs)
-for the oracle and futures verification links.
+provides the current hosted result. Controller release **6** was installed at
+finalized slot **457963767** from
+[published source](https://github.com/amoeba-farm/amoeba-governance/tree/9f141d413a71dce0a4bf79417ef893f60f082859).
+Canonical and authority-specific hosted verification passed on 2026-10-17,
+matching normalized hash
+`534d7456bd65c0849345a130050882b45bd82b072d7dca0d71059b89ed8ce1f7`.
+[Finalized installation and verification receipt](docs/governance/evidence/mainnet-inventory-netting-20261017.json)
+records finalized installation and successful hosted verification.
 
-### Prepared release 6: current Futures build recipe
+Release 6 changes the fixed Futures compiler image and supports migration of its
+previous metadata format. Oracle and controller recipes, council policy, timing,
+gates and account layouts are unchanged. The subsequent inventory-netting Futures
+upgrade is installed and Active at epoch 8; API and bot runtime confirmation passed.
+See the [release plan and qualification](docs/governance/mainnet-futures-verification-r6.md)
+and [all current Amoeba programs](https://github.com/amoeba-farm/amoeba-program#mainnet-programs).
 
-The later AMBA Earn Futures deployment was built at a different compiler working
-directory. Release 6 changes the fixed Futures recipe to the published,
-digest-pinned image that reproduces those installed bytes. It also accepts the
-exact previous Futures metadata format for its two-byte record migration.
-Oracle and controller build recipes, council policy, timing, gates and account
-layouts are unchanged. The candidate fits existing ProgramData capacity.
-
-This is a qualified candidate, **not an installed or hosted-verified release**.
-See the [release plan and qualification](docs/governance/mainnet-futures-verification-r6.md).
+[Release-5 installation and hosted verification](docs/governance/evidence/mainnet-verification-20261016-completed.json)
+remain historical evidence for that earlier artifact.
 
 ## Architecture
 

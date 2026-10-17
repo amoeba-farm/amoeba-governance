@@ -1,6 +1,14 @@
 # Release 6: restore verification of the current Futures deployment
 
-Status: qualified candidate; Mainnet upgrade and hosted verification pending.
+Status: release 6 installed at finalized slot **457963767**; updated hosted
+verification passed on 2026-10-17. The subsequent inventory-netting Futures upgrade is
+installed at slot **457976295**, Active at epoch **8**.
+[Finalized installation, runtime and hosted-verification receipt](evidence/mainnet-inventory-netting-20261017.json)
+records completed operations and matching canonical and authority-specific
+hosted results for controller and Futures. Oracle remains verified.
+
+The AMBA Earn deployment described below is the historical predecessor to the
+installed inventory-netting release; its source/build evidence remains unchanged.
 
 Futures `Bvp9kiRtJ7dT8unxP4Da39gv2eXDLEHLpcDfzcEuRKMu` was upgraded for
 AMBA Earn at slot 457791760. The installed ELF is 444816 bytes, SHA-256
@@ -78,8 +86,8 @@ Transaction fees are additional. Treasury held 4.583726481 SOL at this read;
 execution seat 1 held 0.000700140 SOL. The record deficit accounts for its existing
 lamports; it is not the full rent of a new metadata account.
 
-After explicit approval: install the qualified controller, verify exact bytes
-and preserved state, publish controller and Futures metadata using three council
-approvals each, request hosted verification, and record successful canonical and
-authority-specific status. Oracle remains unchanged. The matching source update
-is staged in an isolated dev VM worktree; other worktrees and services are preserved.
+The controller installation and exact-byte postflight completed. Inventory-netting
+Futures was then installed and activated; API and bot runtime confirmation passed.
+Controller and Futures metadata proposals are 75 and 76. Their finalized execution
+receipts and matching hosted results are recorded in the linked completion receipt. Oracle is unchanged. The matching controller source was
+propagated to the dev VM without dev-chain deployment or service changes.
